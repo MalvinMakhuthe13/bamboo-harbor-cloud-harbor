@@ -29,6 +29,7 @@ import {
   fingerFromPalm,
   foldAmplitudeCm,
   frameDeltaSeconds,
+  updatePinchState,
   trackingBlend,
   garmentEase,
   glassesScale,
@@ -72,7 +73,7 @@ type Strand = {
   geo: THREE.BufferGeometry;
   mesh: THREE.Mesh;
 };
-type Finger = { tip: THREE.Vector3; base: THREE.Vector3 };
+type Finger = { tip: THREE.Vector3; base: THREE.Vector3; ready: boolean };
 
 export type EngineHandle = {
   startCamera: () => Promise<void>;
@@ -234,6 +235,7 @@ export function startEngine(opts: {
   const fingers: Finger[] = Array.from({ length: 10 }, () => ({
     tip: new THREE.Vector3(),
     base: new THREE.Vector3(),
+    ready: false,
   }));
 
   let strands: Strand[] = [];
@@ -265,6 +267,7 @@ export function startEngine(opts: {
   let faceOn = false;
   let poseOn = false;
   let handCount = 0;
+  let lastHandSeen = 0;
   let pinch = false;
   let grabbed = false;
   let grabStrand = -1;
@@ -384,7 +387,6 @@ export function startEngine(opts: {
     if (cameraOn && video.readyState >= 2 && video.currentTime !== lastVideo) {
       freshFrame = true;
       lastVideo = video.currentTime;
-      pinch = false;
       if (faceLandmarker) {
         try {
           const res = faceLandmarker.detectForVideo(video, nextStamp());
@@ -541,12 +543,23 @@ export function startEngine(opts: {
           const slot = fingers[handIndex * 5 + f];
           const tip = hand[tips[f]];
           const base = hand[bases[f]];
-          slot.tip.copy(normToWorld(tip.x, tip.y, depth - tip.z * HAND_Z_TO_CM));
-          slot.base.copy(normToWorld(base.x, base.y, depth - base.z * HAND_Z_TO_CM));
+          const targetTip = normToWorld(tip.x, tip.y, depth - tip.z * HAND_Z_TO_CM);
+          const targetBase = normToWorld(base.x, base.y, depth - base.z * HAND_Z_TO_CM);
+          if (!slot.ready) {
+            slot.tip.copy(targetTip);
+            slot.base.copy(targetBase);
+            slot.ready = true;
+          } else {
+            const blend = trackingBlend(dt, 20);
+            slot.tip.lerp(targetTip, blend);
+            slot.base.lerp(targetBase, blend);
+          }
         }
       });
+      lastHandSeen = now;
       const palms: number[] = [];
       const fingersW: number[] = [];
+      let pinchDistance = Number.POSITIVE_INFINITY;
       for (const hand of liveHands) {
         if (hand.length < 21) continue;
         const a = normToWorld(hand[5].x, hand[5].y, faceOn ? headPos.z : -68);
@@ -557,16 +570,17 @@ export function startEngine(opts: {
           fingersW.push(fingerFromPalm(palm));
         }
         const d = Math.hypot(hand[4].x - hand[8].x, hand[4].y - hand[8].y, hand[4].z - hand[8].z);
-        if (d < PINCH_MAX) {
-          pinch = true;
+        pinchDistance = Math.min(pinchDistance, d);
+        if (d < PINCH_MAX * 1.4) {
           const px = (hand[4].x + hand[8].x) / 2;
           const py = (hand[4].y + hand[8].y) / 2;
           const pz = (faceOn ? headPos.z : -68) - hand[8].z * HAND_Z_TO_CM;
           pinchDot.position.copy(normToWorld(px, py, pz));
           pinchDot.visible = true;
-          tryGrab(px, py, pz);
+          if (!pinch) tryGrab(px, py, pz);
         }
       }
+      pinch = updatePinchState(pinch, pinchDistance);
       if (!pinch) {
         pinchDot.visible = false;
         releaseGrab();
@@ -583,9 +597,13 @@ export function startEngine(opts: {
       wristCm = null;
       fingerCm = null;
     } else if (freshFrame) {
-      pinchDot.visible = false;
-      releaseGrab();
       handCount = 0;
+      if (now - lastHandSeen > 150) {
+        pinch = false;
+        pinchDot.visible = false;
+        releaseGrab();
+        for (const finger of fingers) finger.ready = false;
+      }
     }
 
     if (faceWidth != null) faceWidthHold = faceWidth;
@@ -984,6 +1002,7 @@ export function startEngine(opts: {
 
   function tryGrab(nx: number, ny: number, pz: number) {
     if (getState().category === "necklace") {
+      if (neckGrab >= 0) { grabbed = true; return; }
       let best = -1;
       let bestD = 0.07;
       for (let i = 1; i < neckNodes.length; i++) {
