@@ -351,3 +351,74 @@ export function analyzeHairMotionProxy(
     quality: paired.length >= 8 && meanConfidence >= 0.5 ? "usable" : "insufficient",
   };
 }
+
+
+export type SeededHairMotionSummary = {
+  pairedSamples: number;
+  trackedFrames: number;
+  recoveredFrames: number;
+  trackingCoverage: number;
+  peakFaceRelativeDisplacement: number;
+  peakDisplacementAtMs: number | null;
+  responseLagMs: number | null;
+  quality: "insufficient" | "usable";
+};
+
+/**
+ * Measures a merchant-selected connected semantic hair component relative to
+ * the face. It is a component-motion proxy, not verified wig identity or
+ * physical hair dynamics. Yaw remains an uncalibrated proxy.
+ */
+export function analyzeSeededHairMotion(
+  track: SeededHairTrackPoint[],
+  wearer: WearerTrackingSample[],
+): SeededHairMotionSummary {
+  const wearerByTime = new Map(wearer.map((sample) => [sample.timestampMs, sample]));
+  const paired = track
+    .filter((point) => point.tracked && point.region.center !== null)
+    .map((point) => ({ point, wearer: wearerByTime.get(point.timestampMs) }))
+    .filter((item): item is { point: SeededHairTrackPoint; wearer: WearerTrackingSample } =>
+      Boolean(item.wearer?.faceDetected && item.wearer.headCenterX !== null &&
+        item.wearer.headCenterY !== null && item.wearer.headWidth !== null &&
+        item.wearer.headWidth > 0 && item.wearer.headYawProxy !== null),
+    )
+    .sort((a, b) => a.point.timestampMs - b.point.timestampMs);
+
+  const trackedFrames = track.filter((point) => point.tracked).length;
+  const recoveredFrames = track.filter((point) => point.recovered).length;
+  const trackingCoverage = track.length ? trackedFrames / track.length : 0;
+  const empty = {
+    pairedSamples: paired.length,
+    trackedFrames,
+    recoveredFrames,
+    trackingCoverage,
+    peakFaceRelativeDisplacement: 0,
+    peakDisplacementAtMs: null,
+    responseLagMs: null,
+    quality: "insufficient" as const,
+  };
+  if (paired.length < 5) return empty;
+
+  const offsets = paired.map(({ point, wearer: sample }) => ({
+    timestampMs: point.timestampMs,
+    x: (point.region.center!.x - sample.headCenterX!) / sample.headWidth!,
+    y: (point.region.center!.y - sample.headCenterY!) / sample.headWidth!,
+    yaw: sample.headYawProxy!,
+  }));
+  const baseline = offsets.slice(0, Math.min(3, offsets.length));
+  const baseX = baseline.reduce((sum, item) => sum + item.x, 0) / baseline.length;
+  const baseY = baseline.reduce((sum, item) => sum + item.y, 0) / baseline.length;
+  const yawBase = baseline.reduce((sum, item) => sum + item.yaw, 0) / baseline.length;
+  const yawIndex = offsets.reduce((best, item, index) =>
+    Math.abs(item.yaw - yawBase) > Math.abs(offsets[best].yaw - yawBase) ? index : best, 0);
+  const displacement = offsets.map((item) => Math.hypot(item.x - baseX, item.y - baseY));
+  const peak = Math.max(...displacement);
+  const peakIndex = displacement.indexOf(peak);
+  return {
+    ...empty,
+    peakFaceRelativeDisplacement: peak,
+    peakDisplacementAtMs: offsets[peakIndex].timestampMs,
+    responseLagMs: offsets[peakIndex].timestampMs - offsets[yawIndex].timestampMs,
+    quality: paired.length >= 8 && trackingCoverage >= 0.7 ? "usable" : "insufficient",
+  };
+}
