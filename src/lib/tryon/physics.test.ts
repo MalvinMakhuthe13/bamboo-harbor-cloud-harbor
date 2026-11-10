@@ -105,3 +105,30 @@ test("invalid hair follow inputs remain bounded", () => {
   assert.equal(hairSectionInfluence(Number.NaN, Number.POSITIVE_INFINITY, 1 / 60, 1), 0);
   assert.ok(hairSectionInfluence(0.4, 1, 1 / 60, Number.NaN) >= 0);
 });
+
+
+test("ellipsoid projection leaves outside points untouched", async () => {
+  const { projectOutsideEllipsoid } = await import("./physics.ts");
+  assert.equal(projectOutsideEllipsoid({ x: 5, y: 0, z: 0 }, { x: 2, y: 3, z: 4 }), null);
+});
+
+test("ellipsoid projection clears interior points along the surface normal", async () => {
+  const { projectOutsideEllipsoid } = await import("./physics.ts");
+  const projected = projectOutsideEllipsoid({ x: 1, y: 0, z: 0 }, { x: 2, y: 3, z: 4 }, 0.2)!;
+  assert.ok(Math.abs(projected.x - 2.2) < 1e-10);
+  assert.equal(projected.y, 0);
+  assert.equal(projected.z, 0);
+});
+
+test("ellipsoid projection handles the exact centre with a stable fallback normal", async () => {
+  const { projectOutsideEllipsoid } = await import("./physics.ts");
+  const projected = projectOutsideEllipsoid({ x: 0, y: 0, z: 0 }, { x: 2, y: 3, z: 4 })!;
+  assert.ok(Number.isFinite(projected.x) && Number.isFinite(projected.y) && Number.isFinite(projected.z));
+  assert.ok(projected.z < 0);
+});
+
+test("ellipsoid projection rejects invalid radii and clearance", async () => {
+  const { projectOutsideEllipsoid } = await import("./physics.ts");
+  assert.equal(projectOutsideEllipsoid({ x: 0, y: 0, z: 0 }, { x: 0, y: 3, z: 4 }), null);
+  assert.equal(projectOutsideEllipsoid({ x: 0, y: 0, z: 0 }, { x: 2, y: 3, z: 4 }, -1), null);
+});
