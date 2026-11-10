@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter } from "./physics.ts";
+import { frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -76,4 +76,32 @@ test("hair lock jitter stays in the unit interval", () => {
     const value = stableHairJitter(i, 2);
     assert.ok(value >= 0 && value < 1);
   }
+});
+
+
+test("nearby hair locks follow faster than distant neighbouring locks", () => {
+  const near = hairSectionInfluence(0, 1, 1 / 60, 1);
+  const far = hairSectionInfluence(0, 1, 1 / 60, 3);
+  assert.ok(near > far);
+  assert.ok(far > 0);
+  assert.ok(near < 1);
+  assert.ok(hairSectionResponseHz(1) > hairSectionResponseHz(3));
+});
+
+test("hair follow influence is frame-rate consistent over equal elapsed time", () => {
+  const at30 = hairSectionInfluence(0, 1, 1 / 30, 2);
+  const at60 = hairSectionInfluence(hairSectionInfluence(0, 1, 1 / 60, 2), 1, 1 / 60, 2);
+  assert.ok(Math.abs(at30 - at60) < 1e-10);
+});
+
+test("neighbour influence decays smoothly after a grab is released", () => {
+  const held = hairSectionInfluence(0, 0.42, 1 / 60, 1);
+  const released = hairSectionInfluence(held, 0, 1 / 60, 1);
+  assert.ok(released >= 0);
+  assert.ok(released < held);
+});
+
+test("invalid hair follow inputs remain bounded", () => {
+  assert.equal(hairSectionInfluence(Number.NaN, Number.POSITIVE_INFINITY, 1 / 60, 1), 0);
+  assert.ok(hairSectionInfluence(0.4, 1, 1 / 60, Number.NaN) >= 0);
 });
