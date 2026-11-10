@@ -336,3 +336,10 @@ test("hair motion summary safely handles no strands and invalid thresholds", () 
   assert.deepEqual(summarizeHairMotion([]), { averageSpeed: 0, settledPercent: 0, strandCount: 0 });
   assert.deepEqual(summarizeHairMotion([[1]], -1), { averageSpeed: 0, settledPercent: 0, strandCount: 0 });
 });
+
+
+test("hair motion settling threshold is exclusive at the boundary", () => {
+  const result = summarizeHairMotion([[1.5], [1.499], [1.501]], 1.5);
+  assert.equal(result.strandCount, 3);
+  assert.ok(Math.abs(result.settledPercent - (100 / 3)) < 1e-12);
+});
