@@ -2,6 +2,7 @@ import { useState } from "react";
 import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-frames";
 import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 import { createProductSegmenter, type ProductSegmentationSample } from "@/lib/tryon/product-segmentation";
+import { buildRelativeHairTrack, summarizeRelativeHairTrack } from "@/lib/tryon/hair-region-tracking";
 
 type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string };
 type TrackingSummary = {
@@ -13,6 +14,9 @@ type TrackingSummary = {
   meanHairCoverage: number;
   faceSkinFrames: number;
   clothesFrames: number;
+  relativeHairSamples: number;
+  horizontalJitter: number | null;
+  verticalJitter: number | null;
 };
 
 export function MotionVideoSampler() {
@@ -117,6 +121,8 @@ export function MotionVideoSampler() {
         .map((sample) => sample.headYawProxy)
         .filter((value): value is number => value !== null);
       const hairSamples = segmentationSamples.filter((sample) => sample.hairDetected);
+      const relativeHairTrack = buildRelativeHairTrack(wearerSamples, segmentationSamples);
+      const relativeHairSummary = summarizeRelativeHairTrack(relativeHairTrack);
       setFrames(previews);
       setTracking({
         frames: wearerSamples.length,
@@ -129,6 +135,9 @@ export function MotionVideoSampler() {
           : 0,
         faceSkinFrames: segmentationSamples.filter((sample) => sample.faceSkin.pixels > 0).length,
         clothesFrames: segmentationSamples.filter((sample) => sample.clothes.pixels > 0).length,
+        relativeHairSamples: relativeHairSummary.sampleCount,
+        horizontalJitter: relativeHairSummary.horizontalJitter,
+        verticalJitter: relativeHairSummary.verticalJitter,
       });
       setStatus(`Processed ${wearerSamples.length} frames locally. Face: ${faceFrames}; shoulders: ${shoulderFrames}; hair regions: ${hairSamples.length}. No video was uploaded.`);
     } catch (caught) {
@@ -170,6 +179,9 @@ export function MotionVideoSampler() {
           <div><dt className="text-ink-muted">Mean hair coverage</dt><dd>{(tracking.meanHairCoverage * 100).toFixed(1)}%</dd></div>
           <div><dt className="text-ink-muted">Face / clothing regions</dt><dd>{tracking.faceSkinFrames} / {tracking.clothesFrames}</dd></div>
           <div><dt className="text-ink-muted">Head yaw proxy range</dt><dd>{tracking.yawProxyRange?.toFixed(3) ?? "Unavailable"}</dd></div>
+          <div><dt className="text-ink-muted">Face-relative hair track</dt><dd>{tracking.relativeHairSamples}/{tracking.frames} frames</dd></div>
+          <div><dt className="text-ink-muted">Hair horizontal jitter</dt><dd>{tracking.horizontalJitter?.toFixed(3) ?? "Unavailable"}</dd></div>
+          <div><dt className="text-ink-muted">Hair vertical jitter</dt><dd>{tracking.verticalJitter?.toFixed(3) ?? "Unavailable"}</dd></div>
         </dl>
       )}
       {frames.length > 0 && (
