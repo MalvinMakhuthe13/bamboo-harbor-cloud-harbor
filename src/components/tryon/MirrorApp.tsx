@@ -296,6 +296,21 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
             {metrics?.grabbed ? (metrics.section > 1 ? ` · section of ${metrics.section}` : " · holding") : ""}
             {metrics ? ` · ${metrics.fps} fps` : ""}
           </p>
+          {metrics?.camera && (
+            <details className="mt-3 rounded-xl border border-line/60 px-3 py-2">
+              <summary className="cursor-pointer text-xs text-brass-2">Live motion diagnostics</summary>
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                <Measure label="Torso visibility" value={metrics.torsoConfidence * 100} suffix="%" />
+                <div>
+                  <dt className="text-muted">Motion signal</dt>
+                  <dd>{metrics.motionReady ? "Ready" : "Waiting for stable pose"}</dd>
+                </div>
+                <Measure label="Body acceleration" value={metrics.bodyAcceleration} suffix=" cm/s²" />
+                <Measure label="Head-relative acceleration" value={metrics.headRelativeAcceleration} suffix=" cm/s²" />
+              </dl>
+              <p className="mt-2 text-xs text-muted">These are filtered tracking estimates, not calibrated physical measurements. Low visibility or a lost pose disables the inertia input.</p>
+            </details>
+          )}
         </section>
       </aside>
     </div>
@@ -325,11 +340,11 @@ function Slider({
   );
 }
 
-function Measure({ label, value }: { label: string; value: number | null }) {
+function Measure({ label, value, suffix = " cm" }: { label: string; value: number | null; suffix?: string }) {
   return (
     <div>
       <dt className="text-muted">{label}</dt>
-      <dd>{value == null ? "—" : `${value.toFixed(0)} cm`}</dd>
+      <dd>{value == null ? "—" : `${value.toFixed(0)}${suffix}`}</dd>
     </div>
   );
 }
