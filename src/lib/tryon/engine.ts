@@ -1347,10 +1347,31 @@ function resolveHairBackContacts(
   const localCentre = centre.sub(headPos).applyQuaternion(inverseHead);
   const local = new THREE.Vector3();
   const correction = new THREE.Vector3();
+  const shoulderAxis = new THREE.Vector3().subVectors(shoulderRight, shoulderLeft);
+  const shoulderLengthSq = shoulderAxis.lengthSq();
+  const closestShoulder = new THREE.Vector3();
+  const shoulderDelta = new THREE.Vector3();
+  const shoulderClearance = 2.8;
+  const shoulderClearanceSq = shoulderClearance * shoulderClearance;
 
   for (const strand of strands) {
     for (let j = 2; j < strand.nodes.length; j++) {
       const node = strand.nodes[j];
+      // Rounded shoulder capsule: hair slides around the shoulder line instead
+      // of being pushed by the broad torso volume alone.
+      const shoulderT = shoulderLengthSq > 1e-6
+        ? Math.max(0, Math.min(1, shoulderDelta.subVectors(node.pos, shoulderLeft).dot(shoulderAxis) / shoulderLengthSq))
+        : 0;
+      closestShoulder.copy(shoulderLeft).addScaledVector(shoulderAxis, shoulderT);
+      shoulderDelta.subVectors(node.pos, closestShoulder);
+      const shoulderDistanceSq = shoulderDelta.lengthSq();
+      if (shoulderDistanceSq < shoulderClearanceSq) {
+        if (shoulderDistanceSq < 1e-8) shoulderDelta.set(0, 0, -1);
+        else shoulderDelta.multiplyScalar(1 / Math.sqrt(shoulderDistanceSq));
+        correction.copy(shoulderDelta).multiplyScalar(shoulderClearance - Math.sqrt(Math.max(shoulderDistanceSq, 0)));
+        node.pos.add(correction);
+        node.prev.add(correction);
+      }
       local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead).sub(localCentre);
       // Only the rear half of the torso is a blocker. Front hair remains free
       // to fall over the chest rather than being pushed away from the body.
