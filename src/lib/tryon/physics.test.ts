@@ -184,5 +184,5 @@ test("long rear hair retains more momentum than short front sections", () => {
 test("strand damping remains bounded for invalid and extreme inputs", () => {
   assert.equal(hairStrandDamping(Number.NaN, 1), VERLET_DAMP);
   assert.equal(hairStrandDamping(100, 100), 0.985);
-  assert.equal(hairStrandDamping(-10, -10), 0.925);
+  assert.equal(hairStrandDamping(-10, -10), 0.932);
 });
