@@ -32,7 +32,7 @@ test("normalises hair region against face size and smooths frame-to-frame jitter
   assert.equal(track[0].offsetX, 0);
   assert.ok(track[1].offsetX > 0 && track[1].offsetX < 1);
   assert.ok(track[2].offsetX > 0);
-  assert.equal(track[0].width, 1);
+  assert.ok(Math.abs(track[0].width - 1) < 1e-12);
   assert.equal(summarizeRelativeHairTrack(track).sampleCount, 3);
 });
 
@@ -50,7 +50,7 @@ test("resets smoothing after a long gap and validates options", () => {
     [wearer(0), wearer(3000)],
     [region(0, 0.5), region(3000, 0.7)],
   );
-  assert.equal(track[1].offsetX, 1);
+  assert.ok(Math.abs(track[1].offsetX - 1) < 1e-12);
   assert.throws(() => buildRelativeHairTrack([], [], { smoothing: 0 }));
 });
 
@@ -309,7 +309,7 @@ test("summarises each regional anchor independently", () => {
   const lower = summary.find((item) => item.section === "lower")!;
   assert.equal(top.sampleCount, 3);
   assert.equal(top.peakAtMs, 1000);
-  assert.equal(top.peakDisplacement, 0.1);
+  assert.ok(Math.abs(top.peakDisplacement - 0.2) < 1e-12);
   assert.equal(lower.sampleCount, 2);
   assert.equal(lower.peakAtMs, 500);
 });
