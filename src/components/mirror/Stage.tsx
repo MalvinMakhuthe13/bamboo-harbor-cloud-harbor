@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { startEngine, type Drag, type EngineHandle } from "@/lib/isibuko-ai/engine";
+import { cameraErrorMessage } from "@/lib/isibuko-ai/session";
 import type { FrameRequest, LiveMetrics } from "@/lib/isibuko-ai/types";
 
 export function Stage({
@@ -75,6 +76,7 @@ export function Stage({
       <video ref={videoRef} className="pointer-events-none absolute h-px w-px opacity-0" playsInline muted />
       <canvas
         ref={canvasRef}
+        aria-label="Try-on picture. Drag to nudge the piece."
         className="h-full w-full object-contain"
         onPointerDown={(event) => {
           const point = mapPointer(event);
@@ -112,7 +114,7 @@ export function Stage({
               .startCamera()
               .then(() => setMode("camera"))
               .catch((error) => {
-                const message = error instanceof Error ? error.message : "Camera permission was blocked.";
+                const message = cameraErrorMessage(error);
                 setCameraError(message);
                 onStatus(message);
               });
@@ -130,6 +132,16 @@ export function Stage({
               .catch((error) => onStatus(error instanceof Error ? error.message : "Studio photo failed."));
           }}
         />
+        {mode !== "ask" && (
+          <EngineButton
+            label="Stop"
+            onClick={() => {
+              handleRef.current?.stop();
+              setMode("ask");
+              setCameraError("");
+            }}
+          />
+        )}
       </div>
       {mode === "ask" && (
         <div className="absolute inset-0 flex items-end justify-center bg-ink/55 p-6 sm:items-center">
@@ -150,7 +162,7 @@ export function Stage({
                     .startCamera()
                     .then(() => setMode("camera"))
                     .catch((error) => {
-                      const message = error instanceof Error ? error.message : "Camera permission was blocked.";
+                      const message = cameraErrorMessage(error);
                       setCameraError(message);
                       onStatus(message);
                     });

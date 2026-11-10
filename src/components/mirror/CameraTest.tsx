@@ -51,6 +51,14 @@ export function CameraTest({
         {cell(metrics ? (metrics.poseCrop ? "region, with a full frame on a fixed beat" : "full frame") : "—")}
         <div>Segment size</div>
         {cell(metrics ? `${metrics.segmentEdge}px long edge, not cropped` : "—")}
+        <div>Piece change</div>
+        {cell(
+          metrics?.switchMs == null
+            ? "—"
+            : metrics.switchMs === 0
+              ? "under 1 ms, same frame"
+              : `${metrics.switchMs} ms until the photograph was bound`,
+        )}
         <div>Composite</div>
         {cell(metrics ? `${metrics.compositeMs} ms` : "—")}
         <div>Runtime</div>

@@ -122,3 +122,19 @@ export function syntheticScoreFixture(): Parameters<typeof evaluateShirt>[0] {
     handMask: Uint8Array.from([0, 0, 0, 0]),
   };
 }
+
+/** Mean step between landmarks. A synthetic track is not a person. */
+export function landmarkJitter(points: { x: number; y: number }[]): number {
+  if (points.length < 2) return 0;
+  let sum = 0;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1]!;
+    const next = points[i]!;
+    sum += Math.hypot(next.x - prev.x, next.y - prev.y);
+  }
+  return sum / (points.length - 1);
+}
+
+export function latencyWithin(ms: number, budgetMs: number): { pass: boolean; ms: number; budgetMs: number } {
+  return { pass: ms >= 0 && ms <= budgetMs, ms, budgetMs };
+}

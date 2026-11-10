@@ -13,7 +13,7 @@ export type RegionMode = "none" | "clothing" | "hair";
 
 export function regionMode(category: Category | null): RegionMode {
   if (category === "wig") return "hair";
-  if (category === "shirt" || category === "jacket" || category === "dress" || category === "pants") return "clothing";
+  if (category === "shirt" || category === "jacket" || category === "dress" || category === "pants" || category === "skirt") return "clothing";
   return "none";
 }
 
@@ -32,7 +32,8 @@ export function allowsRegionPaint(opts: {
 }): boolean {
   if (opts.mode === "none") return false;
   if (opts.inProtectedFace) return false;
-  if (opts.nearHand && (opts.cls === CLASS.body || opts.cls === CLASS.other)) return false;
+  // A tracked hand stays the camera, including where it crosses a garment.
+  if (opts.mode === "clothing" && opts.nearHand) return false;
   if (opts.mode === "clothing") {
     if (!opts.inGarment) return false;
     if (opts.cls === CLASS.background || opts.cls === CLASS.hair || opts.cls === CLASS.face) return false;
@@ -40,6 +41,12 @@ export function allowsRegionPaint(opts: {
   }
   if (!opts.inHairEllipse) return false;
   return true;
+}
+
+/** Segmented hair outside the protected face is cleared so the wig plate is the hair, not a sticker on top of it. */
+export function hidesOriginalHair(opts: { cls: number; inProtectedFace: boolean }): boolean {
+  if (opts.inProtectedFace) return false;
+  return opts.cls === CLASS.hair;
 }
 
 export function smoothPoint(prev: Pt | null, next: Pt, alpha: number): Pt {
@@ -82,7 +89,7 @@ export function clothingQuad(opts: {
   shoulderR: Pt;
   hipL: Pt;
   hipR: Pt;
-  category: "shirt" | "jacket" | "dress" | "pants";
+  category: "shirt" | "jacket" | "dress" | "pants" | "skirt";
   ankleL?: Pt | null;
   ankleR?: Pt | null;
   scale: number;
@@ -90,21 +97,28 @@ export function clothingQuad(opts: {
   sleevesInPhoto?: boolean;
 }): Quad {
   const s = opts.scale;
-  if (opts.category === "pants") {
+  if (opts.category === "pants" || opts.category === "skirt") {
     const hipMid = mid(opts.hipL, opts.hipR);
     const shMid = mid(opts.shoulderL, opts.shoulderR);
     const down = norm(sub(hipMid, shMid));
     const torso = Math.max(dist(shMid, hipMid), dist(opts.hipL, opts.hipR));
     const waistL = add(opts.hipL, down, -torso * 0.12);
     const waistR = add(opts.hipR, down, -torso * 0.12);
-    const botL = opts.ankleL ?? add(opts.hipL, down, torso * 1.35);
-    const botR = opts.ankleR ?? add(opts.hipR, down, torso * 1.35);
+    const hem = (hip: Pt, ankle: Pt | null | undefined) => {
+      if (opts.category === "skirt") {
+        if (ankle) return { x: hip.x + (ankle.x - hip.x) * 0.46, y: hip.y + (ankle.y - hip.y) * 0.46 };
+        return add(hip, down, torso * 0.62);
+      }
+      return ankle ?? add(hip, down, torso * 1.35);
+    };
+    const botL = hem(opts.hipL, opts.ankleL);
+    const botR = hem(opts.hipR, opts.ankleR);
     const top = mid(waistL, waistR);
     return {
       topL: scaleAbout(top, waistL, s),
       topR: scaleAbout(top, waistR, s),
-      botL: scaleAbout(mid(botL, botR), botL, s * 0.86),
-      botR: scaleAbout(mid(botL, botR), botR, s * 0.86),
+      botL: scaleAbout(mid(botL, botR), botL, s * (opts.category === "skirt" ? 0.92 : 0.86)),
+      botR: scaleAbout(mid(botL, botR), botR, s * (opts.category === "skirt" ? 0.92 : 0.86)),
     };
   }
   const shMid = mid(opts.shoulderL, opts.shoulderR);
@@ -260,6 +274,20 @@ export function necklaceSprite(chin: Pt, shoulderL: Pt, shoulderR: Pt, imageAspe
     w,
     h: w * imageAspect,
     rot: Math.atan2(shoulderR.y - shoulderL.y, shoulderR.x - shoulderL.x),
+  };
+}
+
+export function braceletSprite(elbow: Pt, wrist: Pt, imageAspect: number, scale: number): Sprite {
+  const along = Math.max(dist(elbow, wrist), 1e-4);
+  const dx = (wrist.x - elbow.x) / along;
+  const dy = (wrist.y - elbow.y) / along;
+  const band = along * 0.22 * scale;
+  return {
+    cx: wrist.x + dx * along * 0.22,
+    cy: wrist.y + dy * along * 0.22,
+    w: band * 1.35,
+    h: band * 0.42 * Math.max(imageAspect, 0.35),
+    rot: Math.atan2(wrist.y - elbow.y, wrist.x - elbow.x),
   };
 }
 

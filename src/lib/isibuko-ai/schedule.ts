@@ -10,12 +10,12 @@ export const FULL_FRAME: NormRect = { x: 0, y: 0, w: 1, h: 1 };
 export const GPU_STALL_MS = 1800;
 
 export function cadenceMs(category: string | null, lastSegmentMs: number): Record<TrackJob, number> {
-  const clothing = category === "shirt" || category === "jacket" || category === "dress" || category === "pants";
-  const hands = category === "nails" || category === "ring" ? 160 : category === "watch" ? 240 : 1100;
+  const clothing = category === "shirt" || category === "jacket" || category === "dress" || category === "pants" || category === "skirt";
+  const hands = category === "nails" || category === "ring" ? 160 : category === "watch" || category === "bracelet" ? 240 : 1100;
   const segment = lastSegmentMs > 650 ? Math.min(1100, Math.round(lastSegmentMs * 1.2)) : 320;
   return {
     face: clothing ? 200 : 140,
-    pose: clothing ? 160 : 320,
+    pose: clothing || category === "watch" || category === "bracelet" ? 160 : 320,
     hands,
     segment,
   };

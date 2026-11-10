@@ -19,6 +19,9 @@ export function Nav({ tone = "paper" }: { tone?: "paper" | "ink" }) {
         <Link to="/studio" className="inline-flex min-h-11 items-center rounded-full px-3">
           Studio
         </Link>
+        <Link to="/wardrobe" className="inline-flex min-h-11 items-center rounded-full px-3">
+          Wardrobe
+        </Link>
         <Link to="/science" className="inline-flex min-h-11 items-center rounded-full px-3">
           Fit math
         </Link>

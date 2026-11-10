@@ -197,7 +197,7 @@ void main() {
   bool protect = inEllipse(p, uProtectC, uProtectHalf, uHairCos, uHairSin);
   bool hand = nearHand(p);
 
-  if (uMode == 1 && uHasMask > 0.5 && !protect && !(hand && (body || other))) {
+  if (uMode == 1 && uHasMask > 0.5 && !protect && !hand) {
     vec2 sampleUv = torsoSample(p);
     vec2 armL = vec2(-1.0);
     vec2 armR = vec2(-1.0);
@@ -223,6 +223,20 @@ void main() {
         rgb = mix(rgb, lit, prod.a * edge);
       }
     }
+  }
+
+  // The wig photograph is drawn afterwards as a cut-out plate. This only removes the shopper's own hair class so it does not stick out around that plate. It is not a new hair mesh.
+  if (uMode == 2 && uHasMask > 0.5 && hair && !protect) {
+    float soften = 1.0;
+    float hr = clsAt(camUv + vec2(0.007, 0.0));
+    float hl = clsAt(camUv - vec2(0.007, 0.0));
+    float hu = clsAt(camUv + vec2(0.0, 0.007));
+    float hd = clsAt(camUv - vec2(0.0, 0.007));
+    if (!(hr > 0.5 && hr < 1.5)) soften = min(soften, 0.62);
+    if (!(hl > 0.5 && hl < 1.5)) soften = min(soften, 0.62);
+    if (!(hu > 0.5 && hu < 1.5)) soften = min(soften, 0.62);
+    if (!(hd > 0.5 && hd < 1.5)) soften = min(soften, 0.62);
+    rgb = mix(rgb, uBackdrop, 0.88 * soften);
   }
 
   if (uNailCount > 0) {

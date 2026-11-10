@@ -10,7 +10,9 @@ export type Category =
   | "shirt"
   | "jacket"
   | "dress"
-  | "pants";
+  | "pants"
+  | "skirt"
+  | "bracelet";
 
 export type NailShape = "almond" | "square" | "stiletto";
 
@@ -46,6 +48,8 @@ export type Product = {
   nail: NailShape;
   custom?: boolean;
   merchantUrl?: string;
+  /** Merchant's own words. Not inferred from the photograph. */
+  fabric?: string;
 };
 
 export type TryEvent = {
@@ -95,6 +99,8 @@ export type LiveMetrics = {
   handMs: number;
   segmentMs: number;
   compositeMs: number;
+  /** Milliseconds from a product, colour, or size change until that photograph is bound. Null before any change. Zero means the change landed in the same frame. */
+  switchMs: number | null;
   /** How often a new face, pose, hand, or mask result arrives. */
   trackFps: number;
   faceHz: number;

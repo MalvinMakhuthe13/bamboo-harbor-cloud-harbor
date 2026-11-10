@@ -9,6 +9,7 @@ import {
   containPoint,
   glassesSprite,
   nailSegments,
+  hidesOriginalHair,
   regionMode,
   torsoUv,
 } from "./placement.ts";
@@ -91,6 +92,23 @@ describe("appearance replacement policy", () => {
       }),
       false,
     );
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.clothes,
+        inGarment: true,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: true,
+      }),
+      false,
+    );
+  });
+
+  it("clears original hair outside the protected face and leaves the face", () => {
+    assert.equal(hidesOriginalHair({ cls: CLASS.hair, inProtectedFace: false }), true);
+    assert.equal(hidesOriginalHair({ cls: CLASS.hair, inProtectedFace: true }), false);
+    assert.equal(hidesOriginalHair({ cls: CLASS.face, inProtectedFace: false }), false);
   });
 });
 
@@ -98,7 +116,9 @@ describe("product conditioning", () => {
   it("maps categories onto hair, clothing, or an accessory sprite", () => {
     assert.equal(regionMode("wig"), "hair");
     assert.equal(regionMode("shirt"), "clothing");
+    assert.equal(regionMode("skirt"), "clothing");
     assert.equal(regionMode("dress"), "clothing");
+    assert.equal(regionMode("bracelet"), "none");
     assert.equal(regionMode("glasses"), "none");
     assert.equal(regionMode("nails"), "none");
   });

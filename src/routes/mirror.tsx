@@ -4,6 +4,7 @@ import { Stage } from "@/components/mirror/Stage";
 import { CameraTest } from "@/components/mirror/CameraTest";
 import { Nav } from "@/components/site/Nav";
 import { CATEGORY_LABEL, CATEGORY_ORDER, findProduct, productsIn } from "@/lib/isibuko-ai/catalog";
+import { conditionProduct } from "@/lib/isibuko-ai/condition";
 import type { Drag } from "@/lib/isibuko-ai/engine";
 import { matchSize, sizeScaleFor } from "@/lib/isibuko-ai/fit";
 import { useWardrobe } from "@/lib/isibuko-ai/store";
@@ -29,6 +30,7 @@ function MirrorPage() {
   const [status, setStatus] = useState("Opening the mirror");
   const [metrics, setMetrics] = useState<LiveMetrics | null>(null);
   const [handoff, setHandoff] = useState(false);
+  const [emptyNote, setEmptyNote] = useState("");
   const [height, setHeight] = useState(data.heightCm);
   const [switches, setSwitches] = useState(0);
   const [sessionSeen, setSessionSeen] = useState<number | null>(null);
@@ -71,20 +73,26 @@ function MirrorPage() {
     setSwatchId(product.swatches[0]?.id ?? "natural");
     setSizeLabel(product.sizes[0]?.label ?? null);
     setHandoff(false);
+    setEmptyNote("");
   }
 
   function choose(category: Category) {
     const next = productsIn(data.products, category)[0];
     if (next) selectProduct(next);
+    else setEmptyNote(`${CATEGORY_LABEL[category]} has no house piece. Add a photograph in the wardrobe. A photograph is not a measurement, and the camera is not restarted.`);
   }
 
+  const condition = conditionProduct(active, swatch?.tint ?? null);
   const payload = {
     sku: active.id,
     name: active.name,
     size: sizeLabel,
     colour: swatch?.name ?? "As photographed",
     priceZar: active.priceZar,
+    cut: condition.cut,
+    fabric: active.fabric ?? null,
     source: metrics?.source === "camera" ? "live-camera" : "studio-photo",
+    missing: condition.missing,
   };
 
   return (
@@ -99,6 +107,7 @@ function MirrorPage() {
               <button
                 key={category}
                 type="button"
+                aria-pressed={active.category === category}
                 className={`min-h-11 shrink-0 rounded-full px-3 text-sm ${active.category === category ? "bg-brass text-ink" : "bg-ink text-muted"}`}
                 onClick={() => choose(category)}
               >
@@ -106,6 +115,7 @@ function MirrorPage() {
               </button>
             ))}
           </div>
+          {emptyNote && <p className="text-sm text-clay">{emptyNote}</p>}
           <div className="flex flex-wrap gap-2">
             {productsIn(data.products, active.category).map((product) => (
               <button

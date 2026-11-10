@@ -1,5 +1,6 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
 import {
+  braceletSprite,
   clothingQuad,
   earringSprite,
   glassesSprite,
@@ -17,6 +18,7 @@ import {
   type Sprite,
 } from "@/lib/isibuko-ai/placement";
 import { COMPOSITE_FRAG, FULLSCREEN_VERT, SPRITE_FRAG, SPRITE_VERT } from "@/lib/isibuko-ai/shaders";
+import { applySessionEvent, reuseLiveCamera } from "@/lib/isibuko-ai/session";
 import {
   FULL_FRAME,
   GPU_STALL_MS,
@@ -269,6 +271,7 @@ export function startEngine(opts: {
   const pendingRoi: Partial<Record<Job, NormRect>> = {};
   let gpuFallback = false;
   let motion: LiveMetrics["motion"] = "unknown";
+  let motionHold: LiveMetrics["motion"] = "unknown";
   let shoulderPrev: { x: number; y: number; span: number; at: number } | null = null;
 
   function setStatus(next: string) {
@@ -283,20 +286,27 @@ export function startEngine(opts: {
     return next;
   }
 
+  let closing = false;
   function clearSource() {
-    stopSource?.();
-    stopSource = null;
-    studioImg = null;
-    stillUploaded = false;
-    faceLm = null;
-    poseLm = null;
-    poseWorld = null;
-    handLms = [];
-    hasMask = false;
-    lastMaskAt = 0;
-    shoulderPrev = null;
-    motion = "unknown";
-    source = "off";
+    closing = true;
+    try {
+      stopSource?.();
+      stopSource = null;
+      studioImg = null;
+      stillUploaded = false;
+      faceLm = null;
+      poseLm = null;
+      poseWorld = null;
+      handLms = [];
+      hasMask = false;
+      lastMaskAt = 0;
+      shoulderPrev = null;
+      motion = "unknown";
+      motionHold = "unknown";
+      source = "off";
+    } finally {
+      closing = false;
+    }
   }
 
   function frameSize(): { w: number; h: number } | null {
@@ -315,9 +325,22 @@ export function startEngine(opts: {
     clearSource();
     video.srcObject = stream;
     video.muted = true;
-    await video.play();
+    try {
+      await video.play();
+    } catch (error) {
+      stream.getTracks().forEach((track) => track.stop());
+      if (video.srcObject === stream) video.srcObject = null;
+      throw error;
+    }
     source = "camera";
-    cameraSession += 1;
+    cameraSession = applySessionEvent({ session: cameraSession, source: "off" }, "camera").session;
+    for (const track of stream.getVideoTracks()) {
+      track.addEventListener("ended", () => {
+        if (closing || disposed || source !== "camera") return;
+        clearSource();
+        setStatus("The camera stopped. Start it again when you are ready.");
+      });
+    }
     stopSource = () => {
       extra?.();
       stream.getTracks().forEach((track) => track.stop());
@@ -326,6 +349,12 @@ export function startEngine(opts: {
   }
 
   async function startCamera() {
+    const existing = video.srcObject;
+    const tracks = existing instanceof MediaStream ? existing.getVideoTracks() : [];
+    if (reuseLiveCamera(source, tracks)) {
+      setStatus("Live camera. Frames stay on this device. Changing the piece does not stop the camera.");
+      return;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -340,7 +369,7 @@ export function startEngine(opts: {
     studioImg = img;
     stillUploaded = false;
     source = "studio";
-    cameraSession += 1;
+    cameraSession = applySessionEvent({ session: cameraSession, source: "off" }, "studio").session;
     stopSource = () => {
       studioImg = null;
     };
@@ -410,6 +439,17 @@ export function startEngine(opts: {
       });
   }
 
+  let switchKey = "";
+  let switchStarted = 0;
+  let switchMs: number | null = null;
+
+  function watchSwitch(request: FrameRequest) {
+    const key = `${request.productId ?? ""}|${request.image ?? ""}|${(request.tint ?? []).join(",")}|${request.sizeScale}|${request.category ?? ""}`;
+    if (key === switchKey) return;
+    switchKey = key;
+    switchStarted = source === "off" ? 0 : performance.now();
+  }
+
   function draw(request: FrameRequest) {
     const t0 = performance.now();
     const category = request.category;
@@ -450,7 +490,7 @@ export function startEngine(opts: {
     gl.uniform1i(u.mode, modeId);
     gl.uniform1f(u.hasMask, hasMask ? 1 : 0);
     gl.uniform1f(u.cover, 1);
-    gl.uniform1f(u.full, category === "pants" || category === "dress" ? 1 : 0);
+    gl.uniform1f(u.full, category === "pants" || category === "dress" || category === "skirt" ? 1 : 0);
     gl.uniform3f(u.tint, tint?.[0] ?? 1, tint?.[1] ?? 1, tint?.[2] ?? 1);
     gl.uniform1f(u.tintOn, tint ? 1 : 0);
     gl.uniform2f(u.drag, mode === "hair" ? dragPt.x : 0, mode === "hair" ? dragPt.y : 0);
@@ -508,7 +548,7 @@ export function startEngine(opts: {
             shoulderR: shR,
             hipL,
             hipR,
-            category: category as "shirt" | "jacket" | "dress" | "pants",
+            category: category as "shirt" | "jacket" | "dress" | "pants" | "skirt",
             ankleL: poseLm && seen(poseLm[27], 0.2) ? remember("anL", flip(poseLm[27]!)) : null,
             ankleR: poseLm && seen(poseLm[28], 0.2) ? remember("anR", flip(poseLm[28]!)) : null,
             scale: request.sizeScale,
@@ -620,13 +660,15 @@ export function startEngine(opts: {
         sprites.push(nudge(necklaceSprite(chin, left, right, aspect, scale, 0)));
       }
     }
-    if (productImg && category === "watch" && poseLm) {
+    if (productImg && (category === "watch" || category === "bracelet") && poseLm) {
       for (const [e, w] of [
         [13, 15],
         [14, 16],
       ] as const) {
         if (seen(poseLm[e], 0.25) && seen(poseLm[w], 0.25)) {
-          sprites.push(nudge(watchSprite(remember(`e${e}`, flip(poseLm[e]!)), remember(`w${w}`, flip(poseLm[w]!)), aspect, scale)));
+          const elbow = remember(`e${e}`, flip(poseLm[e]!));
+          const wrist = remember(`w${w}`, flip(poseLm[w]!));
+          sprites.push(nudge(category === "bracelet" ? braceletSprite(elbow, wrist, aspect, scale) : watchSprite(elbow, wrist, aspect, scale)));
         }
       }
     }
@@ -655,6 +697,10 @@ export function startEngine(opts: {
       gl.bufferData(gl.ARRAY_BUFFER, arr, gl.DYNAMIC_DRAW);
       gl.drawArrays(gl.TRIANGLES, 0, data.length / 4);
       gl.disable(gl.BLEND);
+    }
+    if (switchStarted && (!request.image || productUrl === request.image)) {
+      switchMs = Math.round(performance.now() - switchStarted);
+      switchStarted = 0;
     }
     times.composite = performance.now() - t0;
   }
@@ -914,6 +960,7 @@ export function startEngine(opts: {
       handMs: Math.round(times.hand),
       segmentMs: Math.round(times.segment),
       compositeMs: Math.round(times.composite),
+      switchMs,
       delegate: faceReady || bodyReady || segReady ? delegateName : "loading",
       delegateNote,
       trackFps,
@@ -943,6 +990,7 @@ export function startEngine(opts: {
   function readMotion(pose: Lm[] | null, now: number) {
     if (!pose || !seen(pose[11], 0.2) || !seen(pose[12], 0.2)) {
       motion = "unknown";
+      motionHold = "unknown";
       return;
     }
     const x = (pose[11]!.x + pose[12]!.x) / 2;
@@ -957,15 +1005,24 @@ export function startEngine(opts: {
     if (dt < 280) return;
     const moved = Math.hypot(x - shoulderPrev.x, y - shoulderPrev.y);
     const spanRatio = shoulderPrev.span > 0.02 ? Math.abs(span - shoulderPrev.span) / shoulderPrev.span : 0;
-    if (spanRatio > 0.07) motion = "turning";
-    else if (moved > 0.015) motion = "moving";
-    else motion = "still";
+    const next = spanRatio > 0.08 ? "turning" : moved > 0.02 ? "moving" : "still";
+    if (next === "still") motion = "still";
+    else if (next === motion) motion = next;
+    else if (motionHold === next) motion = next;
+    motionHold = next;
     shoulderPrev = { x, y, span, at: now };
   }
+
+  let pageHidden = false;
+  const onVisibility = () => {
+    pageHidden = document.visibilityState === "hidden";
+  };
+  document.addEventListener("visibilitychange", onVisibility);
 
   function loop(now: number) {
     if (disposed) return;
     raf = requestAnimationFrame(loop);
+    if (pageHidden) return;
     if (!drag.hold) {
       drag.x *= 0.86;
       drag.y *= 0.86;
@@ -973,6 +1030,7 @@ export function startEngine(opts: {
     if (!frameSource()) return;
     resize();
     const request = getRequest();
+    watchSwitch(request);
     ensureProduct(request.image);
     pumpFace();
     pumpBody();
@@ -984,9 +1042,10 @@ export function startEngine(opts: {
     }
     publish(request);
     if (source !== "off") {
-      if (!faceReady && !bodyReady) {
+      if (trackerFault) setStatus(trackerFault);
+      else if (!faceReady && !bodyReady) {
         setStatus(source === "camera" ? "Live camera is on. The tracker is still loading. The picture keeps moving." : "Studio photograph for testing only. The tracker is still loading.");
-      } else if (!faceLm && request.category !== "pants" && request.category !== "nails") setStatus("Looking for a face. Face the mirror.");
+      } else if (!faceLm && request.category !== "pants" && request.category !== "skirt" && request.category !== "nails" && request.category !== "bracelet") setStatus("Looking for a face. Face the mirror.");
       else if (regionMode(request.category) === "clothing" && !poseLm) setStatus("Step back so both shoulders are in frame.");
       else if (request.category === "nails" && handLms.length === 0) setStatus("Hold a hand up so the nails can be read.");
       else if (source === "camera") setStatus("Live camera. You are wearing it. Move — changing the piece does not stop the camera.");
@@ -1000,6 +1059,8 @@ export function startEngine(opts: {
     else segInflight = false;
   }
 
+  let trackerRecoveries = 0;
+  let trackerFault = "";
   function attach(worker: Worker, kind: "face" | "body" | "seg") {
     worker.onmessage = (event: MessageEvent) => {
       const msg = event.data as { type?: string; message?: string; delegate?: string; job?: Job };
@@ -1013,7 +1074,8 @@ export function startEngine(opts: {
       if (msg.type === "progress") return;
       if (msg.type === "error") {
         releaseInflight(kind);
-        setStatus(msg.message || "The live tracker failed to start.");
+        trackerFault = msg.message || "The live tracker failed to start.";
+        setStatus(trackerFault);
         return;
       }
       if (msg.type === "result") {
@@ -1025,7 +1087,15 @@ export function startEngine(opts: {
     };
     worker.onerror = () => {
       releaseInflight(kind);
-      setStatus("The live tracker stopped. Reload the mirror.");
+      if (disposed) return;
+      if (trackerRecoveries < 1) {
+        trackerRecoveries += 1;
+        trackerFault = "";
+        setStatus("The tracker hit an error and is starting again. The picture stays up.");
+        bootDelegate(delegateName === "GPU" ? "GPU" : "CPU");
+        return;
+      }
+      setStatus("The live tracker stopped. Stop the mirror and start it again.");
     };
   }
 
@@ -1033,6 +1103,7 @@ export function startEngine(opts: {
     faceReady = false;
     bodyReady = false;
     segReady = false;
+    trackerFault = "";
     faceInflight = false;
     bodyInflight = false;
     segInflight = false;
@@ -1077,6 +1148,7 @@ export function startEngine(opts: {
       faceWorker.terminate();
       bodyWorker.terminate();
       segWorker.terminate();
+      document.removeEventListener("visibilitychange", onVisibility);
       console.error = originalError;
     },
   };
