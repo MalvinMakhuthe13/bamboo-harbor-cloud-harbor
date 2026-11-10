@@ -1359,7 +1359,6 @@ function resolveHairBackContacts(
   const napeCentre = new THREE.Vector3(0, -9.2, -1.6);
   const napeRadii = new THREE.Vector3(4.6, 5.4, 4.1);
   const napeLocal = new THREE.Vector3();
-  const napeNormal = new THREE.Vector3();
 
   for (const strand of strands) {
     for (let j = 2; j < strand.nodes.length; j++) {
