@@ -12,6 +12,43 @@ import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
 import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
 
+/**
+ * Preview's static server labels `.wasm` as octet-stream, and it Brotli-compresses
+ * the tracker binaries on the fly. MediaPipe then never finishes loading.
+ * Dev already sends `application/wasm` without that compression.
+ */
+function wasmMimePlugin(): Plugin {
+  return {
+    name: "isibuko-wasm-mime",
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = (req.url ?? "").split("?")[0] ?? "";
+        if (/\.(wasm|task|tflite)$/.test(path)) delete req.headers["accept-encoding"];
+        if (!path.endsWith(".wasm")) {
+          next();
+          return;
+        }
+        const setHeader = res.setHeader.bind(res);
+        res.setHeader = ((name: string, value: number | string | readonly string[]) => {
+          if (String(name).toLowerCase() === "content-type") return setHeader("Content-Type", "application/wasm");
+          return setHeader(name, value);
+        }) as typeof res.setHeader;
+        const writeHead = res.writeHead.bind(res);
+        res.writeHead = ((...args: unknown[]) => {
+          const headers = args[1];
+          if (headers && typeof headers === "object" && !Array.isArray(headers)) {
+            for (const key of Object.keys(headers as Record<string, unknown>)) {
+              if (key.toLowerCase() === "content-type") (headers as Record<string, unknown>)[key] = "application/wasm";
+            }
+          }
+          return writeHead(...(args as Parameters<typeof res.writeHead>));
+        }) as typeof res.writeHead;
+        next();
+      });
+    },
+  };
+}
+
 /** The files `src/lib/db.ts` globs — same directory, same non-recursive scope. */
 function hasGlobbedMigrations(root: string): boolean {
   try {
@@ -165,6 +202,7 @@ export default defineConfig(({ command, isPreview }) => ({
     appEnvPlugin(),
     // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
     grokPwaPlugin(),
+    wasmMimePlugin(),
     tailwindcss(),
     tanstackStart(),
     ...(command === "build" || isPreview

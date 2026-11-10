@@ -87,10 +87,13 @@ The GPU delegate stays off. An earlier try on this software GL took about 3.6 s 
 
 `/lab` is a separate page. It can build a shirt-only packet (garment id, frame size, whether pose and a clothes mask exist, camera or studio). `runShirtExperiment` then returns `not-installed`. It does not generate a frame and it does not call the photographic composite. No external checkpoint is downloaded. ViViD, CatV2TON, MagicTryOn, IDM-VTON and CatVTON were compared from their public papers and repos. None is live, and none is cleared for commercial shipping here. An owned shirt model would need licensed training pairs and an approved GPU run. That has not started.
 
+The release-candidate record is `docs/ISIBUKO_RELEASE_CANDIDATE.md`.
+
 ## Not done
 
 - No owned generative video weights, so this is photographic compositing, not Lucy-style synthesis. Identity and cloth motion are not synthesised.
-- A shirt or coat replaces segmented torso and arm pixels and follows the arm bones. The shoulder join is still a hard seam, not a drape.
-- A wig is the merchant plate, aligned to the head with the face left in the plate’s opening. It does not change the shopper’s hair silhouette the way a generative model would. A short style will not remove long hair outside the plate.
+- A shirt or coat replaces segmented torso and arm pixels and follows the arm bones. A tracked hand is left as the camera where it crosses the garment. The shoulder join is still a hard seam, not a drape.
+- A wig clears segmented hair outside the protected face, then draws the merchant plate. Cleared pixels take a sampled backdrop colour. That is not a new hair mesh.
 - Trousers, watches, rings and nails need that body part in frame. The bundled studio plate is chest-up, so those reads are limited. Hats, glasses, earrings and necklaces are landmark-anchored plates.
 - Depth is an assumed ellipse, not a depth camera. The fit screen says so.
+- Skirts and bracelets have geometry and a merchant upload, and no house photograph.
