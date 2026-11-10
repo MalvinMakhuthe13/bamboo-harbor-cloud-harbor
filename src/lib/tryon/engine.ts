@@ -786,6 +786,11 @@ export function startEngine(opts: {
         radius,
         pull || 1,
       );
+    }
+    // Resolve local strand contacts after integration so neighbouring locks do not
+    // fight each other's Verlet constraints during the same update.
+    resolveHairContacts(strands, grabStrand, grabJoint);
+    for (const strand of strands) {
       writeRibbon(strand, ribbonWidthCm(state.style));
       if (!strand.ready) strand.ready = true;
     }
@@ -1252,6 +1257,38 @@ function makeRibbon(joints: number) {
   }
   geo.setIndex(idx);
   return geo;
+}
+
+
+/** Soft local self-collision between adjacent hair ribbons. Keeps roots attached and
+ * moves previous positions with corrected positions to avoid injecting fake velocity. */
+function resolveHairContacts(strands: Strand[], grabbedStrand: number, grabbedJoint: number) {
+  const minGap = 0.34;
+  const minGapSq = minGap * minGap;
+  const delta = new THREE.Vector3();
+  for (let s = 0; s < strands.length; s++) {
+    const a = strands[s].nodes;
+    for (let neighbour = s + 1; neighbour <= Math.min(strands.length - 1, s + 2); neighbour++) {
+      const b = strands[neighbour].nodes;
+      const count = Math.min(a.length, b.length);
+      for (let j = 1; j < count; j++) {
+        if ((s === grabbedStrand && j === grabbedJoint) || (neighbour === grabbedStrand && j === grabbedJoint)) continue;
+        const pa = a[j].pos;
+        const pb = b[j].pos;
+        delta.subVectors(pb, pa);
+        const d2 = delta.lengthSq();
+        if (d2 >= minGapSq) continue;
+        if (d2 < 1e-8) delta.set(0, 0, ((s + neighbour + j) % 2 ? 1 : -1) * minGap);
+        else delta.multiplyScalar(minGap / Math.sqrt(d2));
+        const correction = delta.subVectors(delta, pb.clone().sub(pa)).multiplyScalar(-0.5);
+        // correction now points from a towards its half-separation displacement.
+        pa.sub(correction);
+        pb.add(correction);
+        a[j].prev.sub(correction);
+        b[j].prev.add(correction);
+      }
+    }
+  }
 }
 
 function writeRibbon(strand: Strand, width: number) {
