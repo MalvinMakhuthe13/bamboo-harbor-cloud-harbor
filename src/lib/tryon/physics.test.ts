@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { summarizeHairMotion, angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, motionAccelerationDeadzone, hairSectionResponseHz, hairStrandDamping, verletDampingFactor, VERLET_DAMP } from "./physics.ts";
+import { hairMotionState, summarizeHairMotion, angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, motionAccelerationDeadzone, hairSectionResponseHz, hairStrandDamping, verletDampingFactor, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -342,4 +342,17 @@ test("hair motion settling threshold is exclusive at the boundary", () => {
   const result = summarizeHairMotion([[1.5], [1.499], [1.501]], 1.5);
   assert.equal(result.strandCount, 3);
   assert.ok(Math.abs(result.settledPercent - (100 / 3)) < 1e-12);
+});
+
+test("hair motion state distinguishes unavailable, moving, settling, and settled", () => {
+  assert.equal(hairMotionState(0, 0), "unavailable");
+  assert.equal(hairMotionState(4, 0), "moving");
+  assert.equal(hairMotionState(4, 50), "settling");
+  assert.equal(hairMotionState(4, 100), "settled");
+});
+
+test("hair motion state safely handles invalid diagnostic values", () => {
+  assert.equal(hairMotionState(Number.NaN, 50), "unavailable");
+  assert.equal(hairMotionState(4, Number.NaN), "unavailable");
+  assert.equal(hairMotionState(4, 150), "settled");
 });
