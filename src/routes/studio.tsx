@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Nav } from "@/components/site/Nav";
+import { MotionVideoSampler } from "@/components/tryon/MotionVideoSampler";
 import {
   CATEGORY_LABEL,
   CATEGORY_ORDER,
@@ -315,6 +316,8 @@ function Studio() {
             </ul>
           </div>
         </section>
+
+        <MotionVideoSampler />
 
         <section className="mt-12">
           <h2 className="font-display text-2xl">Sizes chosen</h2>
