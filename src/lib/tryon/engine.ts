@@ -1370,13 +1370,25 @@ function resolveHairBackContacts(
         : 0;
       closestShoulder.copy(shoulderLeft).addScaledVector(shoulderAxis, shoulderT);
       shoulderDelta.subVectors(node.pos, closestShoulder);
-      const shoulderDistanceSq = shoulderDelta.lengthSq();
-      if (shoulderDistanceSq < shoulderClearanceSq) {
-        if (shoulderDistanceSq < 1e-8) shoulderDelta.set(0, 0, -1);
-        else shoulderDelta.multiplyScalar(1 / Math.sqrt(shoulderDistanceSq));
-        correction.copy(shoulderDelta).multiplyScalar(shoulderClearance - Math.sqrt(Math.max(shoulderDistanceSq, 0)));
-        node.pos.add(correction);
-        node.prev.add(correction);
+      const shoulderPrevious = node.prev.clone().sub(closestShoulder);
+      const shoulderContact = resolveEllipsoidContact(
+        shoulderDelta,
+        shoulderPrevious,
+        { x: shoulderClearance, y: shoulderClearance, z: shoulderClearance },
+        0,
+        0.06,
+      );
+      if (shoulderContact) {
+        node.pos.copy(new THREE.Vector3(
+          shoulderContact.position.x,
+          shoulderContact.position.y,
+          shoulderContact.position.z,
+        ).add(closestShoulder));
+        node.prev.copy(new THREE.Vector3(
+          shoulderContact.previous.x,
+          shoulderContact.previous.y,
+          shoulderContact.previous.z,
+        ).add(closestShoulder));
       }
       local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead);
       if (j >= 3 && local.y < -4 && local.y > -15 && local.z < 0) {
