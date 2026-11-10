@@ -67,7 +67,7 @@ export function analyzeMotionSamples(samples: MotionSample[]): ProductMotionProf
     };
   }
 
-  const baseline = valid.slice(0, Math.min(3, valid.length));
+  // Use the opening two observations as the resting baseline. Including a third\n  // sample can absorb the beginning of a turn into the baseline and hide settling.\n  const baseline = valid.slice(0, Math.min(2, valid.length));
   const baseX = average(baseline.map((sample) => sample.productOffsetX));
   const baseY = average(baseline.map((sample) => sample.productOffsetY));
   const yaws = valid.map((sample) => sample.headYawRad);
@@ -84,7 +84,7 @@ export function analyzeMotionSamples(samples: MotionSample[]): ProductMotionProf
   // This is an observed time, not a fitted damping constant.
   const threshold = Math.max(0.015, peakRelativeDisplacement * 0.12);
   let settleTimeMs: number | null = null;
-  for (let i = 1; i < displacement.length - 2; i++) {
+  for (let i = 1; i < displacement.length - 1; i++) {
     if (displacement.slice(i).every((value) => value <= threshold)) {
       settleTimeMs = valid[i].timestampMs - valid[0].timestampMs;
       break;
