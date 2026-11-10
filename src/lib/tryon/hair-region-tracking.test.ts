@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeHairMotionProxy, buildRelativeHairTrack, summarizeRelativeHairTrack } from "./hair-region-tracking.ts";
+import { analyzeHairMotionProxy, analyzeSeededHairMotion, buildRelativeHairTrack, summarizeRelativeHairTrack } from "./hair-region-tracking.ts";
 import type { WearerTrackingSample } from "./wearer-tracking.ts";
 import type { ProductSegmentationSample } from "./product-segmentation.ts";
 
@@ -227,4 +227,44 @@ test("requires enough timestamp-paired confident samples for motion diagnostics"
 
 test("rejects invalid confidence thresholds for hair motion diagnostics", () => {
   assert.throws(() => analyzeHairMotionProxy([], [], 1.5), /Minimum confidence/);
+});
+
+
+test("builds a face-relative motion profile for a merchant-selected hair component", () => {
+  const yaw = [0, 0.1, 0.3, 0.4, 0.2, 0];
+  const centers = [0.5, 0.51, 0.53, 0.56, 0.62, 0.7];
+  const wearerSamples = yaw.map((value, index) => ({
+    ...wearer(index * 500),
+    headYawProxy: value,
+  }));
+  const track = centers.map((center, index) => ({
+    timestampMs: index * 500,
+    seed: { x: center, y: 0.3 },
+    region: {
+      pixels: 20, ratio: 0.02,
+      bounds: { left: center - 0.01, right: center + 0.01, top: 0.2, bottom: 0.4 },
+      center: { x: center, y: 0.3 },
+    },
+    tracked: true,
+    recovered: index === 4,
+  }));
+  const summary = analyzeSeededHairMotion(track, wearerSamples);
+  assert.equal(summary.pairedSamples, 6);
+  assert.equal(summary.trackedFrames, 6);
+  assert.equal(summary.recoveredFrames, 1);
+  assert.equal(summary.trackingCoverage, 1);
+  assert.equal(summary.peakDisplacementAtMs, 2500);
+  assert.equal(summary.responseLagMs, 1000);
+  assert.equal(summary.quality, "insufficient");
+});
+
+test("reports insufficient selected-component motion when face pairing is unavailable", () => {
+  const track = [{
+    timestampMs: 0, seed: { x: 0.5, y: 0.5 },
+    region: { pixels: 1, ratio: 0.01, bounds: null, center: { x: 0.5, y: 0.5 } },
+    tracked: true, recovered: false,
+  }];
+  const summary = analyzeSeededHairMotion(track, [wearer(0, false)]);
+  assert.equal(summary.pairedSamples, 0);
+  assert.equal(summary.quality, "insufficient");
 });
