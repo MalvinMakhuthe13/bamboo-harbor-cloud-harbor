@@ -11,6 +11,7 @@ import {
   CAT_EYE_ROLL,
   angleDeltaRadians,
   bodyMotionAcceleration,
+  relativeMotionVelocity,
   CONSTRAINT_PASSES,
   EAR_SWING_X,
   EAR_SWING_Z,
@@ -273,7 +274,10 @@ export function startEngine(opts: {
   let bodyMotionReady = false;
   const previousBodyMid = new THREE.Vector3();
   const previousBodyVelocity = new THREE.Vector3();
+  const previousHeadRelative = new THREE.Vector3();
+  const previousHeadRelativeVelocity = new THREE.Vector3();
   const bodyAcceleration = new THREE.Vector3();
+  const headRelativeAcceleration = new THREE.Vector3();
 
   let cameraOn = false;
   let faceOn = false;
@@ -556,16 +560,38 @@ export function startEngine(opts: {
         const velocity = tmpC.subVectors(bodyMid, previousBodyMid).multiplyScalar(1 / elapsed);
         const acceleration = bodyMotionAcceleration(previousBodyVelocity, velocity, elapsed, 180);
         bodyAcceleration.lerp(new THREE.Vector3(acceleration.x, acceleration.y, acceleration.z), 0.35);
+        const relativeHead = tmpB.subVectors(headPos, bodyMid);
+        const relativeHeadVelocity = tmpC.subVectors(relativeHead, previousHeadRelative).multiplyScalar(1 / elapsed);
+        const relativeVelocity = relativeMotionVelocity(
+          { x: relativeHeadVelocity.x, y: relativeHeadVelocity.y, z: relativeHeadVelocity.z },
+          { x: 0, y: 0, z: 0 },
+        );
+        const relativeAcceleration = bodyMotionAcceleration(
+          previousHeadRelativeVelocity,
+          relativeVelocity,
+          elapsed,
+          140,
+        );
+        headRelativeAcceleration.lerp(
+          new THREE.Vector3(relativeAcceleration.x, relativeAcceleration.y, relativeAcceleration.z),
+          0.35,
+        );
+        previousHeadRelativeVelocity.set(relativeVelocity.x, relativeVelocity.y, relativeVelocity.z);
+        previousHeadRelative.copy(relativeHead);
         previousBodyVelocity.copy(velocity);
       } else {
         previousBodyVelocity.set(0, 0, 0);
+        previousHeadRelative.copy(tmpB.subVectors(headPos, bodyMid));
+        previousHeadRelativeVelocity.set(0, 0, 0);
         bodyMotionReady = true;
       }
       previousBodyMid.copy(bodyMid);
       bodyMotionStamp = poseSeen;
     } else if (!poseOn) {
       bodyAcceleration.multiplyScalar(0.88);
+      headRelativeAcceleration.multiplyScalar(0.88);
       if (bodyAcceleration.lengthSq() < 0.04) bodyAcceleration.set(0, 0, 0);
+      if (headRelativeAcceleration.lengthSq() < 0.04) headRelativeAcceleration.set(0, 0, 0);
     }
 
     if (cameraOn && freshFrame && liveHands.length) {
@@ -824,6 +850,7 @@ export function startEngine(opts: {
         pull || 1,
         hairStrandDamping(strand.lengthMul, Math.max(0, Math.min(1, -strand.local.z / 10))),
         bodyAcceleration,
+        headRelativeAcceleration,
       );
     }
     // Resolve local strand contacts after integration so neighbouring locks do not
@@ -1559,6 +1586,7 @@ function simulate(
   pullStrength = 1,
   dampingRetention = VERLET_DAMP,
   bodyAcceleration: THREE.Vector3 | null = null,
+  headRelativeAcceleration: THREE.Vector3 | null = null,
 ) {
   const g = GRAVITY_CM_S2 * dt * dt;
   const blend = constraintBlend(stiffness);
@@ -1588,6 +1616,9 @@ function simulate(
     if (bodyAcceleration) {
       // Inertial lag is opposite the wearer's measured torso acceleration.
       n.pos.addScaledVector(bodyAcceleration, -0.18 * dt * dt);
+    }
+    if (headRelativeAcceleration) {
+      n.pos.addScaledVector(headRelativeAcceleration, -0.12 * dt * dt);
     }
   }
   const corr = new THREE.Vector3();
