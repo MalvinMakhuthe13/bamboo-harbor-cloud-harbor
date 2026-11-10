@@ -251,11 +251,11 @@ export function MotionVideoSampler() {
               <p className="mt-2 font-medium">Selected-component motion</p>
               <p className="mt-1 text-ink-muted">Face-relative displacement: {seedSelection.motion.peakFaceRelativeDisplacement.toFixed(3)} · response lag: {seedSelection.motion.responseLagMs === null ? "Unavailable" : `${seedSelection.motion.responseLagMs} ms`}</p>
               <p className="mt-1 text-ink-muted">Face-paired samples: {seedSelection.motion.pairedSamples} · coverage: {(seedSelection.motion.trackingCoverage * 100).toFixed(0)}% · recovered: {seedSelection.motion.recoveredFrames} · quality: {seedSelection.motion.quality}</p>
-              <p className="mt-2 font-medium">Regional anchor movement</p>
+              <p className="mt-2 font-medium">Regional component movement</p>
               <div className="mt-1 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
                 {seedSelection.sections.map((section) => <div key={section.section} className="rounded-lg bg-surface-muted/60 p-2"><p className="capitalize">{section.section}</p><p>{section.peakDisplacement.toFixed(3)}</p><p className="text-ink-muted">{section.sampleCount} samples</p></div>)}
               </div>
-              <p className="mt-1 text-xs text-ink-muted">These are geometric anchors within one tracked region, not separately identified strands.</p>
+              <p className="mt-1 text-xs text-ink-muted">Each value is measured from pixels in a separate zone of the selected component mask. Zones are not independently identified strands or guaranteed wig sections.</p>
               {seedSelection.result.bounds
                 ? <p className="mt-1 text-ink-muted">Bounds: x {seedSelection.result.bounds.left.toFixed(2)}–{seedSelection.result.bounds.right.toFixed(2)}, y {seedSelection.result.bounds.top.toFixed(2)}–{seedSelection.result.bounds.bottom.toFixed(2)}</p>
                 : <p className="mt-1 text-clay">No semantic hair pixels found near that point. Try another point on the pink region.</p>}
