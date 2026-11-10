@@ -133,3 +133,28 @@ test("rejects an invalid bidirectional start index", async () => {
   const { trackSeededHairBidirectional } = await import("./hair-region-tracking.ts");
   assert.throws(() => trackSeededHairBidirectional([], 0, { x: 0.5, y: 0.5, radius: 0.2 }));
 });
+
+
+test("isolates the clicked connected hair component from nearby disconnected hair", async () => {
+  const { selectSeededHairRegion } = await import("./hair-region-tracking.ts");
+  const mask = new Uint8Array(100);
+  // First connected component.
+  mask[4 * 10 + 4] = 1;
+  mask[4 * 10 + 5] = 1;
+  mask[5 * 10 + 4] = 1;
+  // A separate component, still inside the search radius.
+  mask[4 * 10 + 7] = 1;
+  mask[5 * 10 + 7] = 1;
+  const selected = selectSeededHairRegion(mask, 10, 10, { x: 0.45, y: 0.45, radius: 0.4 });
+  assert.equal(selected.pixels, 3);
+  assert.deepEqual(selected.bounds, { left: 0.4, top: 0.4, right: 0.6, bottom: 0.6 });
+});
+
+test("selects the nearest connected hair component when click is slightly off-mask", async () => {
+  const { selectSeededHairRegion } = await import("./hair-region-tracking.ts");
+  const mask = new Uint8Array(100);
+  mask[4 * 10 + 4] = 1;
+  mask[4 * 10 + 5] = 1;
+  const selected = selectSeededHairRegion(mask, 10, 10, { x: 0.35, y: 0.45, radius: 0.2 });
+  assert.equal(selected.pixels, 2);
+});
