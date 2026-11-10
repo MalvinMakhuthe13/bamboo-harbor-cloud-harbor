@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
+import { angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -271,4 +271,15 @@ test("relative motion rejects invalid landmark velocities", () => {
     relativeMotionVelocity({ x: Number.NaN, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }),
     { x: 0, y: 0, z: 0 },
   );
+});
+
+
+test("pose motion confidence requires all four torso anchors", () => {
+  assert.equal(poseMotionConfidence([0.9, 0.8, 0.75, 0.95]), 0.75);
+  assert.equal(poseMotionConfidence([0.9, 0.8, 0.2, 0.95]), 0.2);
+});
+
+test("pose motion confidence rejects missing and invalid visibility", () => {
+  assert.equal(poseMotionConfidence([0.9, 0.8, 0.7]), 0);
+  assert.equal(poseMotionConfidence([0.9, Number.NaN, 0.7, 0.8]), 0);
 });
