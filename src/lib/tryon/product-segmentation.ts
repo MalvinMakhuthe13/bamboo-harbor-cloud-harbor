@@ -22,6 +22,8 @@ export type SemanticRegion = {
 
 export type ProductSegmentationSample = {
   width: number;
+  /** Optional copied category mask, returned only for visual debugging previews. */
+  categoryMask?: Uint8Array;
   height: number;
   hair: SemanticRegion;
   faceSkin: SemanticRegion;
@@ -31,7 +33,7 @@ export type ProductSegmentationSample = {
 };
 
 export type ProductSegmenter = {
-  detect: (bitmap: ImageBitmap, timestampMs: number) => ProductSegmentationSample;
+  detect: (bitmap: ImageBitmap, timestampMs: number, includeMask?: boolean) => ProductSegmentationSample;
   close: () => void;
 };
 
@@ -103,7 +105,7 @@ export async function createProductSegmenter(): Promise<ProductSegmenter> {
   });
   let previousTimestamp = -1;
   return {
-    detect(bitmap, timestampMs) {
+    detect(bitmap, timestampMs, includeMask = false) {
       const safeTimestamp = Math.max(previousTimestamp + 1, Math.round(timestampMs));
       previousTimestamp = safeTimestamp;
       const result = segmenter.segmentForVideo(bitmap, safeTimestamp);
@@ -112,7 +114,11 @@ export async function createProductSegmenter(): Promise<ProductSegmenter> {
         throw new Error("The segmentation model did not return a category mask.");
       }
       try {
-        return summarizeSemanticMask(mask.getAsUint8Array(), mask.width, mask.height);
+        const categories = mask.getAsUint8Array();
+        const sample = summarizeSemanticMask(categories, mask.width, mask.height);
+        return includeMask
+          ? { ...sample, categoryMask: new Uint8Array(categories) }
+          : sample;
       } finally {
         mask.close();
       }
