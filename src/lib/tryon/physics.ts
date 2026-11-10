@@ -347,3 +347,45 @@ export function hairSectionInfluence(current: number, target: number, dt: number
   const safeTarget = Number.isFinite(target) ? Math.max(0, Math.min(1, target)) : 0;
   return safeCurrent + (safeTarget - safeCurrent) * trackingBlend(dt, hairSectionResponseHz(distance));
 }
+
+
+export type Vector3Like = { x: number; y: number; z: number };
+
+/**
+ * Projects a point inside an axis-aligned ellipsoid to its surface plus a
+ * small outward clearance. Returns null when the point is already outside
+ * or the inputs are invalid. The point and radii must use the same units.
+ */
+export function projectOutsideEllipsoid(
+  point: Vector3Like,
+  radii: Vector3Like,
+  clearance = 0,
+): Vector3Like | null {
+  if (![point.x, point.y, point.z, radii.x, radii.y, radii.z, clearance].every(Number.isFinite) ||
+      radii.x <= 0 || radii.y <= 0 || radii.z <= 0 || clearance < 0) return null;
+  const nx = point.x / radii.x;
+  const ny = point.y / radii.y;
+  const nz = point.z / radii.z;
+  const distanceSq = nx * nx + ny * ny + nz * nz;
+  if (distanceSq >= 1) return null;
+
+  const normal = {
+    x: point.x / (radii.x * radii.x),
+    y: point.y / (radii.y * radii.y),
+    z: point.z / (radii.z * radii.z),
+  };
+  let normalLength = Math.hypot(normal.x, normal.y, normal.z);
+  if (normalLength < 1e-8) {
+    normal.x = 0; normal.y = 0; normal.z = -1;
+    normalLength = 1;
+  }
+  normal.x /= normalLength;
+  normal.y /= normalLength;
+  normal.z /= normalLength;
+  const boundaryScale = 1 / Math.sqrt(Math.max(distanceSq, 1e-5));
+  return {
+    x: point.x * boundaryScale + normal.x * clearance,
+    y: point.y * boundaryScale + normal.y * clearance,
+    z: point.z * boundaryScale + normal.z * clearance,
+  };
+}
