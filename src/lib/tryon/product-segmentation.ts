@@ -93,7 +93,7 @@ export function summarizeSemanticMask(
     hair,
     faceSkin: summarize(SELFIE_CLASS.faceSkin),
     clothes: summarize(SELFIE_CLASS.clothes),
-    hairDetected: hair.pixels >= Math.max(8, Math.ceil(categories.length * 0.0005)),
+    hairDetected: hair.pixels >= Math.max(1, Math.ceil(categories.length * 0.0005)),
   };
 }
 
