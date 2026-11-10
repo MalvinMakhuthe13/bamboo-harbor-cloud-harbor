@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz } from "./physics.ts";
+import { frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -170,4 +170,19 @@ test("ellipsoid contact rejects invalid previous positions and friction", async 
   const radii = { x: 2, y: 3, z: 4 };
   assert.equal(resolveEllipsoidContact(point, { x: Number.NaN, y: 0, z: 0 }, radii), null);
   assert.equal(resolveEllipsoidContact(point, { x: 0, y: 0, z: 0 }, radii, 0, 2), null);
+});
+
+
+test("long rear hair retains more momentum than short front sections", () => {
+  const front = hairStrandDamping(0.32, 0);
+  const rear = hairStrandDamping(1, 1);
+  assert.ok(rear > front);
+  assert.ok(front >= VERLET_DAMP - 0.02);
+  assert.ok(rear < 1);
+});
+
+test("strand damping remains bounded for invalid and extreme inputs", () => {
+  assert.equal(hairStrandDamping(Number.NaN, 1), VERLET_DAMP);
+  assert.equal(hairStrandDamping(100, 100), 0.975);
+  assert.equal(hairStrandDamping(-10, -10), 0.925);
 });
