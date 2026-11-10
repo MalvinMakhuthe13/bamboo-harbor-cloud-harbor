@@ -1229,6 +1229,8 @@ function simulate(
 ) {
   const g = GRAVITY_CM_S2 * dt * dt;
   const blend = constraintBlend(stiffness);
+  const damping = Math.pow(VERLET_DAMP, dt * 60);
+  const grabBlend = (1 - Math.pow(1 - GRAB_LERP, dt * 60)) * pullStrength;
   if (!nodes[0].pos.lengthSq() && !nodes[1]?.pos.lengthSq()) {
     for (let i = 0; i < nodes.length; i++) {
       nodes[i].pos.copy(root);
@@ -1242,12 +1244,12 @@ function simulate(
     const n = nodes[i];
     if (i === grabIndex && grabAt) {
       n.prev.copy(n.pos);
-      n.pos.lerp(grabAt, GRAB_LERP * pullStrength);
+      n.pos.lerp(grabAt, grabBlend);
       continue;
     }
-    const vx = (n.pos.x - n.prev.x) * VERLET_DAMP;
-    const vy = (n.pos.y - n.prev.y) * VERLET_DAMP;
-    const vz = (n.pos.z - n.prev.z) * VERLET_DAMP;
+    const vx = (n.pos.x - n.prev.x) * damping;
+    const vy = (n.pos.y - n.prev.y) * damping;
+    const vz = (n.pos.z - n.prev.z) * damping;
     n.prev.copy(n.pos);
     n.pos.set(n.pos.x + vx, n.pos.y + vy - g, n.pos.z + vz);
   }
