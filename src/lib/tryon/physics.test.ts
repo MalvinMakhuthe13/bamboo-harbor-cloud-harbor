@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, motionAccelerationDeadzone, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
+import { angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, motionAccelerationDeadzone, hairSectionResponseHz, hairStrandDamping, verletDampingFactor, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -296,4 +296,23 @@ test("pose motion confidence requires all four torso anchors", () => {
 test("pose motion confidence rejects missing and invalid visibility", () => {
   assert.equal(poseMotionConfidence([0.9, 0.8, 0.7]), 0);
   assert.equal(poseMotionConfidence([0.9, Number.NaN, 0.7, 0.8]), 0);
+});
+
+
+test("Verlet damping is frame-rate consistent over equal elapsed time", () => {
+  const retention = hairStrandDamping(1, 1);
+  const at30 = verletDampingFactor(retention, 1 / 30);
+  const at60 = Math.pow(verletDampingFactor(retention, 1 / 60), 2);
+  assert.ok(Math.abs(at30 - at60) < 1e-12);
+});
+
+test("Verlet damping clamps extreme retention and long frame stalls", () => {
+  assert.equal(verletDampingFactor(2, 1), Math.pow(0.995, 2));
+  assert.equal(verletDampingFactor(0.1, 1 / 60), 0.9);
+});
+
+test("Verlet damping safely rejects invalid time and retention", () => {
+  assert.equal(verletDampingFactor(Number.NaN, 1 / 60), 0);
+  assert.equal(verletDampingFactor(0.94, 0), 0);
+  assert.equal(verletDampingFactor(0.94, Number.POSITIVE_INFINITY), 0);
 });
