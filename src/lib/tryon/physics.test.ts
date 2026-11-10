@@ -122,7 +122,7 @@ test("ellipsoid projection clears interior points along the surface normal", asy
 
 test("ellipsoid projection handles the exact centre with a stable fallback normal", async () => {
   const { projectOutsideEllipsoid } = await import("./physics.ts");
-  const projected = projectOutsideEllipsoid({ x: 0, y: 0, z: 0 }, { x: 2, y: 3, z: 4 })!;
+  const projected = projectOutsideEllipsoid({ x: 0, y: 0, z: 0 }, { x: 2, y: 3, z: 4 }, 0.1)!;
   assert.ok(Number.isFinite(projected.x) && Number.isFinite(projected.y) && Number.isFinite(projected.z));
   assert.ok(projected.z < 0);
 });
