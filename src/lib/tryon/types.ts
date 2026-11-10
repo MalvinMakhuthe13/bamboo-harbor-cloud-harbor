@@ -140,5 +140,7 @@ export type LiveMetrics = {
   hairMotionSpeed: number;
   /** Percentage of visible wig strands below the settling-speed threshold. */
   settledHairPercent: number;
+  /** Number of visible strands included in the motion summary. */
+  visibleHairStrands: number;
   body: BodyEstimate;
 };
