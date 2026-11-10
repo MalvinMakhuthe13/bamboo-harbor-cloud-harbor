@@ -13,6 +13,7 @@ import {
   bodyMotionAcceleration,
   relativeMotionVelocity,
   poseMotionConfidence,
+  summarizeHairMotion,
   CONSTRAINT_PASSES,
   EAR_SWING_X,
   EAR_SWING_Z,
@@ -755,22 +756,17 @@ export function startEngine(opts: {
 
     if (now - metricT > 140) {
       metricT = now;
-      const hairMotion = strands.reduce(
-        (summary, strand) => {
-          if (!strand.mesh.visible || strand.nodes.length < 2) return summary;
-          let strandSpeed = 0;
-          for (let i = 1; i < strand.nodes.length; i++) {
-            const node = strand.nodes[i];
-            strandSpeed += node.pos.distanceTo(node.prev) / Math.max(dt, 1 / 240);
-          }
-          strandSpeed /= strand.nodes.length - 1;
-          summary.speed += strandSpeed;
-          summary.total += 1;
-          if (strandSpeed < 1.5) summary.settled += 1;
-          return summary;
-        },
-        { speed: 0, settled: 0, total: 0 },
-      );
+      const hairSpeedSamples: number[][] = [];
+      for (const strand of strands) {
+        if (!strand.mesh.visible || strand.nodes.length < 2) continue;
+        const samples: number[] = [];
+        for (let i = 1; i < strand.nodes.length; i++) {
+          const node = strand.nodes[i];
+          samples.push(node.pos.distanceTo(node.prev) / Math.max(dt, 1 / 240));
+        }
+        hairSpeedSamples.push(samples);
+      }
+      const hairMotion = summarizeHairMotion(hairSpeedSamples);
       onMetrics({
         camera: cameraOn,
         face: faceOn,
@@ -784,8 +780,8 @@ export function startEngine(opts: {
         bodyAcceleration: bodyAcceleration.length(),
         headRelativeAcceleration: headRelativeAcceleration.length(),
         motionReady: bodyMotionReady && torsoConfidence >= 0.45,
-        hairMotionSpeed: hairMotion.total ? hairMotion.speed / hairMotion.total : 0,
-        settledHairPercent: hairMotion.total ? (hairMotion.settled / hairMotion.total) * 100 : 0,
+        hairMotionSpeed: hairMotion.averageSpeed,
+        settledHairPercent: hairMotion.settledPercent,
         body,
       });
     }
