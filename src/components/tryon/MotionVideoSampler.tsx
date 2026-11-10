@@ -135,7 +135,7 @@ export function MotionVideoSampler() {
       const relativeHairTrack = buildRelativeHairTrack(wearerSamples, segmentationSamples);
       const relativeHairSummary = summarizeRelativeHairTrack(relativeHairTrack);
       setFrames(previews);
-      setMaskFrames(allMaskFrames);\n      setMaskFrames(allMaskFrames);
+      setMaskFrames(allMaskFrames);
       setTracking({
         frames: wearerSamples.length,
         faceFrames,
