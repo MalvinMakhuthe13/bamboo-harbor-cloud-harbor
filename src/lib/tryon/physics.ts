@@ -522,3 +522,10 @@ export function relativeMotionVelocity(
     z: headVelocity.z - torsoVelocity.z,
   };
 }
+
+
+/** Conservative confidence for torso motion: all four anchor joints must be visible. */
+export function poseMotionConfidence(visibility: readonly number[]): number {
+  if (visibility.length < 4 || !visibility.every(Number.isFinite)) return 0;
+  return Math.max(0, Math.min(1, Math.min(...visibility)));
+}
