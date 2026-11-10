@@ -2,10 +2,10 @@ import { useState } from "react";
 import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-frames";
 import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 import { createProductSegmenter, type ProductSegmentationSample } from "@/lib/tryon/product-segmentation";
-import { buildRelativeHairTrack, summarizeRelativeHairTrack, analyzeHairMotionProxy, analyzeSeededHairMotion, buildHairSectionTrack, summarizeHairSectionMotion, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
+import { buildRelativeHairTrack, summarizeRelativeHairTrack, analyzeHairMotionProxy, analyzeSeededHairMotion, buildHairSectionTrack, summarizeHairSectionMotion, summarizeHairSectionCoupling, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
 
 type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string; categoryMask: Uint8Array; maskWidth: number; maskHeight: number };
-type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion; track: SeededHairTrackPoint[]; motion: ReturnType<typeof analyzeSeededHairMotion>; sections: ReturnType<typeof summarizeHairSectionMotion> };
+type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion; track: SeededHairTrackPoint[]; motion: ReturnType<typeof analyzeSeededHairMotion>; sections: ReturnType<typeof summarizeHairSectionMotion>; coupling: ReturnType<typeof summarizeHairSectionCoupling> };
 type TrackingSummary = {
   frames: number;
   faceFrames: number;
@@ -228,7 +228,7 @@ export function MotionVideoSampler() {
                       { x, y, radius: 0.18 },
                     );
                     const result = propagated[0]?.region ?? selectSeededHairRegion(frame.categoryMask, frame.maskWidth, frame.maskHeight, { x, y, radius: 0.18 });
-                    setSeedSelection({ timestampMs: frame.timestampMs, x, y, result, track: propagated, motion: analyzeSeededHairMotion(propagated, wearerSamples), sections: summarizeHairSectionMotion(buildHairSectionTrack(propagated, wearerSamples)) });
+                    setSeedSelection({ timestampMs: frame.timestampMs, x, y, result, track: propagated, motion: analyzeSeededHairMotion(propagated, wearerSamples), sections: summarizeHairSectionMotion(buildHairSectionTrack(propagated, wearerSamples)), coupling: summarizeHairSectionCoupling(buildHairSectionTrack(propagated, wearerSamples)) });
                   }}
                 >
                   <img src={frame.maskDataUrl} alt={`Semantic segmentation overlay at ${(frame.timestampMs / 1000).toFixed(1)} seconds`} className="block w-full" />
@@ -256,6 +256,11 @@ export function MotionVideoSampler() {
                 {seedSelection.sections.map((section) => <div key={section.section} className="rounded-lg bg-surface-muted/60 p-2"><p className="capitalize">{section.section}</p><p>{section.peakDisplacement.toFixed(3)}</p><p className="text-ink-muted">{section.sampleCount} samples</p></div>)}
               </div>
               <p className="mt-1 text-xs text-ink-muted">Each value is measured from pixels in a separate zone of the selected component mask. Zones are not independently identified strands or guaranteed wig sections.</p>
+              <p className="mt-3 font-medium">Neighbour movement relationship</p>
+              <div className="mt-1 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+                {seedSelection.coupling.map((item) => <div key={item.section} className="rounded-lg bg-surface-muted/60 p-2"><p className="capitalize">{item.section}</p><p>{item.meanDirectionalCoherence === null ? "—" : item.meanDirectionalCoherence.toFixed(2)}</p><p className="text-ink-muted">{item.neighbourSamplePairs} paired samples</p><p className="text-ink-muted">{item.peakLagMs === null ? "Lag unavailable" : `Peak lag ${item.peakLagMs} ms`}</p><p className="text-ink-muted">{item.quality}</p></div>)}
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">Directional coherence compares simultaneous face-relative movement in adjacent mask regions (−1 opposite, 0 unrelated, +1 same direction). This is an image-motion proxy, not physical strand simulation or causal influence.</p>
               {seedSelection.result.bounds
                 ? <p className="mt-1 text-ink-muted">Bounds: x {seedSelection.result.bounds.left.toFixed(2)}–{seedSelection.result.bounds.right.toFixed(2)}, y {seedSelection.result.bounds.top.toFixed(2)}–{seedSelection.result.bounds.bottom.toFixed(2)}</p>
                 : <p className="mt-1 text-clay">No semantic hair pixels found near that point. Try another point on the pink region.</p>}
