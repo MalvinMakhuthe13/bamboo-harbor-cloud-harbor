@@ -113,13 +113,16 @@ export function sectionWeights(
 export function stepPendulum(
   swing: number,
   vel: number,
-  yawRate: number,
+  yawDelta: number,
   dt: number,
 ): { swing: number; vel: number } {
+  if (![swing, vel, yawDelta, dt].every(Number.isFinite) || dt <= 0) {
+    return { swing: Number.isFinite(swing) ? swing : 0, vel: Number.isFinite(vel) ? vel : 0 };
+  }
   let next = vel - swing * PENDULUM_K * dt;
   next *= Math.pow(PENDULUM_DAMP, dt * 60);
-  next += yawRate * PENDULUM_DRIVE;
-  return { swing: swing + next, vel: next };
+  next += yawDelta * PENDULUM_DRIVE;
+  return { swing: swing + next * dt, vel: next };
 }
 
 export function foldAmplitudeCm(material: Material): number {
