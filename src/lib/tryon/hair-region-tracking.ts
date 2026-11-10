@@ -531,3 +531,95 @@ export function summarizeHairSectionMotion(
     };
   });
 }
+
+
+export type HairSectionCouplingProfile = {
+  section: HairSectionName;
+  neighbourSamplePairs: number;
+  meanDirectionalCoherence: number | null;
+  peakLagMs: number | null;
+  quality: "insufficient" | "usable";
+};
+
+const HAIR_SECTION_NEIGHBOURS: Record<HairSectionName, HairSectionName[]> = {
+  top: ["left", "centre", "right"],
+  left: ["top", "centre", "lower"],
+  centre: ["top", "left", "right", "lower"],
+  right: ["top", "centre", "lower"],
+  lower: ["left", "centre", "right"],
+};
+
+/**
+ * Estimates whether each mask-derived region moves in a direction similar
+ * to its adjacent regions. This is a temporal image-motion coupling proxy,
+ * not a physical hair/strand simulation or proof of causal influence.
+ * Missing timestamps are excluded rather than interpreted as zero movement.
+ */
+export function summarizeHairSectionCoupling(
+  observations: HairSectionObservation[],
+  minimumPairs = 4,
+): HairSectionCouplingProfile[] {
+  if (!Number.isInteger(minimumPairs) || minimumPairs < 2) {
+    throw new RangeError("Minimum coupling pairs must be an integer of at least 2.");
+  }
+  const sections: HairSectionName[] = ["top", "left", "centre", "right", "lower"];
+  const bySection = new Map<HairSectionName, Map<number, HairSectionObservation>>();
+  for (const section of sections) {
+    const samples = new Map<number, HairSectionObservation>();
+    for (const item of observations) {
+      if (item.section !== section || !Number.isFinite(item.timestampMs) ||
+          !Number.isFinite(item.offsetX) || !Number.isFinite(item.offsetY)) continue;
+      samples.set(item.timestampMs, item);
+    }
+    bySection.set(section, samples);
+  }
+
+  const displacement = new Map<HairSectionName, Map<number, { x: number; y: number }>>();
+  for (const section of sections) {
+    const samples = [...bySection.get(section)!.values()].sort((a, b) => a.timestampMs - b.timestampMs);
+    const baseline = samples.slice(0, Math.min(3, samples.length));
+    const baseX = baseline.length ? baseline.reduce((sum, item) => sum + item.offsetX, 0) / baseline.length : 0;
+    const baseY = baseline.length ? baseline.reduce((sum, item) => sum + item.offsetY, 0) / baseline.length : 0;
+    displacement.set(section, new Map(samples.map((item) => [item.timestampMs, {
+      x: item.offsetX - baseX, y: item.offsetY - baseY,
+    }])));
+  }
+
+  return sections.map((section) => {
+    const own = displacement.get(section)!;
+    const neighbours = HAIR_SECTION_NEIGHBOURS[section];
+    const coherence: number[] = [];
+    const ownPeak = [...own.entries()].reduce<{ time: number; magnitude: number } | null>((best, [time, vector]) => {
+      const magnitude = Math.hypot(vector.x, vector.y);
+      return !best || magnitude > best.magnitude ? { time, magnitude } : best;
+    }, null);
+    let neighbourPeak: { time: number; magnitude: number } | null = null;
+    for (const neighbour of neighbours) {
+      for (const [time, vector] of displacement.get(neighbour)!) {
+        const magnitude = Math.hypot(vector.x, vector.y);
+        if (!neighbourPeak || magnitude > neighbourPeak.magnitude) neighbourPeak = { time, magnitude };
+      }
+    }
+    for (const [time, vector] of own) {
+      const magnitude = Math.hypot(vector.x, vector.y);
+      if (magnitude < 1e-6) continue;
+      const adjacent = neighbours.map((name) => displacement.get(name)!.get(time)).filter(
+        (value): value is { x: number; y: number } => Boolean(value),
+      );
+      if (!adjacent.length) continue;
+      const meanX = adjacent.reduce((sum, item) => sum + item.x, 0) / adjacent.length;
+      const meanY = adjacent.reduce((sum, item) => sum + item.y, 0) / adjacent.length;
+      const neighbourMagnitude = Math.hypot(meanX, meanY);
+      if (neighbourMagnitude < 1e-6) continue;
+      coherence.push(Math.max(-1, Math.min(1, (vector.x * meanX + vector.y * meanY) / (magnitude * neighbourMagnitude))));
+    }
+    const enough = coherence.length >= minimumPairs && ownPeak !== null && neighbourPeak !== null;
+    return {
+      section,
+      neighbourSamplePairs: coherence.length,
+      meanDirectionalCoherence: coherence.length ? coherence.reduce((sum, value) => sum + value, 0) / coherence.length : null,
+      peakLagMs: enough ? ownPeak!.time - neighbourPeak!.time : null,
+      quality: enough ? "usable" : "insufficient",
+    };
+  });
+}
