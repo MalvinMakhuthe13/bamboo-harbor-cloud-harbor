@@ -139,7 +139,7 @@ function Studio() {
               Real product photograph URL
               <input
                 className="mt-1 w-full rounded-xl border border-line/50 px-3 py-3"
-                type="url"
+                type="text"
                 inputMode="url"
                 placeholder="https://…/actual-wig-or-product.jpg"
                 value={imageUrl}
@@ -197,7 +197,7 @@ function Studio() {
                         {counts.get(product.id) ?? 0}
                       </p>
                       <p className="mt-1 text-sm">{product.blurb}</p>
-                      {product.image && <p className="mt-1 text-xs text-ink-muted">Photograph attached</p> }
+                      {product.image && <p className="mt-1 text-xs text-ink-muted">Photograph attached</p>}
                       {product.sizes.length > 0 && (
                         <p className="mt-2 text-sm text-ink-muted">
                           {product.sizes.map((row) => row.label).join(" · ")}
