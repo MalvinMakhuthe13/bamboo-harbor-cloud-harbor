@@ -253,6 +253,8 @@ export function startEngine(opts: {
 
   const headPos = new THREE.Vector3(0, 8, -74);
   const headQuat = new THREE.Quaternion();
+  const faceTargetPos = new THREE.Vector3();
+  const faceTargetQuat = new THREE.Quaternion();
   const hipQuat = new THREE.Quaternion();
   const prevQuat = new THREE.Quaternion();
   let swing = 0;
@@ -391,18 +393,16 @@ export function startEngine(opts: {
           if (matrix && marks) {
             const m = new THREE.Matrix4().fromArray(matrix.data);
             const sc = new THREE.Vector3();
-            const targetPos = new THREE.Vector3();
-            const targetQuat = new THREE.Quaternion();
-            m.decompose(targetPos, targetQuat, sc);
-            if (Math.abs(targetPos.z) < 5) targetPos.multiplyScalar(100);
+            m.decompose(faceTargetPos, faceTargetQuat, sc);
+            if (Math.abs(faceTargetPos.z) < 5) faceTargetPos.multiplyScalar(100);
             if (!faceTransformReady) {
-              headPos.copy(targetPos);
-              headQuat.copy(targetQuat);
+              headPos.copy(faceTargetPos);
+              headQuat.copy(faceTargetQuat);
               faceTransformReady = true;
             } else {
               const blend = trackingBlend(dt, 16);
-              headPos.lerp(targetPos, blend);
-              headQuat.slerp(targetQuat, blend);
+              headPos.lerp(faceTargetPos, blend);
+              headQuat.slerp(faceTargetQuat, blend);
             }
             faceOn = true;
             const left = marks[234];
