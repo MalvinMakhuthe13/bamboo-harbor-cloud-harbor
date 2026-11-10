@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
+import { angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, motionAccelerationDeadzone, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
