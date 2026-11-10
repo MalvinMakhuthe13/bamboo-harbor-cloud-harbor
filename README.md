@@ -8,5 +8,3 @@ npm run dev
 ```
 
 Open the rail, tap a shirt, or paste a product link. Pick a size. The ease changes the fit, and the folds follow the body.
-
-`main` still has the first single-file wig prototype. This branch is the full app.
