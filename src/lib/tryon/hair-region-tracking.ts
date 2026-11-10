@@ -146,3 +146,43 @@ export function selectSeededHairRegion(
     center: bounds ? { x: (bounds.left + bounds.right) / 2, y: (bounds.top + bounds.bottom) / 2 } : null,
   };
 }
+
+export type SeededHairFrame = { timestampMs: number; categories: Uint8Array; width: number; height: number };
+export type SeededHairTrackPoint = {
+  timestampMs: number;
+  seed: { x: number; y: number };
+  region: SeededHairRegion;
+  tracked: boolean;
+};
+
+/**
+ * Propagates a merchant seed through later sampled frames by searching near
+ * the previous selected-region centre. This is a lightweight local mask
+ * tracker; it does not establish identity through occlusion or large motion.
+ */
+export function trackSeededHairForward(
+  frames: SeededHairFrame[],
+  startIndex: number,
+  seed: HairSeed,
+  searchRadius = 0.18,
+): SeededHairTrackPoint[] {
+  if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex >= frames.length) {
+    throw new RangeError("Start index must refer to an available frame.");
+  }
+  if (!Number.isFinite(searchRadius) || searchRadius <= 0 || searchRadius > 1) {
+    throw new RangeError("Search radius must be in (0, 1].");
+  }
+  const track: SeededHairTrackPoint[] = [];
+  let currentSeed = { x: seed.x, y: seed.y };
+  for (let index = startIndex; index < frames.length; index++) {
+    const frame = frames[index];
+    const region = selectSeededHairRegion(frame.categories, frame.width, frame.height, {
+      ...currentSeed,
+      radius: searchRadius,
+    });
+    const tracked = region.pixels > 0 && region.center !== null;
+    track.push({ timestampMs: frame.timestampMs, seed: { ...currentSeed }, region, tracked });
+    if (tracked) currentSeed = region.center!;
+  }
+  return track;
+}
