@@ -2,10 +2,10 @@ import { useState } from "react";
 import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-frames";
 import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 import { createProductSegmenter, type ProductSegmentationSample } from "@/lib/tryon/product-segmentation";
-import { buildRelativeHairTrack, summarizeRelativeHairTrack, analyzeHairMotionProxy, analyzeSeededHairMotion, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
+import { buildRelativeHairTrack, summarizeRelativeHairTrack, analyzeHairMotionProxy, analyzeSeededHairMotion, buildHairSectionTrack, summarizeHairSectionMotion, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
 
 type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string; categoryMask: Uint8Array; maskWidth: number; maskHeight: number };
-type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion; track: SeededHairTrackPoint[]; motion: ReturnType<typeof analyzeSeededHairMotion> };
+type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion; track: SeededHairTrackPoint[]; motion: ReturnType<typeof analyzeSeededHairMotion>; sections: ReturnType<typeof summarizeHairSectionMotion> };
 type TrackingSummary = {
   frames: number;
   faceFrames: number;
@@ -228,7 +228,7 @@ export function MotionVideoSampler() {
                       { x, y, radius: 0.18 },
                     );
                     const result = propagated[0]?.region ?? selectSeededHairRegion(frame.categoryMask, frame.maskWidth, frame.maskHeight, { x, y, radius: 0.18 });
-                    setSeedSelection({ timestampMs: frame.timestampMs, x, y, result, track: propagated, motion: analyzeSeededHairMotion(propagated, wearerSamples) });
+                    setSeedSelection({ timestampMs: frame.timestampMs, x, y, result, track: propagated, motion: analyzeSeededHairMotion(propagated, wearerSamples), sections: summarizeHairSectionMotion(buildHairSectionTrack(propagated, wearerSamples)) });
                   }}
                 >
                   <img src={frame.maskDataUrl} alt={`Semantic segmentation overlay at ${(frame.timestampMs / 1000).toFixed(1)} seconds`} className="block w-full" />
@@ -251,6 +251,11 @@ export function MotionVideoSampler() {
               <p className="mt-2 font-medium">Selected-component motion</p>
               <p className="mt-1 text-ink-muted">Face-relative displacement: {seedSelection.motion.peakFaceRelativeDisplacement.toFixed(3)} · response lag: {seedSelection.motion.responseLagMs === null ? "Unavailable" : `${seedSelection.motion.responseLagMs} ms`}</p>
               <p className="mt-1 text-ink-muted">Face-paired samples: {seedSelection.motion.pairedSamples} · coverage: {(seedSelection.motion.trackingCoverage * 100).toFixed(0)}% · recovered: {seedSelection.motion.recoveredFrames} · quality: {seedSelection.motion.quality}</p>
+              <p className="mt-2 font-medium">Regional anchor movement</p>
+              <div className="mt-1 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+                {seedSelection.sections.map((section) => <div key={section.section} className="rounded-lg bg-surface-muted/60 p-2"><p className="capitalize">{section.section}</p><p>{section.peakDisplacement.toFixed(3)}</p><p className="text-ink-muted">{section.sampleCount} samples</p></div>)}
+              </div>
+              <p className="mt-1 text-xs text-ink-muted">These are geometric anchors within one tracked region, not separately identified strands.</p>
               {seedSelection.result.bounds
                 ? <p className="mt-1 text-ink-muted">Bounds: x {seedSelection.result.bounds.left.toFixed(2)}–{seedSelection.result.bounds.right.toFixed(2)}, y {seedSelection.result.bounds.top.toFixed(2)}–{seedSelection.result.bounds.bottom.toFixed(2)}</p>
                 : <p className="mt-1 text-clay">No semantic hair pixels found near that point. Try another point on the pink region.</p>}
