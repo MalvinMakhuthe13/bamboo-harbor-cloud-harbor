@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameDeltaSeconds, stepPendulum } from "./physics.ts";
+import { frameDeltaSeconds, stepPendulum, trackingBlend } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -29,4 +29,18 @@ test("pendulum remains finite at common frame rates", () => {
     assert.ok(Number.isFinite(result.swing));
     assert.ok(Number.isFinite(result.vel));
   }
+});
+
+
+test("tracking blend is stable and increases with response rate", () => {
+  const slow = trackingBlend(1 / 60, 6);
+  const fast = trackingBlend(1 / 60, 18);
+  assert.ok(slow > 0 && slow < 1);
+  assert.ok(fast > slow && fast < 1);
+});
+
+test("tracking blend is frame-rate consistent over equal elapsed time", () => {
+  const at30 = 1 - Math.pow(1 - trackingBlend(1 / 30, 12), 1);
+  const at60 = 1 - Math.pow(1 - trackingBlend(1 / 60, 12), 2);
+  assert.ok(Math.abs(at30 - at60) < 1e-10);
 });
