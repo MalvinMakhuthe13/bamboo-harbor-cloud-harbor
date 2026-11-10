@@ -129,5 +129,12 @@ export type LiveMetrics = {
   /** Strands or beads currently pulled. 0 when nothing is held. More than 1 means a section, not the whole piece. */
   section: number;
   fps: number;
+  /** Minimum visibility across shoulders and hips, from 0 to 1. */
+  torsoConfidence: number;
+  /** Filtered wearer translation acceleration in scene cm/s². */
+  bodyAcceleration: number;
+  /** Filtered head-relative-to-torso acceleration in scene cm/s². */
+  headRelativeAcceleration: number;
+  motionReady: boolean;
   body: BodyEstimate;
 };
