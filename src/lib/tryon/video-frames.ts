@@ -39,8 +39,8 @@ export function validateMotionVideoFile(file: File): string | null {
 
 export function buildFrameTimestamps(
   durationMs: number,
-  intervalMs = DEFAULT_VIDEO_FRAME_OPTIONS.intervalMs,
-  maxDurationMs = DEFAULT_VIDEO_FRAME_OPTIONS.maxDurationMs,
+  intervalMs: number = DEFAULT_VIDEO_FRAME_OPTIONS.intervalMs,
+  maxDurationMs: number = DEFAULT_VIDEO_FRAME_OPTIONS.maxDurationMs,
 ): number[] {
   if (!Number.isFinite(durationMs) || durationMs <= 0) return [];
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
