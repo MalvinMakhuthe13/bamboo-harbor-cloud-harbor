@@ -3,7 +3,7 @@ import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-f
 import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 import { createProductSegmenter, type ProductSegmentationSample } from "@/lib/tryon/product-segmentation";
 
-type FramePreview = { timestampMs: number; dataUrl: string };
+type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string };
 type TrackingSummary = {
   frames: number;
   faceFrames: number;
@@ -54,15 +54,56 @@ export function MotionVideoSampler() {
       })) {
         try {
           wearerSamples.push(tracker.detect(frame.bitmap, frame.timestampMs));
-          segmentationSamples.push(segmenter.detect(frame.bitmap, frame.timestampMs));
-          if (previews.length < 4) {
+          const includePreviewMask = previews.length < 4;
+          const segmentation = segmenter.detect(frame.bitmap, frame.timestampMs, includePreviewMask);
+          segmentationSamples.push(segmentation);
+          if (includePreviewMask) {
             const canvas = document.createElement("canvas");
             canvas.width = frame.width;
             canvas.height = frame.height;
             const context = canvas.getContext("2d");
             if (context) {
               context.drawImage(frame.bitmap, 0, 0);
-              previews.push({ timestampMs: frame.timestampMs, dataUrl: canvas.toDataURL("image/jpeg", 0.72) });
+              const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+              const maskCanvas = document.createElement("canvas");
+              maskCanvas.width = frame.width;
+              maskCanvas.height = frame.height;
+              const maskContext = maskCanvas.getContext("2d");
+              if (maskContext && segmentation.categoryMask) {
+                const overlay = maskContext.createImageData(frame.width, frame.height);
+                const maskWidth = segmentation.width;
+                const maskHeight = segmentation.height;
+                for (let y = 0; y < frame.height; y++) {
+                  const maskY = Math.min(maskHeight - 1, Math.floor((y / frame.height) * maskHeight));
+                  for (let x = 0; x < frame.width; x++) {
+                    const maskX = Math.min(maskWidth - 1, Math.floor((x / frame.width) * maskWidth));
+                    const category = segmentation.categoryMask[maskY * maskWidth + maskX];
+                    const pixel = (y * frame.width + x) * 4;
+                    if (category === 1) {
+                      overlay.data[pixel] = 232;
+                      overlay.data[pixel + 1] = 70;
+                      overlay.data[pixel + 2] = 170;
+                      overlay.data[pixel + 3] = 105;
+                    } else if (category === 3) {
+                      overlay.data[pixel] = 70;
+                      overlay.data[pixel + 1] = 170;
+                      overlay.data[pixel + 2] = 245;
+                      overlay.data[pixel + 3] = 85;
+                    } else if (category === 4) {
+                      overlay.data[pixel] = 245;
+                      overlay.data[pixel + 1] = 180;
+                      overlay.data[pixel + 2] = 55;
+                      overlay.data[pixel + 3] = 75;
+                    }
+                  }
+                }
+                maskContext.putImageData(overlay, 0, 0);
+              }
+              previews.push({
+                timestampMs: frame.timestampMs,
+                dataUrl,
+                maskDataUrl: maskCanvas.toDataURL("image/jpeg", 0.78),
+              });
             }
           }
         } finally {
@@ -135,11 +176,12 @@ export function MotionVideoSampler() {
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {frames.map((frame) => (
             <figure key={frame.timestampMs} className="overflow-hidden rounded-xl border border-line/40">
-              <img src={frame.dataUrl} alt={`Extracted video frame at ${(frame.timestampMs / 1000).toFixed(1)} seconds`} className="aspect-video w-full object-cover" />
-              <figcaption className="px-2 py-1 text-xs text-ink-muted">{(frame.timestampMs / 1000).toFixed(1)}s</figcaption>
+              <img src={frame.maskDataUrl} alt={`Semantic segmentation overlay at ${(frame.timestampMs / 1000).toFixed(1)} seconds`} className="aspect-video w-full object-cover" />
+              <figcaption className="px-2 py-1 text-xs text-ink-muted">{(frame.timestampMs / 1000).toFixed(1)}s · segmentation overlay</figcaption>
             </figure>
           ))}
         </div>
+        <p className="mt-2 text-xs text-ink-muted">Overlay key: pink = semantic hair, blue = face skin, amber = clothing. These are broad model classes, not confirmed product boundaries.</p>
       )}
     </section>
   );
