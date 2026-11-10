@@ -252,6 +252,20 @@ test("body motion acceleration rejects invalid samples and elapsed time", () => 
 });
 
 
+test("motion acceleration deadzone removes small tracking noise", () => {
+  assert.deepEqual(motionAccelerationDeadzone({ x: 2, y: 1, z: 1 }), { x: 0, y: 0, z: 0 });
+});
+
+test("motion acceleration deadzone preserves meaningful movement", () => {
+  assert.deepEqual(motionAccelerationDeadzone({ x: 6, y: 0, z: 0 }), { x: 6, y: 0, z: 0 });
+});
+
+test("motion acceleration deadzone safely rejects invalid inputs", () => {
+  assert.deepEqual(motionAccelerationDeadzone({ x: Number.NaN, y: 0, z: 0 }), { x: 0, y: 0, z: 0 });
+  assert.deepEqual(motionAccelerationDeadzone({ x: 8, y: 0, z: 0 }, -1), { x: 0, y: 0, z: 0 });
+});
+
+
 test("relative motion cancels shared whole-body translation", () => {
   assert.deepEqual(
     relativeMotionVelocity({ x: 12, y: -4, z: 2 }, { x: 12, y: -4, z: 2 }),
