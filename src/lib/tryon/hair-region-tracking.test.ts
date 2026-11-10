@@ -275,7 +275,12 @@ test("builds five face-relative regional anchors from selected component bounds"
     timestampMs: 0,
     seed: { x: 0.5, y: 0.3 },
     region: {
-      pixels: 100, ratio: 0.1,
+      pixels: 24, ratio: 0.24,
+      componentMask: Uint8Array.from({ length: 100 }, (_, index) => {
+        const x = index % 10; const y = Math.floor(index / 10);
+        return x >= 3 && x <= 6 && y >= 1 && y <= 6 ? 1 : 0;
+      }),
+      maskWidth: 10, maskHeight: 10,
       bounds: { left: 0.3, top: 0.1, right: 0.7, bottom: 0.7 },
       center: { x: 0.5, y: 0.4 },
     },
@@ -286,6 +291,7 @@ test("builds five face-relative regional anchors from selected component bounds"
   assert.equal(anchors.length, 5);
   assert.deepEqual(anchors.map((item) => item.section), ["top", "left", "centre", "right", "lower"]);
   assert.ok(anchors.every((item) => Number.isFinite(item.offsetX) && Number.isFinite(item.offsetY)));
+  assert.ok(anchors.every((item) => item.offsetX >= 0 && item.offsetX <= 1));
 });
 
 test("summarises each regional anchor independently", () => {
