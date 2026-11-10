@@ -758,6 +758,10 @@ export function startEngine(opts: {
         grabbed,
         section: sectionNow,
         fps,
+        torsoConfidence,
+        bodyAcceleration: bodyAcceleration.length(),
+        headRelativeAcceleration: headRelativeAcceleration.length(),
+        motionReady: bodyMotionReady && torsoConfidence >= 0.45,
         body,
       });
     }
