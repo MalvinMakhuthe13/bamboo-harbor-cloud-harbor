@@ -315,3 +315,9 @@ export function trackingBlend(dt: number, responseHz = 12): number {
   if (!Number.isFinite(dt) || dt <= 0) return 0;
   return 1 - Math.exp(-Math.min(dt, 1 / 30) * Math.max(0.1, responseHz));
 }
+
+/** Pinch hysteresis prevents a noisy landmark distance from rapidly grabbing/releasing. */
+export function updatePinchState(wasPinching: boolean, distance: number, close = 0.055, release = 0.078): boolean {
+  if (!Number.isFinite(distance) || distance < 0) return wasPinching;
+  return wasPinching ? distance < release : distance < close;
+}
