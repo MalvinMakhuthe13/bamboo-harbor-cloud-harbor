@@ -199,7 +199,7 @@ export function MotionVideoSampler() {
       {frames.length > 0 && (
         <>
           <p className="mt-4 text-sm font-medium">Select the product region</p>
-          <p className="mt-1 text-xs text-ink-muted">Click the centre of the wig or hair product in a frame. The selection is refined against the pink semantic hair mask, then propagated through every sampled frame (not just the four visual previews).</p>
+          <p className="mt-1 text-xs text-ink-muted">Click the centre of the wig or hair product in a frame. The selection is refined against the pink semantic hair mask, then tracked both directions through every sampled frame. Motion prediction widens the search after temporary mask loss; recovered frames are reported separately.</p>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {frames.map((frame) => (
               <figure key={frame.timestampMs} className="overflow-hidden rounded-xl border border-line/40">
@@ -237,7 +237,7 @@ export function MotionVideoSampler() {
             <div className="mt-3 rounded-xl border border-line/40 p-3 text-sm" aria-live="polite">
               <p className="font-medium">Selected region · {(seedSelection.timestampMs / 1000).toFixed(1)}s</p>
               <p className="mt-1 text-ink-muted">{seedSelection.result.pixels.toLocaleString()} hair-class pixels · {(seedSelection.result.ratio * 100).toFixed(2)}% of frame mask</p>
-              <p className="mt-1 text-ink-muted">Bidirectional propagation: {seedSelection.track.filter((point) => point.tracked).length}/{seedSelection.track.length} sampled frames tracked · {maskFrames.length} masks retained</p>
+              <p className="mt-1 text-ink-muted">Bidirectional tracking: {seedSelection.track.filter((point) => point.tracked).length}/{seedSelection.track.length} frames found · {seedSelection.track.filter((point) => point.recovered).length} recovered after mask loss · {maskFrames.length} masks retained</p>
               {seedSelection.result.bounds
                 ? <p className="mt-1 text-ink-muted">Bounds: x {seedSelection.result.bounds.left.toFixed(2)}–{seedSelection.result.bounds.right.toFixed(2)}, y {seedSelection.result.bounds.top.toFixed(2)}–{seedSelection.result.bounds.bottom.toFixed(2)}</p>
                 : <p className="mt-1 text-clay">No semantic hair pixels found near that point. Try another point on the pink region.</p>}
