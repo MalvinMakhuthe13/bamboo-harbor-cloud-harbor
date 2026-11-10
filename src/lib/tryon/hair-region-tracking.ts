@@ -116,21 +116,57 @@ export function selectSeededHairRegion(
   const seedY = seed.y * height;
   const radius = seed.radius * Math.min(width, height);
   const radiusSquared = radius * radius;
+
+  // Find the nearest hair-class pixel to the click, then isolate only its
+  // 8-connected component. Nearby disconnected hair is deliberately excluded.
+  let startIndex = -1;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const dx = x + 0.5 - seedX;
+      const dy = y + 0.5 - seedY;
+      const distance = dx * dx + dy * dy;
+      const index = y * width + x;
+      if (distance <= radiusSquared && categories[index] === 1 && distance < nearestDistance) {
+        startIndex = index;
+        nearestDistance = distance;
+      }
+    }
+  }
+
   let pixels = 0;
   let minX = width;
   let minY = height;
   let maxX = -1;
   let maxY = -1;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+  if (startIndex >= 0) {
+    const visited = new Uint8Array(categories.length);
+    const queue = [startIndex];
+    visited[startIndex] = 1;
+    for (let cursor = 0; cursor < queue.length; cursor++) {
+      const index = queue[cursor];
+      const x = index % width;
+      const y = Math.floor(index / width);
       const dx = x + 0.5 - seedX;
       const dy = y + 0.5 - seedY;
-      if (dx * dx + dy * dy > radiusSquared || categories[y * width + x] !== 1) continue;
+      if (dx * dx + dy * dy > radiusSquared) continue;
       pixels++;
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x);
       maxY = Math.max(maxY, y);
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          if (ox === 0 && oy === 0) continue;
+          const nx = x + ox;
+          const ny = y + oy;
+          if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+          const next = ny * width + nx;
+          if (visited[next] || categories[next] !== 1) continue;
+          visited[next] = 1;
+          queue.push(next);
+        }
+      }
     }
   }
   const bounds = pixels ? {
