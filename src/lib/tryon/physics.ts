@@ -550,3 +550,31 @@ export function poseMotionConfidence(visibility: readonly number[]): number {
   if (visibility.length < 4 || !visibility.every(Number.isFinite)) return 0;
   return Math.max(0, Math.min(1, Math.min(...visibility)));
 }
+
+
+export type HairMotionSummary = { averageSpeed: number; settledPercent: number; strandCount: number };
+
+/** Summarize per-strand node speeds (scene units/second) for live diagnostics. */
+export function summarizeHairMotion(
+  strands: readonly (readonly number[])[],
+  settleThreshold = 1.5,
+): HairMotionSummary {
+  if (!Number.isFinite(settleThreshold) || settleThreshold < 0) {
+    return { averageSpeed: 0, settledPercent: 0, strandCount: 0 };
+  }
+  let totalSpeed = 0;
+  let settled = 0;
+  let strandCount = 0;
+  for (const samples of strands) {
+    if (samples.length === 0 || !samples.every((speed) => Number.isFinite(speed) && speed >= 0)) continue;
+    const average = samples.reduce((sum, speed) => sum + speed, 0) / samples.length;
+    totalSpeed += average;
+    strandCount += 1;
+    if (average < settleThreshold) settled += 1;
+  }
+  return {
+    averageSpeed: strandCount ? totalSpeed / strandCount : 0,
+    settledPercent: strandCount ? (settled / strandCount) * 100 : 0,
+    strandCount,
+  };
+}
