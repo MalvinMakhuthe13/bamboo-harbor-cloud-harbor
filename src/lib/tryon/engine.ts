@@ -28,6 +28,7 @@ import {
   clothWrinkleCm,
   fingerFromPalm,
   foldAmplitudeCm,
+  frameDeltaSeconds,
   garmentEase,
   glassesScale,
   hairDropCm,
@@ -274,6 +275,7 @@ export function startEngine(opts: {
   let frames = 0;
   let fps = 0;
   let fpsT = performance.now();
+  let lastFrameTime: number | null = null;
   let metricT = 0;
   let faceLandmarker: FaceLandmarker | null = null;
   let handLandmarker: HandLandmarker | null = null;
@@ -354,7 +356,8 @@ export function startEngine(opts: {
   function loop(now: number) {
     if (disposed) return;
     requestAnimationFrame(loop);
-    const dt = Math.min(0.033, 0.016);
+    const dt = frameDeltaSeconds(now, lastFrameTime);
+    lastFrameTime = now;
     frames += 1;
     if (now - fpsT > 500) {
       fps = Math.round((frames * 1000) / (now - fpsT));
