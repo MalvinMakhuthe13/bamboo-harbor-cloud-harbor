@@ -799,6 +799,9 @@ export function startEngine(opts: {
     // fight each other's Verlet constraints during the same update.
     resolveHairContacts(strands, grabStrand, grabJoint);
     resolveHairClumps(strands, dt, grabStrand, grabJoint);
+    if (poseOn) {
+      resolveHairBackContacts(strands, headPos, headQuat, shL, shR, hipL, hipR);
+    }
     for (const strand of strands) {
       writeRibbon(strand, ribbonWidthCm(state.style));
       if (!strand.ready) strand.ready = true;
@@ -1313,6 +1316,68 @@ function resolveHairContacts(strands: Strand[], grabbedStrand: number, grabbedJo
   }
 }
 
+
+/**
+ * Keeps rear-facing hair from passing through the wearer's upper torso.
+ * The torso is a conservative ellipsoid built from tracked shoulder/hip
+ * landmarks. Corrections are applied to Verlet history as well as position
+ * so contact does not inject artificial velocity.
+ */
+function resolveHairBackContacts(
+  strands: Strand[],
+  headPos: THREE.Vector3,
+  headQuat: THREE.Quaternion,
+  shoulderLeft: THREE.Vector3,
+  shoulderRight: THREE.Vector3,
+  hipLeft: THREE.Vector3,
+  hipRight: THREE.Vector3,
+) {
+  const shoulderSpan = shoulderLeft.distanceTo(shoulderRight);
+  const torsoLength = shoulderLeft.clone().add(shoulderRight).multiplyScalar(0.5)
+    .distanceTo(hipLeft.clone().add(hipRight).multiplyScalar(0.5));
+  if (!Number.isFinite(shoulderSpan) || shoulderSpan < 8 || torsoLength < 8) return;
+
+  const shoulderMid = shoulderLeft.clone().add(shoulderRight).multiplyScalar(0.5);
+  const hipMid = hipLeft.clone().add(hipRight).multiplyScalar(0.5);
+  const centre = shoulderMid.add(hipMid).multiplyScalar(0.5);
+  const radiusX = Math.max(5, shoulderSpan * 0.47);
+  const radiusY = Math.max(7, torsoLength * 0.58);
+  const radiusZ = 6.2;
+  const inverseHead = headQuat.clone().invert();
+  const localCentre = centre.sub(headPos).applyQuaternion(inverseHead);
+  const local = new THREE.Vector3();
+  const correction = new THREE.Vector3();
+
+  for (const strand of strands) {
+    for (let j = 2; j < strand.nodes.length; j++) {
+      const node = strand.nodes[j];
+      local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead).sub(localCentre);
+      // Only the rear half of the torso is a blocker. Front hair remains free
+      // to fall over the chest rather than being pushed away from the body.
+      if (local.z >= 0) continue;
+      const nx = local.x / radiusX;
+      const ny = local.y / radiusY;
+      const nz = local.z / radiusZ;
+      const distanceSq = nx * nx + ny * ny + nz * nz;
+      if (distanceSq >= 1) continue;
+
+      const normal = new THREE.Vector3(
+        local.x / (radiusX * radiusX),
+        local.y / (radiusY * radiusY),
+        local.z / (radiusZ * radiusZ),
+      );
+      if (normal.lengthSq() < 1e-8) normal.set(0, 0, -1);
+      normal.normalize();
+      // Push to the ellipsoid boundary with a small clearance.
+      const boundaryScale = 1 / Math.sqrt(Math.max(distanceSq, 1e-5));
+      correction.copy(local).multiplyScalar(boundaryScale).sub(local);
+      correction.addScaledVector(normal, 0.18);
+      correction.applyQuaternion(headQuat);
+      node.pos.add(correction);
+      node.prev.add(correction);
+    }
+  }
+}
 
 /**
  * Soft lock cohesion: neighbouring roots retain a loose shared bundle as the
