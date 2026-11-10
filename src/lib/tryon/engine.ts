@@ -782,6 +782,7 @@ export function startEngine(opts: {
         motionReady: bodyMotionReady && torsoConfidence >= 0.45,
         hairMotionSpeed: hairMotion.averageSpeed,
         settledHairPercent: hairMotion.settledPercent,
+        visibleHairStrands: hairMotion.strandCount,
         body,
       });
     }
