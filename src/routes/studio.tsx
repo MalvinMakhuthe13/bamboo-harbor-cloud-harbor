@@ -26,6 +26,8 @@ function Studio() {
   const [leftImageUrl, setLeftImageUrl] = useState("");
   const [rightImageUrl, setRightImageUrl] = useState("");
   const [backImageUrl, setBackImageUrl] = useState("");
+  const [motionVideoUrl, setMotionVideoUrl] = useState("");
+  const [motionVideoConsent, setMotionVideoConsent] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -44,6 +46,15 @@ function Studio() {
       setImageError("Use secure https image URLs or site-local image paths for every angle.");
       return;
     }
+    const motionVideo = motionVideoUrl.trim();
+    if (motionVideo && !/^https:\/\//i.test(motionVideo)) {
+      setImageError("Use a secure https URL for the demonstration video.");
+      return;
+    }
+    if (motionVideo && !motionVideoConsent) {
+      setImageError("Confirm that you own or have permission to use this demonstration video.");
+      return;
+    }
     setImageError(null);
     const product: Product = {
       id: `custom-${Date.now()}`,
@@ -53,7 +64,16 @@ function Studio() {
       color,
       blurb: blurb.trim() || "Added in the studio.",
       image: image || undefined,
-      assetViews: Object.values(views).some(Boolean) ? Object.fromEntries(Object.entries(views).filter(([, url]) => Boolean(url))) : undefined,
+      assetViews: Object.values(views).some(Boolean)
+        ? {
+            front: image || undefined,
+            left: leftImageUrl.trim() || undefined,
+            right: rightImageUrl.trim() || undefined,
+            back: backImageUrl.trim() || undefined,
+          }
+        : undefined,
+      motionReferenceVideo: motionVideo || undefined,
+      motionReferenceConsent: motionVideo ? true : undefined,
       custom: true,
       style: category === "wig" ? "straight" : undefined,
       nailShape: category === "nails" ? "almond" : undefined,
@@ -66,6 +86,8 @@ function Studio() {
     setLeftImageUrl("");
     setRightImageUrl("");
     setBackImageUrl("");
+    setMotionVideoUrl("");
+    setMotionVideoConsent(false);
   }
 
   async function copySnippet(product: Product) {
@@ -190,6 +212,33 @@ function Studio() {
                 </label>
               ))}
             </div>
+            <div className="mt-4 rounded-2xl border border-line/40 p-3">
+              <p className="text-sm font-medium">Product demonstration video</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                Add a seller-owned or licensed fitting video as a future source for offline motion analysis.
+                It is not streamed to shoppers and is not yet automatically analysed.
+              </p>
+              <input
+                className="mt-3 w-full rounded-xl border border-line/50 px-3 py-2 text-sm"
+                type="url"
+                inputMode="url"
+                placeholder="https://…/product-fitting-demo.mp4"
+                value={motionVideoUrl}
+                onChange={(event) => {
+                  setMotionVideoUrl(event.target.value);
+                  setImageError(null);
+                }}
+              />
+              <label className="mt-3 flex items-start gap-2 text-xs text-ink-muted">
+                <input
+                  className="mt-0.5"
+                  type="checkbox"
+                  checked={motionVideoConsent}
+                  onChange={(event) => setMotionVideoConsent(event.target.checked)}
+                />
+                I own this video or have permission to use it for product-motion analysis.
+              </label>
+            </div>
             {imageError && <p className="mt-2 text-sm text-clay">{imageError}</p>}
             <label className="mt-3 block text-sm">
               Note
@@ -222,6 +271,7 @@ function Studio() {
                       <p className="mt-1 text-sm">{product.blurb}</p>
                       {product.image && <p className="mt-1 text-xs text-ink-muted">Photograph attached</p>}
                       {product.assetViews && <p className="mt-1 text-xs text-ink-muted">{Object.keys(product.assetViews).length} photographic angles supplied</p>}
+                      {product.motionReferenceVideo && <p className="mt-1 text-xs text-ink-muted">Motion reference video attached · analysis not yet available</p>}
                       {product.sizes.length > 0 && (
                         <p className="mt-2 text-sm text-ink-muted">
                           {product.sizes.map((row) => row.label).join(" · ")}
