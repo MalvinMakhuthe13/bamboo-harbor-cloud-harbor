@@ -22,6 +22,8 @@ function Studio() {
   const [material, setMaterial] = useState<Material>("silky");
   const [color, setColor] = useState("#1a1210");
   const [blurb, setBlurb] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageError, setImageError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
   const counts = new Map<string, number>();
@@ -32,6 +34,12 @@ function Studio() {
   function addProduct() {
     const trimmed = name.trim();
     if (!trimmed) return;
+    const image = imageUrl.trim();
+    if (image && !/^https:\/\//i.test(image) && !image.startsWith("/")) {
+      setImageError("Use a secure https image URL or a site-local image path.");
+      return;
+    }
+    setImageError(null);
     const product: Product = {
       id: `custom-${Date.now()}`,
       name: trimmed,
@@ -39,6 +47,7 @@ function Studio() {
       material,
       color,
       blurb: blurb.trim() || "Added in the studio.",
+      image: image || undefined,
       custom: true,
       style: category === "wig" ? "straight" : undefined,
       nailShape: category === "nails" ? "almond" : undefined,
@@ -47,6 +56,7 @@ function Studio() {
     commit((current) => ({ ...current, products: [...current.products, product] }));
     setName("");
     setBlurb("");
+    setImageUrl("");
   }
 
   async function copySnippet(product: Product) {
@@ -126,6 +136,39 @@ function Studio() {
               />
             </label>
             <label className="mt-3 block text-sm">
+              Real product photograph URL
+              <input
+                className="mt-1 w-full rounded-xl border border-line/50 px-3 py-3"
+                type="url"
+                inputMode="url"
+                placeholder="https://…/actual-wig-or-product.jpg"
+                value={imageUrl}
+                onChange={(event) => {
+                  setImageUrl(event.target.value);
+                  setImageError(null);
+                }}
+              />
+            </label>
+            {imageUrl.trim() && (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-line/40">
+                <img
+                  src={imageUrl}
+                  alt="Product photograph preview"
+                  className="h-40 w-full object-contain"
+                  onError={(event) => {
+                    event.currentTarget.style.visibility = "hidden";
+                    setImageError("That image could not be loaded. Check the URL and image permissions.");
+                  }}
+                  onLoad={(event) => {
+                    event.currentTarget.style.visibility = "visible";
+                    setImageError(null);
+                  }}
+                />
+                <p className="px-3 py-2 text-xs text-ink-muted">Photographic product reference · not yet composited onto the live shopper</p>
+              </div>
+            )}
+            {imageError && <p className="mt-2 text-sm text-clay">{imageError}</p>}
+            <label className="mt-3 block text-sm">
               Note
               <input
                 className="mt-1 w-full rounded-xl border border-line/50 px-3 py-3"
@@ -154,6 +197,7 @@ function Studio() {
                         {counts.get(product.id) ?? 0}
                       </p>
                       <p className="mt-1 text-sm">{product.blurb}</p>
+                      {product.image && <p className="mt-1 text-xs text-ink-muted">Photograph attached</p> }
                       {product.sizes.length > 0 && (
                         <p className="mt-2 text-sm text-ink-muted">
                           {product.sizes.map((row) => row.label).join(" · ")}
