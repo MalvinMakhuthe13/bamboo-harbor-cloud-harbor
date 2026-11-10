@@ -12,6 +12,7 @@ import {
   angleDeltaRadians,
   bodyMotionAcceleration,
   relativeMotionVelocity,
+  poseMotionConfidence,
   CONSTRAINT_PASSES,
   EAR_SWING_X,
   EAR_SWING_Z,
@@ -552,7 +553,10 @@ export function startEngine(opts: {
       put(28, ankR);
     }
 
-    if (poseOn && poseSeen > bodyMotionStamp) {
+    const torsoConfidence = poseOn && poseImage
+      ? poseMotionConfidence([poseImage[11]?.visibility ?? 0, poseImage[12]?.visibility ?? 0, poseImage[23]?.visibility ?? 0, poseImage[24]?.visibility ?? 0])
+      : 0;
+    if (torsoConfidence >= 0.45 && poseSeen > bodyMotionStamp) {
       const bodyMid = tmp.copy(shL).add(shR).multiplyScalar(0.5)
         .add(tmpB.copy(hipL).add(hipR).multiplyScalar(0.5)).multiplyScalar(0.5);
       if (bodyMotionReady) {
@@ -587,11 +591,12 @@ export function startEngine(opts: {
       }
       previousBodyMid.copy(bodyMid);
       bodyMotionStamp = poseSeen;
-    } else if (!poseOn) {
+    } else {
       bodyAcceleration.multiplyScalar(0.88);
       headRelativeAcceleration.multiplyScalar(0.88);
       if (bodyAcceleration.lengthSq() < 0.04) bodyAcceleration.set(0, 0, 0);
       if (headRelativeAcceleration.lengthSq() < 0.04) headRelativeAcceleration.set(0, 0, 0);
+      if (now - poseSeen > 160 || torsoConfidence < 0.25) bodyMotionReady = false;
     }
 
     if (cameraOn && freshFrame && liveHands.length) {
