@@ -508,6 +508,21 @@ export function bodyMotionAcceleration(
 }
 
 
+/** Suppress tiny acceleration estimates caused by landmark jitter before they reach the simulation. */
+export function motionAccelerationDeadzone(
+  acceleration: { x: number; y: number; z: number },
+  threshold = 4,
+): { x: number; y: number; z: number } {
+  if (![acceleration.x, acceleration.y, acceleration.z, threshold].every(Number.isFinite) || threshold < 0) {
+    return { x: 0, y: 0, z: 0 };
+  }
+  const magnitude = Math.hypot(acceleration.x, acceleration.y, acceleration.z);
+  return magnitude < threshold
+    ? { x: 0, y: 0, z: 0 }
+    : { x: acceleration.x, y: acceleration.y, z: acceleration.z };
+}
+
+
 /** Velocity of the head relative to the torso; shared body translation cancels out. */
 export function relativeMotionVelocity(
   headVelocity: { x: number; y: number; z: number },
