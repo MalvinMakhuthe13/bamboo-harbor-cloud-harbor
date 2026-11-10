@@ -158,3 +158,35 @@ test("selects the nearest connected hair component when click is slightly off-ma
   const selected = selectSeededHairRegion(mask, 10, 10, { x: 0.35, y: 0.45, radius: 0.2 });
   assert.equal(selected.pixels, 2);
 });
+
+
+test("predicts motion and recovers after a temporarily missing mask", async () => {
+  const { trackSeededHairForward } = await import("./hair-region-tracking.ts");
+  const makeMask = (cx: number) => {
+    const mask = new Uint8Array(100);
+    mask[4 * 10 + cx] = 1;
+    mask[4 * 10 + cx + 1] = 1;
+    mask[5 * 10 + cx] = 1;
+    return mask;
+  };
+  const frames = [
+    { timestampMs: 0, categories: makeMask(2), width: 10, height: 10 },
+    { timestampMs: 500, categories: makeMask(3), width: 10, height: 10 },
+    { timestampMs: 1000, categories: new Uint8Array(100), width: 10, height: 10 },
+    { timestampMs: 1500, categories: makeMask(5), width: 10, height: 10 },
+  ];
+  const track = trackSeededHairForward(frames, 0, { x: 0.35, y: 0.45, radius: 0.15 }, 0.15);
+  assert.equal(track[0].tracked, true);
+  assert.equal(track[1].tracked, true);
+  assert.equal(track[2].tracked, false);
+  assert.equal(track[3].tracked, true);
+  assert.equal(track[3].recovered, true);
+});
+
+test("marks ordinary detections as not recovered", async () => {
+  const { trackSeededHairForward } = await import("./hair-region-tracking.ts");
+  const track = trackSeededHairForward([
+    { timestampMs: 0, categories: regionMask(), width: 10, height: 10 },
+  ], 0, { x: 0.45, y: 0.45, radius: 0.2 });
+  assert.equal(track[0].recovered, false);
+});
