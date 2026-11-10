@@ -35,6 +35,7 @@ import {
   glassesScale,
   hairDropCm,
   hairSectionInfluence,
+  projectOutsideEllipsoid,
   hairStiffness,
   headFromFace,
   kneeBendAmount,
@@ -1386,45 +1387,32 @@ function resolveHairBackContacts(
         const nz = napeLocal.z / napeRadii.z;
         const napeDistanceSq = nx * nx + ny * ny + nz * nz;
         if (napeDistanceSq < 1) {
-          napeNormal.set(
-            napeLocal.x / (napeRadii.x * napeRadii.x),
-            napeLocal.y / (napeRadii.y * napeRadii.y),
-            napeLocal.z / (napeRadii.z * napeRadii.z),
+          const projected = projectOutsideEllipsoid(
+            napeLocal,
+            napeRadii,
+            0.12,
           );
-          if (napeNormal.lengthSq() < 1e-8) napeNormal.set(0, 0, -1);
-          napeNormal.normalize();
-          correction.copy(napeLocal)
-            .multiplyScalar(1 / Math.sqrt(Math.max(napeDistanceSq, 1e-5)))
-            .sub(napeLocal)
-            .addScaledVector(napeNormal, 0.12)
-            .applyQuaternion(headQuat);
-          node.pos.add(correction);
-          node.prev.add(correction);
-          local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead);
+          if (projected) {
+            correction.set(projected.x - napeLocal.x, projected.y - napeLocal.y, projected.z - napeLocal.z)
+              .applyQuaternion(headQuat);
+            node.pos.add(correction);
+            node.prev.add(correction);
+            local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead);
+          }
         }
       }
       local.sub(localCentre);
       // Only the rear half of the torso is a blocker. Front hair remains free
       // to fall over the chest rather than being pushed away from the body.
       if (local.z >= 0) continue;
-      const nx = local.x / radiusX;
-      const ny = local.y / radiusY;
-      const nz = local.z / radiusZ;
-      const distanceSq = nx * nx + ny * ny + nz * nz;
-      if (distanceSq >= 1) continue;
-
-      const normal = new THREE.Vector3(
-        local.x / (radiusX * radiusX),
-        local.y / (radiusY * radiusY),
-        local.z / (radiusZ * radiusZ),
+      const projected = projectOutsideEllipsoid(
+        local,
+        { x: radiusX, y: radiusY, z: radiusZ },
+        0.18,
       );
-      if (normal.lengthSq() < 1e-8) normal.set(0, 0, -1);
-      normal.normalize();
-      // Push to the ellipsoid boundary with a small clearance.
-      const boundaryScale = 1 / Math.sqrt(Math.max(distanceSq, 1e-5));
-      correction.copy(local).multiplyScalar(boundaryScale).sub(local);
-      correction.addScaledVector(normal, 0.18);
-      correction.applyQuaternion(headQuat);
+      if (!projected) continue;
+      correction.set(projected.x - local.x, projected.y - local.y, projected.z - local.z)
+        .applyQuaternion(headQuat);
       node.pos.add(correction);
       node.prev.add(correction);
     }
