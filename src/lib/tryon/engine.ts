@@ -39,6 +39,7 @@ import {
   glassesScale,
   hairDropCm,
   hairSectionInfluence,
+  motionAccelerationDeadzone,
   hairStrandDamping,
   resolveEllipsoidContact,
   hairStiffness,
@@ -562,7 +563,9 @@ export function startEngine(opts: {
       if (bodyMotionReady) {
         const elapsed = Math.max(1 / 120, Math.min(0.2, (poseSeen - bodyMotionStamp) / 1000));
         const velocity = tmpC.subVectors(bodyMid, previousBodyMid).multiplyScalar(1 / elapsed);
-        const acceleration = bodyMotionAcceleration(previousBodyVelocity, velocity, elapsed, 180);
+        const acceleration = motionAccelerationDeadzone(
+          bodyMotionAcceleration(previousBodyVelocity, velocity, elapsed, 180),
+        );
         bodyAcceleration.lerp(new THREE.Vector3(acceleration.x, acceleration.y, acceleration.z), 0.35);
         const relativeHead = tmpB.subVectors(headPos, bodyMid);
         const relativeHeadVelocity = tmpC.subVectors(relativeHead, previousHeadRelative).multiplyScalar(1 / elapsed);
@@ -570,11 +573,13 @@ export function startEngine(opts: {
           { x: relativeHeadVelocity.x, y: relativeHeadVelocity.y, z: relativeHeadVelocity.z },
           { x: 0, y: 0, z: 0 },
         );
-        const relativeAcceleration = bodyMotionAcceleration(
-          previousHeadRelativeVelocity,
-          relativeVelocity,
-          elapsed,
-          140,
+        const relativeAcceleration = motionAccelerationDeadzone(
+          bodyMotionAcceleration(
+            previousHeadRelativeVelocity,
+            relativeVelocity,
+            elapsed,
+            140,
+          ),
         );
         headRelativeAcceleration.lerp(
           new THREE.Vector3(relativeAcceleration.x, relativeAcceleration.y, relativeAcceleration.z),
