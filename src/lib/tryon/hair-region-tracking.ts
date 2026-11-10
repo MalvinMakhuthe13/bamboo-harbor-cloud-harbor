@@ -60,15 +60,20 @@ export function buildRelativeHairTrack(
       height: (bounds.bottom - bounds.top) / sample.headWidth,
       confidence,
     };
-    const canSmooth = previous && raw.timestampMs > previous.timestampMs &&
-      raw.timestampMs - previous.timestampMs <= maximumGapMs;
-    const next = canSmooth ? {
-      ...raw,
-      offsetX: previous.offsetX + smoothing * (raw.offsetX - previous.offsetX),
-      offsetY: previous.offsetY + smoothing * (raw.offsetY - previous.offsetY),
-      width: previous.width + smoothing * (raw.width - previous.width),
-      height: previous.height + smoothing * (raw.height - previous.height),
-    } : raw;
+    let next: RelativeHairObservation = raw;
+    if (
+      previous !== null &&
+      raw.timestampMs > previous.timestampMs &&
+      raw.timestampMs - previous.timestampMs <= maximumGapMs
+    ) {
+      next = {
+        ...raw,
+        offsetX: previous.offsetX + smoothing * (raw.offsetX - previous.offsetX),
+        offsetY: previous.offsetY + smoothing * (raw.offsetY - previous.offsetY),
+        width: previous.width + smoothing * (raw.width - previous.width),
+        height: previous.height + smoothing * (raw.height - previous.height),
+      };
+    }
     observations.push(next);
     previous = next;
   }
