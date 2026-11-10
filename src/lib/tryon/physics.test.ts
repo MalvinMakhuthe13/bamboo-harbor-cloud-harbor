@@ -31,6 +31,34 @@ test("pendulum remains finite at common frame rates", () => {
   }
 });
 
+test("ear swing stays consistent across frame rates for the same head turn", () => {
+  const simulate = (fps: number) => {
+    const dt = 1 / fps;
+    let swing = 0;
+    let velocity = 0;
+    for (let frame = 0; frame < fps; frame++) {
+      const yawDelta = 0.8 * dt;
+      const next = stepPendulum(swing, velocity, yawDelta, dt);
+      swing = next.swing;
+      velocity = next.vel;
+    }
+    return { swing, velocity };
+  };
+  const at30 = simulate(30);
+  const at60 = simulate(60);
+  const at120 = simulate(120);
+  assert.ok(Math.abs(at30.swing - at60.swing) < 0.015);
+  assert.ok(Math.abs(at60.swing - at120.swing) < 0.015);
+  assert.ok(Math.abs(at30.velocity - at60.velocity) < 0.08);
+  assert.ok(Math.abs(at60.velocity - at120.velocity) < 0.08);
+});
+
+test("pendulum safely ignores invalid motion samples", () => {
+  const result = stepPendulum(0.2, 0.1, Number.NaN, 1 / 60);
+  assert.ok(Number.isFinite(result.swing));
+  assert.ok(Number.isFinite(result.vel));
+});
+
 
 test("tracking blend is stable and increases with response rate", () => {
   const slow = trackingBlend(1 / 60, 6);
