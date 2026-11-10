@@ -35,7 +35,11 @@ export function buildRelativeHairTrack(
   if (!(smoothing > 0 && smoothing <= 1)) throw new RangeError("Smoothing must be in (0, 1].");
   if (!(minimumConfidence >= 0 && minimumConfidence <= 1)) throw new RangeError("Minimum confidence must be in [0, 1].");
 
-  const regionByTime = new Map(regions.map((region, index) => [wearer[index]?.timestampMs, region]));
+  const regionByTime = new Map<number, ProductSegmentationSample>();
+  regions.forEach((region, index) => {
+    const timestamp = region.timestampMs ?? wearer[index]?.timestampMs;
+    if (timestamp !== undefined) regionByTime.set(timestamp, region);
+  });
   const observations: RelativeHairObservation[] = [];
   let previous: RelativeHairObservation | null = null;
 
@@ -274,4 +278,76 @@ export function trackSeededHairBidirectional(
   const backward = backwardReversed.reverse().slice(0, -1);
   const forward = trackSeededHairForward(frames, startIndex, seed, searchRadius);
   return [...backward, ...forward];
+}
+
+
+export type HairMotionProxySummary = {
+  sampleCount: number;
+  meanConfidence: number;
+  headYawProxyRange: number;
+  peakRelativeDisplacement: number;
+  peakDisplacementAtMs: number | null;
+  /** Difference between the largest yaw-proxy deviation and hair-displacement peak. */
+  responseLagMs: number | null;
+  quality: "insufficient" | "usable";
+};
+
+/**
+ * Compares face-relative semantic hair movement with the uncalibrated face yaw
+ * proxy. Diagnostic only: it does not estimate degrees, physical inertia, or
+ * a product-specific wig response.
+ */
+export function analyzeHairMotionProxy(
+  wearer: WearerTrackingSample[],
+  hairTrack: RelativeHairObservation[],
+  minimumConfidence = 0.25,
+): HairMotionProxySummary {
+  if (!(minimumConfidence >= 0 && minimumConfidence <= 1)) {
+    throw new RangeError("Minimum confidence must be in [0, 1].");
+  }
+  const hairByTime = new Map(hairTrack.map((item) => [item.timestampMs, item]));
+  const paired = wearer
+    .filter((sample) => sample.headYawProxy !== null && Number.isFinite(sample.headYawProxy))
+    .map((sample) => ({ wearer: sample, hair: hairByTime.get(sample.timestampMs) }))
+    .filter((item): item is { wearer: WearerTrackingSample; hair: RelativeHairObservation } =>
+      Boolean(item.hair && item.hair.confidence >= minimumConfidence),
+    )
+    .sort((a, b) => a.wearer.timestampMs - b.wearer.timestampMs);
+
+  const meanConfidence = paired.length
+    ? paired.reduce((sum, item) => sum + item.hair.confidence, 0) / paired.length
+    : 0;
+  const insufficient = {
+    sampleCount: paired.length,
+    meanConfidence,
+    headYawProxyRange: 0,
+    peakRelativeDisplacement: 0,
+    peakDisplacementAtMs: null,
+    responseLagMs: null,
+    quality: "insufficient" as const,
+  };
+  if (paired.length < 5) return insufficient;
+
+  const baseline = paired.slice(0, Math.min(3, paired.length));
+  const baseX = baseline.reduce((sum, item) => sum + item.hair.offsetX, 0) / baseline.length;
+  const baseY = baseline.reduce((sum, item) => sum + item.hair.offsetY, 0) / baseline.length;
+  const yawValues = paired.map((item) => item.wearer.headYawProxy!);
+  const yawMin = Math.min(...yawValues);
+  const yawMax = Math.max(...yawValues);
+  const peakYawIndex = yawValues.reduce((best, value, index) =>
+    Math.abs(value - yawValues[0]) > Math.abs(yawValues[best] - yawValues[0]) ? index : best, 0);
+  const displacements = paired.map((item) =>
+    Math.hypot(item.hair.offsetX - baseX, item.hair.offsetY - baseY),
+  );
+  const peakDisplacement = Math.max(...displacements);
+  const peakIndex = displacements.indexOf(peakDisplacement);
+  return {
+    sampleCount: paired.length,
+    meanConfidence,
+    headYawProxyRange: yawMax - yawMin,
+    peakRelativeDisplacement: peakDisplacement,
+    peakDisplacementAtMs: paired[peakIndex].wearer.timestampMs,
+    responseLagMs: paired[peakIndex].wearer.timestampMs - paired[peakYawIndex].wearer.timestampMs,
+    quality: paired.length >= 8 && meanConfidence >= 0.5 ? "usable" : "insufficient",
+  };
 }
