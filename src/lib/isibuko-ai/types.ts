@@ -97,7 +97,20 @@ export type LiveMetrics = {
   compositeMs: number;
   /** How often a new face, pose, hand, or mask result arrives. */
   trackFps: number;
+  faceHz: number;
+  poseHz: number;
+  handHz: number;
+  segmentHz: number;
+  maskAgeMs: number;
+  shoulders: boolean;
+  elbows: number;
+  wrists: number;
+  motion: "unknown" | "still" | "moving" | "turning";
+  cameraSession: number;
+  poseCrop: boolean;
+  segmentEdge: number;
   delegate: string;
+  delegateNote: string;
   source: "camera" | "studio" | "off";
   body: BodyEstimate;
   productId: string | null;

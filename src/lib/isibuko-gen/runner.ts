@@ -1,4 +1,5 @@
 import { OWNED_SHIRT_MODEL } from "./candidates.ts";
+import { preflightShirt, type Preflight } from "./inference.ts";
 import type { ShirtPacket } from "./packet.ts";
 
 export type ShirtExperimentResult = {
@@ -10,14 +11,16 @@ export type ShirtExperimentResult = {
   output: null;
   weightsPresent: false;
   reason: string;
+  preflight: Preflight;
 };
 
 /**
- * The only entry a future camera hook may call.
+ * Camera hook. Validates the shirt packet and assembles a conditioning plan.
  * It never paints a garment and never calls the photographic composite.
- * Weights are intentionally absent until a licensed training run is approved.
+ * Weights are absent until a licensed training run is approved.
  */
 export function runShirtExperiment(packet: ShirtPacket): ShirtExperimentResult {
+  const preflight = preflightShirt(packet);
   return {
     modelId: packet.modelId,
     state: "not-installed",
@@ -26,7 +29,7 @@ export function runShirtExperiment(packet: ShirtPacket): ShirtExperimentResult {
     usedComposite: false,
     output: null,
     weightsPresent: false,
-    reason:
-      "No Isibuko shirt checkpoint is installed. No image was generated. The photographic mirror was not used as a stand-in.",
+    reason: preflight.blocker,
+    preflight,
   };
 }

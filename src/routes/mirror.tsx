@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Stage } from "@/components/mirror/Stage";
+import { CameraTest } from "@/components/mirror/CameraTest";
 import { Nav } from "@/components/site/Nav";
 import { CATEGORY_LABEL, CATEGORY_ORDER, findProduct, productsIn } from "@/lib/isibuko-ai/catalog";
 import type { Drag } from "@/lib/isibuko-ai/engine";
@@ -29,6 +30,9 @@ function MirrorPage() {
   const [metrics, setMetrics] = useState<LiveMetrics | null>(null);
   const [handoff, setHandoff] = useState(false);
   const [height, setHeight] = useState(data.heightCm);
+  const [switches, setSwitches] = useState(0);
+  const [sessionSeen, setSessionSeen] = useState<number | null>(null);
+  const controlsRef = useRef<{ setDelegate: (delegate: "CPU" | "GPU") => void } | null>(null);
   const active = findProduct(data.products, productId);
   const swatch = active.swatches.find((item) => item.id === swatchId) ?? active.swatches[0];
   const fit = useMemo(() => (metrics ? matchSize(active.sizes, metrics.body) : null), [active.sizes, metrics]);
@@ -53,7 +57,16 @@ function MirrorPage() {
   };
   const dragRef = useRef<Drag>({ x: 0, y: 0, hold: false });
 
+  useEffect(() => {
+    if (metrics?.source !== "camera") return;
+    if (sessionSeen !== metrics.cameraSession) {
+      setSessionSeen(metrics.cameraSession);
+      setSwitches(0);
+    }
+  }, [metrics?.source, metrics?.cameraSession, sessionSeen]);
+
   function selectProduct(product: Product) {
+    if (metrics?.source === "camera" && product.id !== productId) setSwitches((count) => count + 1);
     setProductId(product.id);
     setSwatchId(product.swatches[0]?.id ?? "natural");
     setSizeLabel(product.sizes[0]?.label ?? null);
@@ -78,7 +91,7 @@ function MirrorPage() {
     <main className="flex h-dvh flex-col bg-ink text-paper">
       <Nav tone="ink" />
       <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_22rem]">
-        <Stage requestRef={requestRef} dragRef={dragRef} onMetrics={setMetrics} onStatus={setStatus} />
+        <Stage requestRef={requestRef} dragRef={dragRef} controlsRef={controlsRef} onMetrics={setMetrics} onStatus={setStatus} />
         <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto border-t border-line bg-ink-2 px-4 py-4 md:border-t-0 md:border-l">
           <p className="text-sm text-brass-2">{status}</p>
           <div className="flex flex-wrap gap-2">
@@ -205,25 +218,12 @@ function MirrorPage() {
               )}
             </div>
           )}
-          <dl className="grid grid-cols-2 gap-2 text-sm text-muted">
-            <div>Picture</div>
-            <div className="text-paper">{metrics ? `${metrics.fps} fps` : "—"}</div>
-            <div>Tracking</div>
-            <div className="text-paper">{metrics ? `${metrics.trackFps} fps` : "—"}</div>
-            <div>Face</div>
-            <div className="text-paper">{metrics ? `${metrics.face ? "found" : "missing"} · ${metrics.faceMs} ms` : "waiting"}</div>
-            <div>Pose</div>
-            <div className="text-paper">{metrics ? `${metrics.pose ? "found" : "missing"} · ${metrics.poseMs} ms` : "waiting"}</div>
-            <div>Hands</div>
-            <div className="text-paper">{metrics ? `${metrics.hands} · ${metrics.handMs} ms` : "—"}</div>
-            <div>Segment</div>
-            <div className="text-paper">{metrics ? `${metrics.segment ? "mask" : "none"} · ${metrics.segmentMs} ms` : "waiting"}</div>
-            <div>Composite</div>
-            <div className="text-paper">{metrics ? `${metrics.compositeMs} ms` : "—"}</div>
-            <div>Runtime</div>
-            <div className="text-paper">{metrics?.delegate ?? "—"}</div>
-          </dl>
-          <p className="text-sm text-muted">Use your camera, pick a piece, and move. Changing product, colour, or size does not stop the camera. The studio photo is only a labelled test.</p>
+          <CameraTest
+            metrics={metrics}
+            switches={switches}
+            onDelegate={(delegate) => controlsRef.current?.setDelegate(delegate)}
+          />
+          <p className="text-sm text-muted">Changing product, colour, or size does not stop the camera. The studio photo is only a labelled test. Picture fps is the display. The hertz numbers are how often each model returns, and they are allowed to be slower than the picture.</p>
         </aside>
       </div>
     </main>

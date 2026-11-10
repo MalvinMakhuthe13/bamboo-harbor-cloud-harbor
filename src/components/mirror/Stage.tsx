@@ -5,11 +5,13 @@ import type { FrameRequest, LiveMetrics } from "@/lib/isibuko-ai/types";
 export function Stage({
   requestRef,
   dragRef,
+  controlsRef,
   onMetrics,
   onStatus,
 }: {
   requestRef: { current: FrameRequest };
   dragRef: { current: Drag };
+  controlsRef?: { current: { setDelegate: (delegate: "CPU" | "GPU") => void } | null };
   onMetrics: (metrics: LiveMetrics) => void;
   onStatus: (status: string) => void;
 }) {
@@ -39,10 +41,12 @@ export function Stage({
       return;
     }
     handleRef.current = handle;
+    if (controlsRef) controlsRef.current = { setDelegate: (delegate) => handle.setDelegate(delegate) };
     setEngineReady(true);
     return () => {
       handle.dispose();
       handleRef.current = null;
+      if (controlsRef) controlsRef.current = null;
       setEngineReady(false);
     };
     // The engine reads the latest request through refs. Mount once.
@@ -129,7 +133,7 @@ export function Stage({
       </div>
       {mode === "ask" && (
         <div className="absolute inset-0 flex items-end justify-center bg-ink/55 p-6 sm:items-center">
-          <div className="w-full max-w-md rounded-3xl border border-line bg-ink-2 p-5">
+          <div className="mb-16 w-full max-w-md rounded-3xl border border-line bg-ink-2 p-5 sm:mb-0">
             <p className="font-display text-3xl text-paper">Wear it on camera</p>
             <p className="mt-2 text-sm text-muted">Your camera stays on while you move and change pieces. Frames stay on this device. A studio photo is only for testing, and it is never treated as live.</p>
             {cameraError && <p className="mt-3 text-sm text-clay">{cameraError}</p>}

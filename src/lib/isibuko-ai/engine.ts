@@ -17,6 +17,20 @@ import {
   type Sprite,
 } from "@/lib/isibuko-ai/placement";
 import { COMPOSITE_FRAG, FULLSCREEN_VERT, SPRITE_FRAG, SPRITE_VERT } from "@/lib/isibuko-ai/shaders";
+import {
+  FULL_FRAME,
+  GPU_STALL_MS,
+  cadenceMs,
+  due,
+  inferenceEdge,
+  isFullFrame,
+  maskIsFresh,
+  pixelCrop,
+  remapList,
+  roiFromPoints,
+  shouldRefreshFull,
+  type NormRect,
+} from "@/lib/isibuko-ai/schedule";
 import type { FrameRequest, LiveMetrics, Pt } from "@/lib/isibuko-ai/types";
 
 
@@ -25,6 +39,7 @@ export type Drag = { x: number; y: number; hold: boolean };
 export type EngineHandle = {
   startCamera: () => Promise<void>;
   startStudio: () => Promise<void>;
+  setDelegate: (delegate: "CPU" | "GPU") => void;
   stop: () => void;
   dispose: () => void;
 };
@@ -192,17 +207,22 @@ export function startEngine(opts: {
   let disposed = false;
   let raf = 0;
   let clock = 0;
-  let landReady = false;
+  let faceReady = false;
+  let bodyReady = false;
   let segReady = false;
-  let landInflight = false;
+  let faceInflight = false;
+  let bodyInflight = false;
   let segInflight = false;
   let delegateName = "CPU";
+  let delegateNote = "CPU. The picture is painted on its own loop. GPU is optional and reverts if a pass stalls.";
   let tracks = 0;
   let trackMark = performance.now();
   let trackFps = 0;
-  const landWorker = new Worker("/isibuko/tracker.js");
+  const faceWorker = new Worker("/isibuko/tracker.js");
+  const bodyWorker = new Worker("/isibuko/tracker.js");
   const segWorker = new Worker("/isibuko/tracker.js");
   let source: LiveMetrics["source"] = "off";
+  let cameraSession = 0;
   let stopSource: (() => void) | null = null;
   let stillUploaded = false;
   let studioImg: HTMLImageElement | null = null;
@@ -236,6 +256,20 @@ export function startEngine(opts: {
   let backdrop: [number, number, number] = [0.72, 0.7, 0.67];
   let loggedFace = false;
   let probeTick = 0;
+  let faceTick = 0;
+  let poseTick = 0;
+  let handTick = 0;
+  let poseCrop = false;
+  let segmentEdge = 144;
+  const sentAt = { face: 0, pose: 0, hands: 0, segment: 0 };
+  const hits = { face: 0, pose: 0, hands: 0, segment: 0 };
+  const rate = { face: 0, pose: 0, hands: 0, segment: 0 };
+  let rateMark = performance.now();
+  let lastMaskAt = 0;
+  const pendingRoi: Partial<Record<Job, NormRect>> = {};
+  let gpuFallback = false;
+  let motion: LiveMetrics["motion"] = "unknown";
+  let shoulderPrev: { x: number; y: number; span: number; at: number } | null = null;
 
   function setStatus(next: string) {
     if (next === status) return;
@@ -259,6 +293,9 @@ export function startEngine(opts: {
     poseWorld = null;
     handLms = [];
     hasMask = false;
+    lastMaskAt = 0;
+    shoulderPrev = null;
+    motion = "unknown";
     source = "off";
   }
 
@@ -280,6 +317,7 @@ export function startEngine(opts: {
     video.muted = true;
     await video.play();
     source = "camera";
+    cameraSession += 1;
     stopSource = () => {
       extra?.();
       stream.getTracks().forEach((track) => track.stop());
@@ -302,6 +340,7 @@ export function startEngine(opts: {
     studioImg = img;
     stillUploaded = false;
     source = "studio";
+    cameraSession += 1;
     stopSource = () => {
       studioImg = null;
     };
@@ -624,22 +663,6 @@ export function startEngine(opts: {
     return { ...sprite, cx: sprite.cx + drag.x, cy: sprite.cy + drag.y };
   }
 
-  let jobCursor = 0;
-
-  function nextLandJob(category: FrameRequest["category"]): Job {
-    const clothing = regionMode(category) === "clothing";
-    const jobs: Job[] = clothing
-      ? ["pose", "face", "pose"]
-      : category === "nails" || category === "ring"
-        ? ["hands", "hands", "face"]
-        : category === "watch" || category === "necklace" || category === "hat"
-          ? ["pose", "face"]
-          : ["face"];
-    const job = jobs[jobCursor % jobs.length] ?? "face";
-    jobCursor += 1;
-    return job;
-  }
-
   function sampleBackdrop(picture: HTMLVideoElement | HTMLImageElement, w: number, h: number) {
     if (!probeCtx) return;
     probeTick += 1;
@@ -657,53 +680,110 @@ export function startEngine(opts: {
     backdrop = [r / 4 / 255, g / 4 / 255, b / 4 / 255];
   }
 
-  function sendFrame(worker: Worker, job: Job, edge: number) {
+  function deliver(worker: Worker, job: Job, edge: number, roi: NormRect, release: () => void) {
     const picture = frameSource();
     const size = frameSize();
-    if (!picture || !size) return;
-    const scale = Math.min(1, edge / Math.max(size.w, size.h));
-    const w = Math.max(2, Math.round(size.w * scale));
-    const h = Math.max(2, Math.round(size.h * scale));
-    if (!scratchCtx) return;
-    scratch.width = w;
-    scratch.height = h;
-    scratchCtx.drawImage(picture, 0, 0, w, h);
+    if (!picture || !size) {
+      release();
+      return;
+    }
+    const crop = pixelCrop(roi, size.w, size.h);
+    const scale = Math.min(1, edge / Math.max(crop.sw, crop.sh));
+    const w = Math.max(2, Math.round(crop.sw * scale));
+    const h = Math.max(2, Math.round(crop.sh * scale));
     clock = Math.max(clock + 1, Math.round(performance.now()));
     const ts = clock;
     if (regionMode(getRequest().category) === "hair") sampleBackdrop(picture, size.w, size.h);
-    void createImageBitmap(scratch)
+    pendingRoi[job] = roi;
+    const options = { resizeWidth: w, resizeHeight: h, resizeQuality: "low" as const };
+    const bitmapPromise = createImageBitmap(picture, crop.sx, crop.sy, crop.sw, crop.sh, options).catch(() => {
+      if (!scratchCtx) throw new Error("Could not copy a frame for tracking.");
+      scratch.width = w;
+      scratch.height = h;
+      scratchCtx.drawImage(picture, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, w, h);
+      return createImageBitmap(scratch);
+    });
+    void bitmapPromise
       .then((bitmap) => {
         if (disposed) {
           bitmap.close();
-          if (job === "segment") segInflight = false;
-          else landInflight = false;
+          release();
           return;
         }
         worker.postMessage({ type: "frame", job, bitmap, ts }, [bitmap]);
       })
       .catch((error) => {
         console.warn(error instanceof Error ? error.message : "Could not copy a frame for tracking.");
-        if (job === "segment") segInflight = false;
-        else landInflight = false;
+        release();
       });
   }
 
-  function pumpLand() {
-    if (landInflight || !landReady || disposed || !frameSource()) return;
-    landInflight = true;
-    sendFrame(landWorker, nextLandJob(getRequest().category), 192);
+  function faceRoi(): NormRect {
+    faceTick += 1;
+    if (!faceLm || shouldRefreshFull(faceTick, 5)) return FULL_FRAME;
+    const ids = [10, 152, 234, 454];
+    return roiFromPoints(ids.map((id) => faceLm?.[id]), 0.6) ?? FULL_FRAME;
   }
 
-  let segNotBefore = 0;
+  function poseRoi(): NormRect {
+    poseTick += 1;
+    if (!poseLm || shouldRefreshFull(poseTick, 4)) return FULL_FRAME;
+    const ids = [0, 11, 12, 13, 14, 15, 16, 23, 24];
+    return roiFromPoints(ids.map((id) => poseLm?.[id]), 0.55) ?? FULL_FRAME;
+  }
+
+  function handsRoi(): NormRect {
+    handTick += 1;
+    if (handLms.length === 0 || shouldRefreshFull(handTick, 3)) return FULL_FRAME;
+    return roiFromPoints(handLms.flat(), 0.8) ?? FULL_FRAME;
+  }
+
+  function pumpFace() {
+    if (faceInflight || !faceReady || disposed || !frameSource()) return;
+    const now = performance.now();
+    const gap = cadenceMs(getRequest().category, times.segment).face;
+    if (!due(now, sentAt.face, gap, false)) return;
+    faceInflight = true;
+    sentAt.face = now;
+    const roi = faceRoi();
+    deliver(faceWorker, "face", inferenceEdge("face", times.face, !isFullFrame(roi)), roi, () => {
+      faceInflight = false;
+    });
+  }
+
+  function pumpBody() {
+    if (bodyInflight || !bodyReady || disposed || !frameSource()) return;
+    const now = performance.now();
+    const cadence = cadenceMs(getRequest().category, times.segment);
+    const poseDue = due(now, sentAt.pose, cadence.pose, false);
+    const handsDue = due(now, sentAt.hands, cadence.hands, false);
+    const job: Job | null = poseDue ? "pose" : handsDue ? "hands" : null;
+    if (!job) return;
+    bodyInflight = true;
+    sentAt[job] = now;
+    const roi = job === "pose" ? poseRoi() : handsRoi();
+    if (job === "pose") poseCrop = !isFullFrame(roi);
+    const last = job === "pose" ? times.pose : times.hand;
+    deliver(bodyWorker, job, inferenceEdge(job, last, !isFullFrame(roi)), roi, () => {
+      bodyInflight = false;
+    });
+  }
 
   function pumpSeg() {
     if (segInflight || !segReady || disposed || !frameSource()) return;
-    if (performance.now() < segNotBefore) return;
     const category = getRequest().category;
     const needs = regionMode(category) === "clothing" || regionMode(category) === "hair";
     if (!needs) return;
+    const now = performance.now();
+    const gap = cadenceMs(category, times.segment).segment;
+    if (hasMask && maskIsFresh(now, lastMaskAt, gap)) return;
+    if (!due(now, sentAt.segment, gap, false)) return;
     segInflight = true;
-    sendFrame(segWorker, "segment", times.segment > 420 ? 112 : 144);
+    sentAt.segment = now;
+    segmentEdge = inferenceEdge("segment", times.segment, false);
+    deliver(segWorker, "segment", segmentEdge, FULL_FRAME, () => {
+      segInflight = false;
+    });
   }
 
   function uploadMask(width: number, height: number, data: Uint8Array) {
@@ -734,7 +814,28 @@ export function startEngine(opts: {
       trackMark = now;
     }
     const ms = msg.ms ?? 0;
+    if (msg.job === "face" || msg.job === "pose" || msg.job === "hands" || msg.job === "segment") {
+      hits[msg.job] += 1;
+    }
+    if (now - rateMark > 1000) {
+      const seconds = (now - rateMark) / 1000;
+      rate.face = Math.round(hits.face / seconds);
+      rate.pose = Math.round(hits.pose / seconds);
+      rate.hands = Math.round(hits.hands / seconds);
+      rate.segment = Math.round(hits.segment / seconds);
+      hits.face = 0;
+      hits.pose = 0;
+      hits.hands = 0;
+      hits.segment = 0;
+      rateMark = now;
+    }
+    if (delegateName === "GPU" && ms > GPU_STALL_MS && !gpuFallback) {
+      gpuFallback = true;
+      delegateNote = `GPU pass took ${Math.round(ms)} ms and was stalling the tracker. Reverted to CPU. The picture kept its own loop.`;
+      bootDelegate("CPU");
+    }
     if (msg.error) console.warn(msg.job, msg.error);
+    const roi = (msg.job && pendingRoi[msg.job]) || FULL_FRAME;
     if (!loggedFace && msg.job === "face") {
       loggedFace = true;
       const info = msg as { count?: number; width?: number; height?: number };
@@ -742,14 +843,16 @@ export function startEngine(opts: {
     }
     if (msg.job === "face") {
       times.face = ms;
-      if (msg.face) {
-        faceLm = msg.face;
+      const face = remapList(msg.face, roi);
+      if (face) {
+        faceLm = face;
         faceMiss = 0;
       } else if (++faceMiss > 8) faceLm = null;
     } else if (msg.job === "pose") {
       times.pose = ms;
-      if (msg.pose) {
-        poseLm = msg.pose;
+      const pose = remapList(msg.pose, roi);
+      if (pose) {
+        poseLm = pose;
         poseWorld = msg.world ?? null;
         poseMiss = 0;
       } else if (++poseMiss > 6) {
@@ -758,16 +861,14 @@ export function startEngine(opts: {
       }
     } else if (msg.job === "hands") {
       times.hand = ms;
-      handLms = msg.hands ?? [];
+      handLms = (msg.hands ?? []).map((hand) => remapList(hand, roi) ?? hand);
     } else if (msg.job === "segment" && msg.mask) {
       times.segment = ms;
       uploadMask(msg.mask.width, msg.mask.height, msg.mask.data);
-      segNotBefore = performance.now() + Math.min(350, Math.max(80, ms * 0.35));
+      lastMaskAt = performance.now();
     } else if (msg.job === "segment") {
       times.segment = ms;
     }
-    if (msg.job === "segment") pumpSeg();
-    else pumpLand();
   }
 
   function publish(request: FrameRequest) {
@@ -799,6 +900,9 @@ export function startEngine(opts: {
       faceWidthCm,
       wristCm,
     });
+    readMotion(poseLm, now);
+    const elbows = countJoints(poseLm, [13, 14]);
+    const wrists = countJoints(poseLm, [15, 16]);
     onMetrics({
       fps,
       face: Boolean(faceLm),
@@ -810,12 +914,53 @@ export function startEngine(opts: {
       handMs: Math.round(times.hand),
       segmentMs: Math.round(times.segment),
       compositeMs: Math.round(times.composite),
-      delegate: landReady || segReady ? delegateName : "loading",
+      delegate: faceReady || bodyReady || segReady ? delegateName : "loading",
+      delegateNote,
       trackFps,
+      faceHz: rate.face,
+      poseHz: rate.pose,
+      handHz: rate.hands,
+      segmentHz: rate.segment,
+      maskAgeMs: hasMask && lastMaskAt ? Math.round(now - lastMaskAt) : 0,
+      shoulders: Boolean(poseLm && seen(poseLm[11], 0.2) && seen(poseLm[12], 0.2)),
+      elbows,
+      wrists,
+      motion,
+      cameraSession,
+      poseCrop,
+      segmentEdge,
       source,
       body,
       productId: request.productId,
     });
+  }
+
+  function countJoints(pose: Lm[] | null, ids: number[]): number {
+    if (!pose) return 0;
+    return ids.filter((id) => seen(pose[id], 0.2)).length;
+  }
+
+  function readMotion(pose: Lm[] | null, now: number) {
+    if (!pose || !seen(pose[11], 0.2) || !seen(pose[12], 0.2)) {
+      motion = "unknown";
+      return;
+    }
+    const x = (pose[11]!.x + pose[12]!.x) / 2;
+    const y = (pose[11]!.y + pose[12]!.y) / 2;
+    const span = Math.hypot(pose[12]!.x - pose[11]!.x, pose[12]!.y - pose[11]!.y);
+    if (!shoulderPrev) {
+      shoulderPrev = { x, y, span, at: now };
+      motion = "unknown";
+      return;
+    }
+    const dt = now - shoulderPrev.at;
+    if (dt < 280) return;
+    const moved = Math.hypot(x - shoulderPrev.x, y - shoulderPrev.y);
+    const spanRatio = shoulderPrev.span > 0.02 ? Math.abs(span - shoulderPrev.span) / shoulderPrev.span : 0;
+    if (spanRatio > 0.07) motion = "turning";
+    else if (moved > 0.015) motion = "moving";
+    else motion = "still";
+    shoulderPrev = { x, y, span, at: now };
   }
 
   function loop(now: number) {
@@ -829,7 +974,8 @@ export function startEngine(opts: {
     resize();
     const request = getRequest();
     ensureProduct(request.image);
-    pumpLand();
+    pumpFace();
+    pumpBody();
     pumpSeg();
     try {
       draw(request);
@@ -838,7 +984,7 @@ export function startEngine(opts: {
     }
     publish(request);
     if (source !== "off") {
-      if (!landReady) {
+      if (!faceReady && !bodyReady) {
         setStatus(source === "camera" ? "Live camera is on. The tracker is still loading. The picture keeps moving." : "Studio photograph for testing only. The tracker is still loading.");
       } else if (!faceLm && request.category !== "pants" && request.category !== "nails") setStatus("Looking for a face. Face the mirror.");
       else if (regionMode(request.category) === "clothing" && !poseLm) setStatus("Step back so both shoulders are in frame.");
@@ -848,43 +994,63 @@ export function startEngine(opts: {
     }
   }
 
-  function attach(worker: Worker, kind: "land" | "seg") {
+  function releaseInflight(kind: "face" | "body" | "seg") {
+    if (kind === "face") faceInflight = false;
+    else if (kind === "body") bodyInflight = false;
+    else segInflight = false;
+  }
+
+  function attach(worker: Worker, kind: "face" | "body" | "seg") {
     worker.onmessage = (event: MessageEvent) => {
       const msg = event.data as { type?: string; message?: string; delegate?: string; job?: Job };
       if (msg.type === "ready") {
-        if (kind === "land") landReady = true;
+        if (kind === "face") faceReady = true;
+        else if (kind === "body") bodyReady = true;
         else segReady = true;
         if (msg.delegate) delegateName = msg.delegate;
-        if (kind === "land") pumpLand();
-        else pumpSeg();
         return;
       }
       if (msg.type === "progress") return;
       if (msg.type === "error") {
-        if (kind === "land") landInflight = false;
-        else segInflight = false;
+        releaseInflight(kind);
         setStatus(msg.message || "The live tracker failed to start.");
         return;
       }
       if (msg.type === "result") {
         if (msg.job === "segment") segInflight = false;
-        else landInflight = false;
+        else if (msg.job === "face") faceInflight = false;
+        else bodyInflight = false;
         applyResult(event.data as Parameters<typeof applyResult>[0]);
       }
     };
     worker.onerror = () => {
-      if (kind === "land") landInflight = false;
-      else segInflight = false;
+      releaseInflight(kind);
       setStatus("The live tracker stopped. Reload the mirror.");
     };
   }
 
+  function bootDelegate(delegate: "CPU" | "GPU") {
+    faceReady = false;
+    bodyReady = false;
+    segReady = false;
+    faceInflight = false;
+    bodyInflight = false;
+    segInflight = false;
+    delegateName = delegate;
+    if (delegate === "CPU" && !gpuFallback) {
+      delegateNote = "CPU. Face, body and segmentation run on separate workers. The picture is not waiting on them.";
+    }
+    faceWorker.postMessage({ type: "init", models: ["face"], delegate });
+    bodyWorker.postMessage({ type: "init", models: ["pose", "hands"], delegate });
+    segWorker.postMessage({ type: "init", models: ["segment"], delegate });
+  }
+
   function boot() {
     setStatus("Turn on your camera to wear this live.");
-    attach(landWorker, "land");
+    attach(faceWorker, "face");
+    attach(bodyWorker, "body");
     attach(segWorker, "seg");
-    landWorker.postMessage({ type: "init", models: ["face", "pose", "hands"] });
-    segWorker.postMessage({ type: "init", models: ["segment"] });
+    bootDelegate("CPU");
     raf = requestAnimationFrame(loop);
   }
 
@@ -893,6 +1059,13 @@ export function startEngine(opts: {
   return {
     startCamera,
     startStudio,
+    setDelegate(delegate) {
+      gpuFallback = false;
+      if (delegate === "GPU") {
+        delegateNote = "GPU requested. If a pass stalls, the tracker returns to CPU without stopping the camera.";
+      }
+      bootDelegate(delegate);
+    },
     stop() {
       clearSource();
       setStatus("Mirror paused.");
@@ -901,7 +1074,8 @@ export function startEngine(opts: {
       disposed = true;
       cancelAnimationFrame(raf);
       clearSource();
-      landWorker.terminate();
+      faceWorker.terminate();
+      bodyWorker.terminate();
       segWorker.terminate();
       console.error = originalError;
     },

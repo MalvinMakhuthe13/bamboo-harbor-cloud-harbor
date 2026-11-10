@@ -121,11 +121,13 @@ self.onmessage = async function (event) {
       for (var m = 0; m < data.models.length; m++) want[data.models[m]] = true;
     }
     try {
-      // CPU delegate. The GPU delegate runs on the same WebGL device as the mirror,
-      // and a segmentation pass then stalls the camera (measured here at multi-second
-      // frame gaps). CPU keeps inference off that device so the picture can keep moving.
-      await build("CPU");
-      self.postMessage({ type: "ready", delegate: "CPU" });
+      closeAll();
+      var delegate = data.delegate === "GPU" ? "GPU" : "CPU";
+      // CPU is the default. GPU shares the browser graphics device with the mirror
+      // and has stalled the picture on software GL. The page can request GPU and
+      // will revert if a pass exceeds the stall budget.
+      await build(delegate);
+      self.postMessage({ type: "ready", delegate: delegate });
     } catch (error) {
       self.postMessage({
         type: "error",

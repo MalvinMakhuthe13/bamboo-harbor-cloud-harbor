@@ -111,7 +111,8 @@ export const MODEL_REGISTRY: ModelRecord[] = [
     runs: "not-running",
     live: false,
     weights: "None owned.",
-    notes: "Not shipped. The lab page can prepare a shirt packet and will say the checkpoint is missing. It does not call this mirror.",
+    notes:
+      "Weights are not trained. The lab runs the data validator, the conditioning preflight, and the pixel scorer. Generation stays refused. It does not call this mirror.",
   },
 ];
 

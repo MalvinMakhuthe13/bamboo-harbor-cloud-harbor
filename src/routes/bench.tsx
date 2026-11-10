@@ -38,7 +38,7 @@ function BenchPage() {
         </p>
         <h2 className="font-display mt-8 text-2xl">What is not done</h2>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-muted">
-          <li>No owned generative video weights. The mirror composites a product photograph onto the tracked body. It does not synthesise cloth, hair or identity. The shirt experiment on the lab page is a separate, inactive pipeline.</li>
+          <li>No owned generative video weights. The lab validates training clips, assembles a shirt conditioning plan, and scores pixels. It does not generate a worn frame, and the mirror does not call it.</li>
           <li>Clothing replaces the segmented torso and arms, so the old garment is covered where the body is visible. It is still a fitted photograph, not a draped simulation. A chest-up frame cannot show trousers.</li>
           <li>A wig hides the old hair inside the hair mask and places the product’s own cut on the head. Edges on a busy background are approximate. It is not a generative hairstyle.</li>
           <li>Glasses, hats, earrings, necklaces, watches and rings are anchored to landmarks. Nails recolour the tracked nail, which needs a visible hand.</li>
