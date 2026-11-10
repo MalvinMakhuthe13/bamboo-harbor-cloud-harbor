@@ -35,15 +35,15 @@ The GPU delegate was tried. A segmentation pass took about 3.6 s and stalled the
 Studio photograph, CPU, landmarks at 192 px, segmentation near 144 px:
 
 - Picture about 8 fps. Composite about 0 ms after the still is uploaded once. The headless display callback itself was about 8 Hz.
-- Tracking about 2–9 fps while pose, face and segmentation share the machine.
-- Face about 30–180 ms after the first frame (first frame about 260–330 ms). Pose about 28–100 ms. Segmentation about 690–860 ms.
+- Tracking about 6–9 fps while pose, face and segmentation share the machine.
+- Face about 30–180 ms after the first frame (one steady reading was 56 ms). Pose about 28–190 ms. Segmentation about 690–860 ms.
 - Hands: 0 on the bundled chest-up plate.
 
 Live camera, Chromium’s fake device (a moving test pattern, not a person):
 
 - The gate asks before opening the camera. The status was “Looking for a face. Face the mirror.” It was not labelled as the studio photograph.
-- Picture about 9 fps. Composite about 88 ms while uploading that camera frame on software WebGL.
-- Face step about 10 ms, no face found. Two frames 700 ms apart were not identical.
+- Picture about 9 fps. Composite about 33 ms while copying that camera frame onto the mirror texture on software WebGL.
+- Face step about 12 ms. The test pattern is not a person; a hit there is not a try-on. Two frames 700 ms apart were not identical.
 
 ## Not done
 
