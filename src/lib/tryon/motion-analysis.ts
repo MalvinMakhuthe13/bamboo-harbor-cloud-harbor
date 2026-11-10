@@ -67,7 +67,9 @@ export function analyzeMotionSamples(samples: MotionSample[]): ProductMotionProf
     };
   }
 
-  // Use the opening two observations as the resting baseline. Including a third\n  // sample can absorb the beginning of a turn into the baseline and hide settling.\n  const baseline = valid.slice(0, Math.min(2, valid.length));
+  // Use the opening two observations as the resting baseline. Including a third
+  // sample can absorb the beginning of a turn into the baseline and hide settling.
+  const baseline = valid.slice(0, Math.min(2, valid.length));
   const baseX = average(baseline.map((sample) => sample.productOffsetX));
   const baseY = average(baseline.map((sample) => sample.productOffsetY));
   const yaws = valid.map((sample) => sample.headYawRad);
