@@ -51,6 +51,14 @@ export const NECKLACE_STIFFNESS = 0.72;
 export const FOLD_FREQ = 9;
 export const FOLD_SPEED = 2.4;
 
+/** Clamp animation delta after stalls/backgrounding; physics remains time-based. */
+export function frameDeltaSeconds(now: number, previous: number | null): number {
+  if (previous === null || !Number.isFinite(previous)) return 1 / 60;
+  const elapsed = (now - previous) / 1000;
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return 1 / 60;
+  return clamp(elapsed, 1 / 240, 1 / 30);
+}
+
 export type ChainNode = { x: number; y: number; px: number; py: number };
 
 export function constraintBlend(stiffness: number): number {
@@ -100,7 +108,7 @@ export function stepPendulum(
   dt: number,
 ): { swing: number; vel: number } {
   let next = vel - swing * PENDULUM_K * dt;
-  next *= PENDULUM_DAMP;
+  next *= Math.pow(PENDULUM_DAMP, dt * 60);
   next += yawRate * PENDULUM_DRIVE;
   return { swing: swing + next, vel: next };
 }
@@ -254,13 +262,14 @@ export function stepChain2d(
     if (i === grabIndex && grabAt) {
       n.px = n.x;
       n.py = n.y;
-      const t = GRAB_LERP * pull;
+      const t = (1 - Math.pow(1 - GRAB_LERP, dt * 60)) * pull;
       n.x += (grabAt.x - n.x) * t;
       n.y += (grabAt.y - n.y) * t;
       continue;
     }
-    const vx = (n.x - n.px) * VERLET_DAMP;
-    const vy = (n.y - n.py) * VERLET_DAMP;
+    const damping = Math.pow(VERLET_DAMP, dt * 60);
+    const vx = (n.x - n.px) * damping;
+    const vy = (n.y - n.py) * damping;
     n.px = n.x;
     n.py = n.y;
     n.x += vx;
