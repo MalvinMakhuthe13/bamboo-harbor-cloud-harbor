@@ -71,3 +71,40 @@ test("rejects invalid merchant seed coordinates", async () => {
   const { selectSeededHairRegion } = await import("./hair-region-tracking.ts");
   assert.throws(() => selectSeededHairRegion(new Uint8Array(4), 2, 2, { x: 2, y: 0.5, radius: 0.2 }));
 });
+
+test("propagates a selected hair region through nearby later masks", async () => {
+  const { trackSeededHairForward } = await import("./hair-region-tracking.ts");
+  const makeMask = (cx: number) => {
+    const mask = new Uint8Array(100);
+    mask[4 * 10 + cx] = 1;
+    mask[4 * 10 + cx + 1] = 1;
+    mask[5 * 10 + cx] = 1;
+    return mask;
+  };
+  const track = trackSeededHairForward([
+    { timestampMs: 0, categories: makeMask(4), width: 10, height: 10 },
+    { timestampMs: 500, categories: makeMask(5), width: 10, height: 10 },
+    { timestampMs: 1000, categories: makeMask(6), width: 10, height: 10 },
+  ], 0, { x: 0.45, y: 0.45, radius: 0.2 }, 0.3);
+  assert.equal(track.length, 3);
+  assert.ok(track.every((point) => point.tracked));
+  assert.ok(track[2].region.center!.x > track[0].region.center!.x);
+});
+
+test("retains last seed when a later frame loses the selected region", async () => {
+  const { trackSeededHairForward } = await import("./hair-region-tracking.ts");
+  const empty = new Uint8Array(100);
+  const track = trackSeededHairForward([
+    { timestampMs: 0, categories: regionMask(), width: 10, height: 10 },
+    { timestampMs: 500, categories: empty, width: 10, height: 10 },
+  ], 0, { x: 0.45, y: 0.45, radius: 0.2 }, 0.2);
+  assert.equal(track[0].tracked, true);
+  assert.equal(track[1].tracked, false);
+});
+function regionMask() {
+  const mask = new Uint8Array(100);
+  mask[4 * 10 + 4] = 1;
+  mask[4 * 10 + 5] = 1;
+  mask[5 * 10 + 4] = 1;
+  return mask;
+}
