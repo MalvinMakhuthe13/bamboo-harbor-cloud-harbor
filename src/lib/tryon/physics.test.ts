@@ -59,3 +59,8 @@ test("pinch hysteresis prevents flicker near the close threshold", () => {
 test("invalid pinch samples do not cause an accidental release", () => {
   assert.equal(updatePinchState(true, Number.NaN), true);
 });
+
+
+test("an open hand releases an active pinch", () => {
+  assert.equal(updatePinchState(true, Number.POSITIVE_INFINITY), false);
+});
