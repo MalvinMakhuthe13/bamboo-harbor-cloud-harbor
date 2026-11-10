@@ -1353,6 +1353,12 @@ function resolveHairBackContacts(
   const shoulderDelta = new THREE.Vector3();
   const shoulderClearance = 2.8;
   const shoulderClearanceSq = shoulderClearance * shoulderClearance;
+  // A compact nape volume prevents lower rear locks from cutting through
+  // the neck while leaving the scalp roots and front-facing hair untouched.
+  const napeCentre = new THREE.Vector3(0, -9.2, -1.6);
+  const napeRadii = new THREE.Vector3(4.6, 5.4, 4.1);
+  const napeLocal = new THREE.Vector3();
+  const napeNormal = new THREE.Vector3();
 
   for (const strand of strands) {
     for (let j = 2; j < strand.nodes.length; j++) {
@@ -1372,7 +1378,32 @@ function resolveHairBackContacts(
         node.pos.add(correction);
         node.prev.add(correction);
       }
-      local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead).sub(localCentre);
+      local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead);
+      if (j >= 3 && local.y < -4 && local.y > -15 && local.z < 0) {
+        napeLocal.copy(local).sub(napeCentre);
+        const nx = napeLocal.x / napeRadii.x;
+        const ny = napeLocal.y / napeRadii.y;
+        const nz = napeLocal.z / napeRadii.z;
+        const napeDistanceSq = nx * nx + ny * ny + nz * nz;
+        if (napeDistanceSq < 1) {
+          napeNormal.set(
+            napeLocal.x / (napeRadii.x * napeRadii.x),
+            napeLocal.y / (napeRadii.y * napeRadii.y),
+            napeLocal.z / (napeRadii.z * napeRadii.z),
+          );
+          if (napeNormal.lengthSq() < 1e-8) napeNormal.set(0, 0, -1);
+          napeNormal.normalize();
+          correction.copy(napeLocal)
+            .multiplyScalar(1 / Math.sqrt(Math.max(napeDistanceSq, 1e-5)))
+            .sub(napeLocal)
+            .addScaledVector(napeNormal, 0.12)
+            .applyQuaternion(headQuat);
+          node.pos.add(correction);
+          node.prev.add(correction);
+          local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead);
+        }
+      }
+      local.sub(localCentre);
       // Only the rear half of the torso is a blocker. Front hair remains free
       // to fall over the chest rather than being pushed away from the body.
       if (local.z >= 0) continue;
