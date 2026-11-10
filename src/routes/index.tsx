@@ -13,20 +13,20 @@ function Home() {
       <section className="bg-ink text-paper">
         <div className="mx-auto grid max-w-6xl gap-10 px-5 py-16 md:grid-cols-12 md:py-24">
           <div className="md:col-span-7">
-            <p className="text-sm tracking-widest text-brass-2 uppercase">Live try-on, on the phone</p>
+            <p className="text-sm tracking-widest text-brass-2 uppercase">A photograph, on you</p>
             <h1 className="font-display mt-4 text-5xl leading-tight text-paper md:text-6xl">
-              See it on you, moving.
+              Click it. It goes on, for real.
             </h1>
             <p className="mt-6 max-w-xl text-lg text-muted">
-              Isibuko is a mirror for wigs, nails, glasses, jewellery and clothes. The camera stays on.
-              The piece stays locked to the body. Nothing is uploaded.
+              Isibuko puts a real product photograph on a real person. A wig, a set of nails, a shirt.
+              Not a cartoon body. One still is used. The live camera is not streamed.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 to="/rail"
                 className="inline-flex min-h-11 items-center rounded-full bg-brass px-5 text-ink"
               >
-                Click a shirt
+                Click a photograph
               </Link>
               <Link
                 to="/mirror"
@@ -40,11 +40,11 @@ function Home() {
             <div className="rounded-3xl border border-line bg-ink-2 p-6">
               <p className="font-display text-2xl">What a shopper does</p>
               <ol className="mt-4 space-y-3 text-muted">
-                <li>1. On the rail, tap the piece. Or paste a shop link.</li>
-                <li>2. Enter height. Pick the size you would actually buy.</li>
-                <li>3. Turn. Folds follow the shoulders and the hips.</li>
-                <li>4. Pinch a fold, a strand, or a bead. Let go. It settles.</li>
-                <li>5. Read the size, and the warning if it will run tight.</li>
+                <li>1. Take a frame, upload a photo, or start from a sample shopper.</li>
+                <li>2. Tap a wig, nails, glasses or a shirt. The photograph is the product.</li>
+                <li>3. The piece is put onto that still. The face stays the shopper's.</li>
+                <li>4. Tap another photograph. That one replaces it.</li>
+                <li>5. The picture is not a tape measure. Size charts stay on the piece.</li>
               </ol>
             </div>
           </div>
@@ -52,19 +52,18 @@ function Home() {
       </section>
 
       <section className="mx-auto grid max-w-6xl gap-4 px-5 py-16 md:grid-cols-4">
-        <Point icon={<Camera />} title="Live, not a photo" text="MediaPipe tracks the face, hands and pose on the device. Three.js pins the piece to those points every frame." />
-        <Point icon={<Ruler />} title="A size, with the error stated" text="Height corrects the pose. Chest and waist are ellipses, not a tape. The screen says so." />
-        <Point icon={<ShieldCheck />} title="Video stays here" text="Frames are read in the browser and dropped. A shop only gets counts: tried on, size chosen." />
-        <Point icon={<Store />} title="One engine, many pieces" text="A new wearable is a category, an anchor and a size chart. It is not a new app." />
+        <Point icon={<Camera />} title="A still, not a cartoon" text="You click a product photograph. It is placed onto one frame of you. Wigs, nails and clothes, the same way." />
+        <Point icon={<Ruler />} title="The picture is not a tape" text="Fit charts are still on the piece. The photograph does not measure your chest." />
+        <Point icon={<ShieldCheck />} title="One frame, on purpose" text="The live camera stays on the phone. A still is sent only when you tap a piece, to make that picture." />
+        <Point icon={<Store />} title="A shop link works too" text="Paste a product page. If it has a photograph, that photograph is what goes on." />
       </section>
 
       <section className="border-t border-line/30">
         <div className="mx-auto max-w-6xl px-5 py-16">
           <h2 className="font-display text-3xl">What can be tried on</h2>
           <p className="mt-3 max-w-2xl text-ink-muted">
-            Shirts and trousers follow the body you are showing them. Ease from the size chart
-            decides how much they wrinkle. It is not a film-quality cloth solver — a phone cannot
-            run one live — and shoes are not in this build.
+            Wigs and nails first, then shirts and trousers. Each card is a photograph. Tap it and that
+            photograph is what goes on the person. Jewellery without a picture stays off the rail.
           </p>
           <ul className="mt-8 grid gap-3 sm:grid-cols-2 md:grid-cols-5">
             {CATEGORY_ORDER.map((category) => (

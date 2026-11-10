@@ -66,8 +66,8 @@ function Studio() {
         <p className="text-sm tracking-widest text-clay uppercase">For the shop, on this device</p>
         <h1 className="font-display mt-3 text-5xl">Studio</h1>
         <p className="mt-3 max-w-2xl text-ink-muted">
-          Catalogue, size charts and try-on counts stay in this browser. There is no account and no
-          upload. The embed is a link into the mirror with a product id.
+          Catalogue and try-on counts stay in this browser. A still is sent only when someone taps a
+          piece in the mirror, to make that photograph. The embed is a link into the mirror.
         </p>
 
         <section className="mt-10 grid gap-6 lg:grid-cols-5">

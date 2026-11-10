@@ -57,11 +57,10 @@ function Rail() {
       <Nav />
       <div className="mx-auto max-w-6xl px-5 py-10">
         <p className="text-sm tracking-widest text-clay uppercase">Click it. It goes on.</p>
-        <h1 className="font-display mt-3 max-w-3xl text-5xl leading-tight">A shirt from the rail, or from a shop link.</h1>
+        <h1 className="font-display mt-3 max-w-3xl text-5xl leading-tight">Click the photograph.</h1>
         <p className="mt-4 max-w-2xl text-ink-muted">
-          Paste a product page — Superbalist, a brand site, anywhere with a title. Isibuko reads the
-          name, the photo, the rand price, and the size chart when the page has one. Then the piece
-          is on the body. The size you pick is the ease. The folds follow the turn.
+          Wigs, nails, glasses and clothes are real pictures, not a drawn body. Tap one to put it on
+          a still of you. Or paste a shop link that has its own photograph.
         </p>
 
         <form className="mt-8 flex flex-col gap-3 sm:flex-row" onSubmit={(event) => void onSubmit(event)}>
@@ -82,7 +81,7 @@ function Rail() {
         {error && <p className="mt-3 text-sm text-clay">{error}</p>}
 
         <ul className="mt-12 grid grid-cols-2 gap-4 md:grid-cols-3">
-          {pieces.map((piece) => (
+          {pieces.filter((piece) => piece.image).map((piece) => (
             <li key={piece.id}>
               <button
                 type="button"
@@ -114,9 +113,13 @@ function Rail() {
 }
 
 function rank(piece: Product): number {
-  if (piece.category === "shirt") return 0;
-  if (piece.category === "pants") return 1;
-  return 2;
+  if (piece.category === "wig") return 0;
+  if (piece.category === "nails") return 1;
+  if (piece.category === "hat") return 2;
+  if (piece.category === "glasses") return 3;
+  if (piece.category === "shirt") return 4;
+  if (piece.category === "pants") return 5;
+  return 6;
 }
 
 function inkOn(hex: string): string {
