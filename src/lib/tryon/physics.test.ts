@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { angleDeltaRadians, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
+import { angleDeltaRadians, bodyMotionAcceleration, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -225,4 +225,28 @@ test("head yaw delta takes the short path across the angle wrap", () => {
 test("head yaw delta rejects non-finite angles", () => {
   assert.equal(angleDeltaRadians(Number.NaN, 1), 0);
   assert.equal(angleDeltaRadians(1, Number.POSITIVE_INFINITY), 0);
+});
+
+
+test("body motion acceleration is bounded and preserves direction", () => {
+  const result = bodyMotionAcceleration(
+    { x: 0, y: 0, z: 0 },
+    { x: 100, y: 0, z: 0 },
+    0.1,
+    180,
+  );
+  assert.ok(Math.abs(result.x - 180) < 1e-9);
+  assert.equal(result.y, 0);
+  assert.equal(result.z, 0);
+});
+
+test("body motion acceleration rejects invalid samples and elapsed time", () => {
+  assert.deepEqual(
+    bodyMotionAcceleration({ x: 0, y: 0, z: 0 }, { x: Number.NaN, y: 1, z: 1 }, 0.1),
+    { x: 0, y: 0, z: 0 },
+  );
+  assert.deepEqual(
+    bodyMotionAcceleration({ x: 0, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }, 0),
+    { x: 0, y: 0, z: 0 },
+  );
 });
