@@ -1121,7 +1121,7 @@ export function startEngine(opts: {
         const nodes = strands[neighbour.index].nodes;
         const index = indexFor(nodes);
         if (!nodes[index]) continue;
-        nodes[index].prev.copy(nodes[index].pos).subScaledVector(pinchFrameVelocity, neighbour.weight * SECTION_FOLLOW);
+        nodes[index].prev.copy(nodes[index].pos).addScaledVector(pinchFrameVelocity, -neighbour.weight * SECTION_FOLLOW);
       }
     }
     if (neckGrab > 0 && neckNodes[neckGrab]) {
