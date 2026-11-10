@@ -52,6 +52,15 @@ export const FOLD_FREQ = 9;
 export const FOLD_SPEED = 2.4;
 
 /** Clamp animation delta after stalls/backgrounding; physics remains time-based. */
+/** Smallest signed angular difference, avoiding false full turns at +/- PI. */
+export function angleDeltaRadians(current: number, previous: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return 0;
+  let delta = (current - previous) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+}
+
 export function frameDeltaSeconds(now: number, previous: number | null): number {
   if (previous === null || !Number.isFinite(previous)) return 1 / 60;
   const elapsed = (now - previous) / 1000;
