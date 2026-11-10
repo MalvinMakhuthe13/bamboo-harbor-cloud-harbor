@@ -1278,14 +1278,15 @@ function resolveHairContacts(strands: Strand[], grabbedStrand: number, grabbedJo
         delta.subVectors(pb, pa);
         const d2 = delta.lengthSq();
         if (d2 >= minGapSq) continue;
-        if (d2 < 1e-8) delta.set(0, 0, ((s + neighbour + j) % 2 ? 1 : -1) * minGap);
-        else delta.multiplyScalar(minGap / Math.sqrt(d2));
-        const correction = delta.subVectors(delta, pb.clone().sub(pa)).multiplyScalar(-0.5);
-        // correction now points from a towards its half-separation displacement.
-        pa.sub(correction);
-        pb.add(correction);
-        a[j].prev.sub(correction);
-        b[j].prev.add(correction);
+        if (d2 < 1e-8) {
+          delta.set(0, 0, ((s + neighbour + j) % 2 ? 1 : -1) * (minGap * 0.5));
+        } else {
+          delta.multiplyScalar(((minGap - Math.sqrt(d2)) / (2 * Math.sqrt(d2))));
+        }
+        pa.sub(delta);
+        pb.add(delta);
+        a[j].prev.sub(delta);
+        b[j].prev.add(delta);
       }
     }
   }
