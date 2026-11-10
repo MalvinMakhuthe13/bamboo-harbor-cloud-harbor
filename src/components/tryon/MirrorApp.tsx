@@ -307,11 +307,11 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
                 </div>
                 <Measure label="Body acceleration" value={metrics.bodyAcceleration} suffix=" cm/s²" />
                 <Measure label="Head-relative acceleration" value={metrics.headRelativeAcceleration} suffix=" cm/s²" />
-                <Measure label="Average simulated hair speed" value={metrics.hairMotionSpeed} suffix=" cm/s" />
-                <Measure label="Settled strands (<1.5 cm/s)" value={metrics.settledHairPercent} suffix="%" />
+                <Measure label="Average simulated hair speed" value={metrics.visibleHairStrands > 0 ? metrics.hairMotionSpeed : null} suffix=" cm/s" />
+                <Measure label="Settled strands (<1.5 cm/s)" value={metrics.visibleHairStrands > 0 ? metrics.settledHairPercent : null} suffix="%" />
                 <div>
                   <dt className="text-muted">Hair motion state</dt>
-                  <dd className="capitalize">{hairMotionState(metrics.visibleHairStrands, metrics.settledHairPercent)}</dd>
+                  <dd className="capitalize">{hairMotionState(metrics.visibleHairStrands, metrics.settledHairPercent) === "unavailable" ? "No visible strands" : hairMotionState(metrics.visibleHairStrands, metrics.settledHairPercent)}</dd>
                 </div>
                 <Measure label="Visible strands tracked" value={metrics.visibleHairStrands} />
               </dl>
