@@ -21,6 +21,8 @@ export type SemanticRegion = {
 };
 
 export type ProductSegmentationSample = {
+  /** Video timestamp in milliseconds; absent for standalone mask summaries. */
+  timestampMs?: number;
   width: number;
   /** Optional copied category mask, returned only for visual debugging previews. */
   categoryMask?: Uint8Array;
@@ -117,8 +119,8 @@ export async function createProductSegmenter(): Promise<ProductSegmenter> {
         const categories = mask.getAsUint8Array();
         const sample = summarizeSemanticMask(categories, mask.width, mask.height);
         return includeMask
-          ? { ...sample, categoryMask: new Uint8Array(categories) }
-          : sample;
+          ? { ...sample, timestampMs: safeTimestamp, categoryMask: new Uint8Array(categories) }
+          : { ...sample, timestampMs: safeTimestamp };
       } finally {
         mask.close();
       }
