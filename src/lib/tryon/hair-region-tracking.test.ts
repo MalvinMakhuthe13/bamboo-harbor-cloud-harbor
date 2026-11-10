@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRelativeHairTrack, summarizeRelativeHairTrack } from "./hair-region-tracking.ts";
+import { analyzeHairMotionProxy, buildRelativeHairTrack, summarizeRelativeHairTrack } from "./hair-region-tracking.ts";
 import type { WearerTrackingSample } from "./wearer-tracking.ts";
 import type { ProductSegmentationSample } from "./product-segmentation.ts";
 
@@ -16,7 +16,7 @@ function region(timestampMs: number, centerX: number): ProductSegmentationSample
   const left = centerX - 0.1;
   const right = centerX + 0.1;
   return {
-    width: 256, height: 256, hairDetected: true,
+    timestampMs, width: 256, height: 256, hairDetected: true,
     hair: { pixels: 1000, ratio: 0.02, bounds: { left, right, top: 0.1, bottom: 0.5 }, center: { x: centerX, y: 0.3 } },
     faceSkin: { pixels: 0, ratio: 0, bounds: null, center: null },
     clothes: { pixels: 0, ratio: 0, bounds: null, center: null },
@@ -189,4 +189,42 @@ test("marks ordinary detections as not recovered", async () => {
     { timestampMs: 0, categories: regionMask(), width: 10, height: 10 },
   ], 0, { x: 0.45, y: 0.45, radius: 0.2 });
   assert.equal(track[0].recovered, false);
+});
+
+
+test("joins segmentation and wearer samples by timestamp when arrays are offset", () => {
+  const track = buildRelativeHairTrack(
+    [wearer(0), wearer(500), wearer(1000)],
+    [region(500, 0.6), region(1000, 0.7)],
+  );
+  assert.deepEqual(track.map((item) => item.timestampMs), [500, 1000]);
+});
+
+test("summarises hair response against yaw proxy without treating it as radians", () => {
+  const yaw = [0, 0.1, 0.3, 0.4, 0.2, 0];
+  const offsets = [0, 0.01, 0.04, 0.1, 0.2, 0.25];
+  const wearerSamples = yaw.map((value, index) => ({
+    ...wearer(index * 500),
+    headYawProxy: value,
+  }));
+  const hairTrack = offsets.map((value, index) => ({
+    timestampMs: index * 500, offsetX: value, offsetY: 0,
+    width: 1, height: 1, confidence: 0.9,
+  }));
+  const summary = analyzeHairMotionProxy(wearerSamples, hairTrack);
+  assert.equal(summary.sampleCount, 6);
+  assert.equal(summary.headYawProxyRange, 0.4);
+  assert.equal(summary.peakDisplacementAtMs, 2500);
+  assert.equal(summary.responseLagMs, 1000);
+  assert.equal(summary.quality, "insufficient");
+});
+
+test("requires enough timestamp-paired confident samples for motion diagnostics", () => {
+  const summary = analyzeHairMotionProxy([wearer(0)], []);
+  assert.equal(summary.quality, "insufficient");
+  assert.equal(summary.responseLagMs, null);
+});
+
+test("rejects invalid confidence thresholds for hair motion diagnostics", () => {
+  assert.throws(() => analyzeHairMotionProxy([], [], 1.5), /Minimum confidence/);
 });
