@@ -336,6 +336,18 @@ export function stableHairJitter(index: number, salt = 0): number {
  * Nearby locks follow promptly; farther locks respond more softly, creating
  * staggered motion without welding neighbouring strands together.
  */
+/**
+ * Velocity retention for a strand based on its length and position around
+ * the head. Longer rear sections keep more momentum; short front sections
+ * settle sooner. Values remain close to the base Verlet damping.
+ */
+export function hairStrandDamping(lengthMul: number, rearBias: number): number {
+  if (!Number.isFinite(lengthMul) || !Number.isFinite(rearBias)) return VERLET_DAMP;
+  const length = clamp(lengthMul, 0.2, 1.4);
+  const rear = clamp(rearBias, 0, 1);
+  return clamp(0.925 + length * 0.035 + rear * 0.015, 0.925, 0.985);
+}
+
 export function hairSectionResponseHz(distance: number): number {
   if (!Number.isFinite(distance) || distance < 0) return 8;
   return Math.max(7, 28 / (1 + distance * 0.72));
