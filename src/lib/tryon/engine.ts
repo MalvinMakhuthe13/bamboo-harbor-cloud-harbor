@@ -35,7 +35,7 @@ import {
   glassesScale,
   hairDropCm,
   hairSectionInfluence,
-  projectOutsideEllipsoid,
+  resolveEllipsoidContact,
   hairStiffness,
   headFromFace,
   kneeBendAmount,
@@ -1386,16 +1386,21 @@ function resolveHairBackContacts(
         const nz = napeLocal.z / napeRadii.z;
         const napeDistanceSq = nx * nx + ny * ny + nz * nz;
         if (napeDistanceSq < 1) {
-          const projected = projectOutsideEllipsoid(
+          const previousNape = node.prev.clone().sub(headPos).applyQuaternion(inverseHead).sub(napeCentre);
+          const contact = resolveEllipsoidContact(
             napeLocal,
+            previousNape,
             napeRadii,
             0.12,
+            0.04,
           );
-          if (projected) {
-            correction.set(projected.x - napeLocal.x, projected.y - napeLocal.y, projected.z - napeLocal.z)
-              .applyQuaternion(headQuat);
-            node.pos.add(correction);
-            node.prev.add(correction);
+          if (contact) {
+            const corrected = new THREE.Vector3(contact.position.x, contact.position.y, contact.position.z)
+              .add(napeCentre).applyQuaternion(headQuat).add(headPos);
+            const correctedPrevious = new THREE.Vector3(contact.previous.x, contact.previous.y, contact.previous.z)
+              .add(napeCentre).applyQuaternion(headQuat).add(headPos);
+            node.pos.copy(corrected);
+            node.prev.copy(correctedPrevious);
             local.copy(node.pos).sub(headPos).applyQuaternion(inverseHead);
           }
         }
@@ -1404,16 +1409,21 @@ function resolveHairBackContacts(
       // Only the rear half of the torso is a blocker. Front hair remains free
       // to fall over the chest rather than being pushed away from the body.
       if (local.z >= 0) continue;
-      const projected = projectOutsideEllipsoid(
+      const previousLocal = node.prev.clone().sub(headPos).applyQuaternion(inverseHead).sub(localCentre);
+      const contact = resolveEllipsoidContact(
         local,
+        previousLocal,
         { x: radiusX, y: radiusY, z: radiusZ },
         0.18,
+        0.08,
       );
-      if (!projected) continue;
-      correction.set(projected.x - local.x, projected.y - local.y, projected.z - local.z)
-        .applyQuaternion(headQuat);
-      node.pos.add(correction);
-      node.prev.add(correction);
+      if (!contact) continue;
+      const corrected = new THREE.Vector3(contact.position.x, contact.position.y, contact.position.z)
+        .add(localCentre).applyQuaternion(headQuat).add(headPos);
+      const correctedPrevious = new THREE.Vector3(contact.previous.x, contact.previous.y, contact.previous.z)
+        .add(localCentre).applyQuaternion(headQuat).add(headPos);
+      node.pos.copy(corrected);
+      node.prev.copy(correctedPrevious);
     }
   }
 }
