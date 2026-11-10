@@ -91,6 +91,10 @@ export function summarizeRelativeHairTrack(track: RelativeHairObservation[]) {
 export type HairSeed = { x: number; y: number; radius: number };
 export type SeededHairRegion = {
   pixels: number;
+  /** Binary mask containing only the selected connected component. */
+  componentMask?: Uint8Array;
+  maskWidth?: number;
+  maskHeight?: number;
   ratio: number;
   bounds: { left: number; top: number; right: number; bottom: number } | null;
   center: { x: number; y: number } | null;
@@ -139,6 +143,7 @@ export function selectSeededHairRegion(
   }
 
   let pixels = 0;
+  const componentMask = new Uint8Array(categories.length);
   let minX = width;
   let minY = height;
   let maxX = -1;
@@ -155,6 +160,7 @@ export function selectSeededHairRegion(
       const dy = y + 0.5 - seedY;
       if (dx * dx + dy * dy > radiusSquared) continue;
       pixels++;
+      componentMask[index] = 1;
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x);
@@ -181,6 +187,9 @@ export function selectSeededHairRegion(
   } : null;
   return {
     pixels,
+    componentMask,
+    maskWidth: width,
+    maskHeight: height,
     ratio: pixels / categories.length,
     bounds,
     center: bounds ? { x: (bounds.left + bounds.right) / 2, y: (bounds.top + bounds.bottom) / 2 } : null,
@@ -450,26 +459,49 @@ export function buildHairSectionTrack(
   const wearerByTime = new Map(wearer.map((sample) => [sample.timestampMs, sample]));
   const observations: HairSectionObservation[] = [];
   for (const point of track) {
-    if (!point.tracked || !point.region.bounds) continue;
     const sample = wearerByTime.get(point.timestampMs);
-    if (!sample?.faceDetected || sample.headCenterX === null ||
+    const mask = point.region.componentMask;
+    const width = point.region.maskWidth;
+    const height = point.region.maskHeight;
+    const bounds = point.region.bounds;
+    if (!point.tracked || !mask || !width || !height || !bounds ||
+        !sample?.faceDetected || sample.headCenterX === null ||
         sample.headCenterY === null || sample.headWidth === null || sample.headWidth <= 0) continue;
-    const b = point.region.bounds;
-    const width = b.right - b.left;
-    const height = b.bottom - b.top;
-    const anchors: Record<HairSectionName, { x: number; y: number }> = {
-      top: { x: (b.left + b.right) / 2, y: b.top + height * 0.12 },
-      left: { x: b.left + width * 0.18, y: b.top + height * 0.5 },
-      centre: { x: (b.left + b.right) / 2, y: b.top + height * 0.5 },
-      right: { x: b.right - width * 0.18, y: b.top + height * 0.5 },
-      lower: { x: (b.left + b.right) / 2, y: b.bottom - height * 0.12 },
+
+    const boxWidth = bounds.right - bounds.left;
+    const boxHeight = bounds.bottom - bounds.top;
+    if (boxWidth <= 0 || boxHeight <= 0) continue;
+    const zones: Record<HairSectionName, (x: number, y: number) => boolean> = {
+      top: (_x, y) => y < 0.28,
+      left: (x, y) => x < 0.36 && y >= 0.2,
+      centre: (x, y) => x >= 0.36 && x <= 0.64 && y >= 0.2 && y < 0.8,
+      right: (x, y) => x > 0.64 && y >= 0.2,
+      lower: (_x, y) => y >= 0.72,
     };
-    for (const [section, anchor] of Object.entries(anchors) as [HairSectionName, { x: number; y: number }][]) {
+    for (const section of Object.keys(zones) as HairSectionName[]) {
+      let sumX = 0;
+      let sumY = 0;
+      let count = 0;
+      for (let py = 0; py < height; py++) {
+        for (let px = 0; px < width; px++) {
+          if (!mask[py * width + px]) continue;
+          const nx = (px + 0.5) / width;
+          const ny = (py + 0.5) / height;
+          const localX = (nx - bounds.left) / boxWidth;
+          const localY = (ny - bounds.top) / boxHeight;
+          if (localX < 0 || localX > 1 || localY < 0 || localY > 1 ||
+              !zones[section](localX, localY)) continue;
+          sumX += nx;
+          sumY += ny;
+          count++;
+        }
+      }
+      if (!count) continue;
       observations.push({
         timestampMs: point.timestampMs,
         section,
-        offsetX: (anchor.x - sample.headCenterX) / sample.headWidth,
-        offsetY: (anchor.y - sample.headCenterY) / sample.headWidth,
+        offsetX: (sumX / count - sample.headCenterX) / sample.headWidth,
+        offsetY: (sumY / count - sample.headCenterY) / sample.headWidth,
       });
     }
   }
