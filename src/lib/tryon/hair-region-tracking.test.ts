@@ -356,7 +356,7 @@ test("reverse tracking predicts movement in the reverse time direction", async (
 test("summarises directional movement shared by neighbouring hair regions", async () => {
   const { summarizeHairSectionCoupling } = await import("./hair-region-tracking.ts");
   const sections = ["top", "left", "centre", "right", "lower"] as const;
-  const observations = [0, 1, 2, 3, 4, 5].flatMap((step) =>
+  const observations = [0, 1, 2, 3, 4, 5, 6, 7].flatMap((step) =>
     sections.map((section) => ({
       timestampMs: step * 500,
       section,
@@ -368,7 +368,7 @@ test("summarises directional movement shared by neighbouring hair regions", asyn
   const centre = summary.find((item) => item.section === "centre")!;
   assert.equal(centre.quality, "usable");
   assert.ok(centre.meanDirectionalCoherence !== null && centre.meanDirectionalCoherence > 0.99);
-  assert.equal(centre.neighbourSamplePairs, 3);
+  assert.equal(centre.neighbourSamplePairs, 5);
 });
 
 test("does not invent neighbour motion when regional observations are missing", async () => {
