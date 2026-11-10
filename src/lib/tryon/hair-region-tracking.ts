@@ -189,6 +189,7 @@ export type SeededHairTrackPoint = {
   seed: { x: number; y: number };
   region: SeededHairRegion;
   tracked: boolean;
+  recovered: boolean;
 };
 
 /**
@@ -210,15 +211,41 @@ export function trackSeededHairForward(
   }
   const track: SeededHairTrackPoint[] = [];
   let currentSeed = { x: seed.x, y: seed.y };
+  let previousCenter: { x: number; y: number; timestampMs: number } | null = null;
+  let lastCenter: { x: number; y: number; timestampMs: number } | null = null;
+  let missedFrames = 0;
+
   for (let index = startIndex; index < frames.length; index++) {
     const frame = frames[index];
+    let predicted = currentSeed;
+    if (lastCenter && previousCenter) {
+      const elapsed = lastCenter.timestampMs - previousCenter.timestampMs;
+      const nextElapsed = frame.timestampMs - lastCenter.timestampMs;
+      if (elapsed > 0 && nextElapsed >= 0) {
+        const steps = Math.min(2, nextElapsed / elapsed);
+        predicted = {
+          x: Math.max(0, Math.min(1, lastCenter.x + (lastCenter.x - previousCenter.x) * steps)),
+          y: Math.max(0, Math.min(1, lastCenter.y + (lastCenter.y - previousCenter.y) * steps)),
+        };
+      }
+    }
+    const recoveryRadius = Math.min(0.45, searchRadius * (1 + Math.min(missedFrames, 3) * 0.65));
     const region = selectSeededHairRegion(frame.categories, frame.width, frame.height, {
-      ...currentSeed,
-      radius: searchRadius,
+      ...predicted,
+      radius: recoveryRadius,
     });
     const tracked = region.pixels > 0 && region.center !== null;
-    track.push({ timestampMs: frame.timestampMs, seed: { ...currentSeed }, region, tracked });
-    if (tracked) currentSeed = region.center!;
+    const recovered = tracked && missedFrames > 0;
+    track.push({ timestampMs: frame.timestampMs, seed: { ...predicted }, region, tracked, recovered });
+    if (tracked) {
+      previousCenter = lastCenter;
+      lastCenter = { ...region.center!, timestampMs: frame.timestampMs };
+      currentSeed = region.center!;
+      missedFrames = 0;
+    } else {
+      currentSeed = predicted;
+      missedFrames++;
+    }
   }
   return track;
 }
