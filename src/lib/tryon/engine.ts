@@ -10,6 +10,7 @@ import { estimateFromPose, PINCH_MAX, priorFromHeight, round1 } from "@/lib/tryo
 import {
   CAT_EYE_ROLL,
   angleDeltaRadians,
+  bodyMotionAcceleration,
   CONSTRAINT_PASSES,
   EAR_SWING_X,
   EAR_SWING_Z,
