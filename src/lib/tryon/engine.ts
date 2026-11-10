@@ -43,6 +43,7 @@ import {
   sectionWeights,
   shinRadiusCm,
   stepPendulum,
+  stableHairJitter,
   thighRadiusCm,
   watchScale,
   wristFromPalm,
@@ -1136,7 +1137,7 @@ export function startEngine(opts: {
     const rim = style === "bob" ? 1.6 : 5.2;
     for (let i = 0; i < count; i++) {
       const angle = 1.5 * Math.PI + (i / (count - 1) - 0.5) * 1.42 * Math.PI;
-      pushStrand(Math.cos(angle) * 8.1, rim - Math.random() * 0.8, -2.6 + Math.sin(angle) * 9.2, joints, 1);
+      pushStrand(Math.cos(angle) * 8.1, rim - stableHairJitter(i, style === "bob" ? 2 : style === "braids" ? 3 : 1) * 0.8, -2.6 + Math.sin(angle) * 9.2, joints, 1);
     }
     if (style === "straight") {
       for (let i = 0; i < 14; i++) {
