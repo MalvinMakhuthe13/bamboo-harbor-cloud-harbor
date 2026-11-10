@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { angleDeltaRadians, bodyMotionAcceleration, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
+import { angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -247,6 +247,28 @@ test("body motion acceleration rejects invalid samples and elapsed time", () => 
   );
   assert.deepEqual(
     bodyMotionAcceleration({ x: 0, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }, 0),
+    { x: 0, y: 0, z: 0 },
+  );
+});
+
+
+test("relative motion cancels shared whole-body translation", () => {
+  assert.deepEqual(
+    relativeMotionVelocity({ x: 12, y: -4, z: 2 }, { x: 12, y: -4, z: 2 }),
+    { x: 0, y: 0, z: 0 },
+  );
+});
+
+test("relative motion preserves movement of the head against a steady torso", () => {
+  assert.deepEqual(
+    relativeMotionVelocity({ x: 8, y: -3, z: 1 }, { x: 0, y: 0, z: 0 }),
+    { x: 8, y: -3, z: 1 },
+  );
+});
+
+test("relative motion rejects invalid landmark velocities", () => {
+  assert.deepEqual(
+    relativeMotionVelocity({ x: Number.NaN, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }),
     { x: 0, y: 0, z: 0 },
   );
 });
