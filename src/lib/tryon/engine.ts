@@ -35,6 +35,7 @@ import {
   glassesScale,
   hairDropCm,
   hairSectionInfluence,
+  hairStrandDamping,
   resolveEllipsoidContact,
   hairStiffness,
   headFromFace,
@@ -794,6 +795,7 @@ export function startEngine(opts: {
         headPos,
         radius,
         pull || 1,
+        hairStrandDamping(strand.lengthMul, Math.max(0, Math.min(1, -strand.local.z / 10))),
       );
     }
     // Resolve local strand contacts after integration so neighbouring locks do not
@@ -1527,10 +1529,11 @@ function simulate(
   head: THREE.Vector3,
   headRadius: number,
   pullStrength = 1,
+  dampingRetention = VERLET_DAMP,
 ) {
   const g = GRAVITY_CM_S2 * dt * dt;
   const blend = constraintBlend(stiffness);
-  const damping = Math.pow(VERLET_DAMP, dt * 60);
+  const damping = Math.pow(Math.max(0.9, Math.min(0.995, dampingRetention)), dt * 60);
   const grabBlend = (1 - Math.pow(1 - GRAB_LERP, dt * 60)) * pullStrength;
   if (!nodes[0].pos.lengthSq() && !nodes[1]?.pos.lengthSq()) {
     for (let i = 0; i < nodes.length; i++) {
