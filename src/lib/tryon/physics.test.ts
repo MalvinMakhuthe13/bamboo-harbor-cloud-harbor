@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, motionAccelerationDeadzone, hairSectionResponseHz, hairStrandDamping, verletDampingFactor, VERLET_DAMP } from "./physics.ts";
+import { summarizeHairMotion, angleDeltaRadians, bodyMotionAcceleration, relativeMotionVelocity, poseMotionConfidence, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, motionAccelerationDeadzone, hairSectionResponseHz, hairStrandDamping, verletDampingFactor, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -315,4 +315,23 @@ test("Verlet damping safely rejects invalid time and retention", () => {
   assert.equal(verletDampingFactor(Number.NaN, 1 / 60), 0);
   assert.equal(verletDampingFactor(0.94, 0), 0);
   assert.equal(verletDampingFactor(0.94, Number.POSITIVE_INFINITY), 0);
+});
+
+
+test("hair motion summary averages each strand equally and reports settled share", () => {
+  const result = summarizeHairMotion([[0.5, 1.5], [3, 5], [0.2, 0.4]]);
+  assert.equal(result.strandCount, 3);
+  assert.ok(Math.abs(result.averageSpeed - ((1 + 4 + 0.3) / 3)) < 1e-12);
+  assert.ok(Math.abs(result.settledPercent - 66.6666666667) < 1e-8);
+});
+
+test("hair motion summary ignores empty and invalid strands", () => {
+  assert.deepEqual(summarizeHairMotion([[], [1, Number.NaN], [-1], [0.2, 0.4]]), {
+    averageSpeed: 0.3, settledPercent: 100, strandCount: 1,
+  });
+});
+
+test("hair motion summary safely handles no strands and invalid thresholds", () => {
+  assert.deepEqual(summarizeHairMotion([]), { averageSpeed: 0, settledPercent: 0, strandCount: 0 });
+  assert.deepEqual(summarizeHairMotion([[1]], -1), { averageSpeed: 0, settledPercent: 0, strandCount: 0 });
 });
