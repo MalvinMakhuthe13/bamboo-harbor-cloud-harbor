@@ -309,3 +309,9 @@ export function hangChain(count: number, originX: number, originY: number, segme
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
+
+/** Exponential smoothing factor: stable across frame rates, expressed as response Hz. */
+export function trackingBlend(dt: number, responseHz = 12): number {
+  if (!Number.isFinite(dt) || dt <= 0) return 0;
+  return 1 - Math.exp(-Math.min(dt, 1 / 30) * Math.max(0.1, responseHz));
+}
