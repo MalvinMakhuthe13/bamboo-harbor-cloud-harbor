@@ -136,5 +136,9 @@ export type LiveMetrics = {
   /** Filtered head-relative-to-torso acceleration in scene cm/s². */
   headRelativeAcceleration: number;
   motionReady: boolean;
+  /** Mean speed of simulated wig nodes, in scene cm/s. */
+  hairMotionSpeed: number;
+  /** Percentage of visible wig strands below the settling-speed threshold. */
+  settledHairPercent: number;
   body: BodyEstimate;
 };
