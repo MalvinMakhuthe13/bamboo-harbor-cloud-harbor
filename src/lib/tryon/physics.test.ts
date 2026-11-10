@@ -132,3 +132,42 @@ test("ellipsoid projection rejects invalid radii and clearance", async () => {
   assert.equal(projectOutsideEllipsoid({ x: 0, y: 0, z: 0 }, { x: 0, y: 3, z: 4 }), null);
   assert.equal(projectOutsideEllipsoid({ x: 0, y: 0, z: 0 }, { x: 2, y: 3, z: 4 }, -1), null);
 });
+
+
+test("ellipsoid contact removes inward velocity but preserves tangential sliding", async () => {
+  const { resolveEllipsoidContact } = await import("./physics.ts");
+  const result = resolveEllipsoidContact(
+    { x: 1, y: 0, z: 0 },
+    { x: 1.2, y: -1, z: 0 },
+    { x: 2, y: 3, z: 4 },
+    0.1,
+    0,
+  )!;
+  const vx = result.position.x - result.previous.x;
+  const vy = result.position.y - result.previous.y;
+  assert.ok(Math.abs(vx) < 1e-10);
+  assert.ok(vy > 0.99);
+});
+
+test("ellipsoid contact applies friction only to tangential velocity", async () => {
+  const { resolveEllipsoidContact } = await import("./physics.ts");
+  const result = resolveEllipsoidContact(
+    { x: 1, y: 0, z: 0 },
+    { x: 1.2, y: -1, z: 0 },
+    { x: 2, y: 3, z: 4 },
+    0.1,
+    0.25,
+  )!;
+  const vx = result.position.x - result.previous.x;
+  const vy = result.position.y - result.previous.y;
+  assert.ok(Math.abs(vx) < 1e-10);
+  assert.ok(Math.abs(vy - 0.75) < 1e-10);
+});
+
+test("ellipsoid contact rejects invalid previous positions and friction", async () => {
+  const { resolveEllipsoidContact } = await import("./physics.ts");
+  const point = { x: 1, y: 0, z: 0 };
+  const radii = { x: 2, y: 3, z: 4 };
+  assert.equal(resolveEllipsoidContact(point, { x: Number.NaN, y: 0, z: 0 }, radii), null);
+  assert.equal(resolveEllipsoidContact(point, { x: 0, y: 0, z: 0 }, radii, 0, 2), null);
+});
