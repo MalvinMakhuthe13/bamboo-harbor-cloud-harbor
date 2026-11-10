@@ -560,6 +560,7 @@ export function startEngine(opts: {
       const palms: number[] = [];
       const fingersW: number[] = [];
       let pinchDistance = Number.POSITIVE_INFINITY;
+      let pinchPoint: { x: number; y: number; z: number } | null = null;
       for (const hand of liveHands) {
         if (hand.length < 21) continue;
         const a = normToWorld(hand[5].x, hand[5].y, faceOn ? headPos.z : -68);
@@ -571,17 +572,21 @@ export function startEngine(opts: {
         }
         const d = Math.hypot(hand[4].x - hand[8].x, hand[4].y - hand[8].y, hand[4].z - hand[8].z);
         pinchDistance = Math.min(pinchDistance, d);
-        if (d < PINCH_MAX * 1.4) {
-          const px = (hand[4].x + hand[8].x) / 2;
-          const py = (hand[4].y + hand[8].y) / 2;
-          const pz = (faceOn ? headPos.z : -68) - hand[8].z * HAND_Z_TO_CM;
-          pinchDot.position.copy(normToWorld(px, py, pz));
-          pinchDot.visible = true;
-          if (!pinch) tryGrab(px, py, pz);
+        if (d < PINCH_MAX * 1.5) {
+          pinchPoint = {
+            x: (hand[4].x + hand[8].x) / 2,
+            y: (hand[4].y + hand[8].y) / 2,
+            z: (faceOn ? headPos.z : -68) - hand[8].z * HAND_Z_TO_CM,
+          };
         }
       }
+      const wasPinching = pinch;
       pinch = updatePinchState(pinch, pinchDistance);
-      if (!pinch) {
+      if (pinch && pinchPoint) {
+        pinchDot.position.copy(normToWorld(pinchPoint.x, pinchPoint.y, pinchPoint.z));
+        pinchDot.visible = true;
+        if (!wasPinching) tryGrab(pinchPoint.x, pinchPoint.y, pinchPoint.z);
+      } else if (!pinch) {
         pinchDot.visible = false;
         releaseGrab();
       }
