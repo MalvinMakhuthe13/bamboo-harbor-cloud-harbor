@@ -422,3 +422,80 @@ export function analyzeSeededHairMotion(
     quality: paired.length >= 8 && trackingCoverage >= 0.7 ? "usable" : "insufficient",
   };
 }
+
+
+export type HairSectionName = "top" | "left" | "centre" | "right" | "lower";
+export type HairSectionObservation = {
+  timestampMs: number;
+  section: HairSectionName;
+  offsetX: number;
+  offsetY: number;
+};
+export type HairSectionMotionProfile = {
+  section: HairSectionName;
+  sampleCount: number;
+  peakDisplacement: number;
+  peakAtMs: number | null;
+};
+
+/**
+ * Creates five geometric anchor tracks inside the selected component bounds.
+ * These are region anchors, not independently segmented strands or physical
+ * hair sections. Coordinates are normalised by face width.
+ */
+export function buildHairSectionTrack(
+  track: SeededHairTrackPoint[],
+  wearer: WearerTrackingSample[],
+): HairSectionObservation[] {
+  const wearerByTime = new Map(wearer.map((sample) => [sample.timestampMs, sample]));
+  const observations: HairSectionObservation[] = [];
+  for (const point of track) {
+    if (!point.tracked || !point.region.bounds) continue;
+    const sample = wearerByTime.get(point.timestampMs);
+    if (!sample?.faceDetected || sample.headCenterX === null ||
+        sample.headCenterY === null || sample.headWidth === null || sample.headWidth <= 0) continue;
+    const b = point.region.bounds;
+    const width = b.right - b.left;
+    const height = b.bottom - b.top;
+    const anchors: Record<HairSectionName, { x: number; y: number }> = {
+      top: { x: (b.left + b.right) / 2, y: b.top + height * 0.12 },
+      left: { x: b.left + width * 0.18, y: b.top + height * 0.5 },
+      centre: { x: (b.left + b.right) / 2, y: b.top + height * 0.5 },
+      right: { x: b.right - width * 0.18, y: b.top + height * 0.5 },
+      lower: { x: (b.left + b.right) / 2, y: b.bottom - height * 0.12 },
+    };
+    for (const [section, anchor] of Object.entries(anchors) as [HairSectionName, { x: number; y: number }][]) {
+      observations.push({
+        timestampMs: point.timestampMs,
+        section,
+        offsetX: (anchor.x - sample.headCenterX) / sample.headWidth,
+        offsetY: (anchor.y - sample.headCenterY) / sample.headWidth,
+      });
+    }
+  }
+  return observations;
+}
+
+/** Summarises the movement of each geometric anchor independently. */
+export function summarizeHairSectionMotion(
+  observations: HairSectionObservation[],
+): HairSectionMotionProfile[] {
+  const sections: HairSectionName[] = ["top", "left", "centre", "right", "lower"];
+  return sections.map((section) => {
+    const samples = observations
+      .filter((item) => item.section === section)
+      .sort((a, b) => a.timestampMs - b.timestampMs);
+    if (samples.length < 2) return { section, sampleCount: samples.length, peakDisplacement: 0, peakAtMs: null };
+    const baseline = samples.slice(0, Math.min(3, samples.length));
+    const baseX = baseline.reduce((sum, item) => sum + item.offsetX, 0) / baseline.length;
+    const baseY = baseline.reduce((sum, item) => sum + item.offsetY, 0) / baseline.length;
+    const displacement = samples.map((item) => Math.hypot(item.offsetX - baseX, item.offsetY - baseY));
+    const peak = Math.max(...displacement);
+    return {
+      section,
+      sampleCount: samples.length,
+      peakDisplacement: peak,
+      peakAtMs: samples[displacement.indexOf(peak)].timestampMs,
+    };
+  });
+}
