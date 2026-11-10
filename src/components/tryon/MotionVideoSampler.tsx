@@ -23,7 +23,7 @@ type TrackingSummary = {
 export function MotionVideoSampler() {
   const [status, setStatus] = useState("No video analysed yet.");
   const [error, setError] = useState<string | null>(null);
-  const [frames, setFrames] = useState<FramePreview[]>([]);
+  const [frames, setFrames] = useState<FramePreview[]>([]);\n  const [maskFrames, setMaskFrames] = useState<{ timestampMs: number; categories: Uint8Array; width: number; height: number }[]>([]);
   const [tracking, setTracking] = useState<TrackingSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [seedSelection, setSeedSelection] = useState<SeedSelection | null>(null);
@@ -46,7 +46,7 @@ export function MotionVideoSampler() {
 
     setBusy(true);
     setStatus("Loading on-device face, pose and segmentation models…");
-    const previews: FramePreview[] = [];
+    const previews: FramePreview[] = [];\n    const allMaskFrames: { timestampMs: number; categories: Uint8Array; width: number; height: number }[] = [];
     const wearerSamples: WearerTrackingSample[] = [];
     const segmentationSamples: ProductSegmentationSample[] = [];
     let tracker: Awaited<ReturnType<typeof createWearerTrackers>> | null = null;
@@ -76,7 +76,7 @@ export function MotionVideoSampler() {
               maskCanvas.width = frame.width;
               maskCanvas.height = frame.height;
               const maskContext = maskCanvas.getContext("2d");
-              if (maskContext && segmentation.categoryMask) {
+              if (maskContext && categoryMask.length) {
                 const overlay = maskContext.createImageData(frame.width, frame.height);
                 const maskWidth = segmentation.width;
                 const maskHeight = segmentation.height;
@@ -84,7 +84,7 @@ export function MotionVideoSampler() {
                   const maskY = Math.min(maskHeight - 1, Math.floor((y / frame.height) * maskHeight));
                   for (let x = 0; x < frame.width; x++) {
                     const maskX = Math.min(maskWidth - 1, Math.floor((x / frame.width) * maskWidth));
-                    const category = segmentation.categoryMask[maskY * maskWidth + maskX];
+                    const category = categoryMask[maskY * maskWidth + maskX];
                     const pixel = (y * frame.width + x) * 4;
                     if (category === 1) {
                       overlay.data[pixel] = 232;
@@ -110,7 +110,7 @@ export function MotionVideoSampler() {
                 timestampMs: frame.timestampMs,
                 dataUrl,
                 maskDataUrl: maskCanvas.toDataURL("image/jpeg", 0.78),
-                categoryMask: segmentation.categoryMask ? new Uint8Array(segmentation.categoryMask) : new Uint8Array(),
+                categoryMask,
                 maskWidth: segmentation.width,
                 maskHeight: segmentation.height,
               });
@@ -129,7 +129,7 @@ export function MotionVideoSampler() {
       const hairSamples = segmentationSamples.filter((sample) => sample.hairDetected);
       const relativeHairTrack = buildRelativeHairTrack(wearerSamples, segmentationSamples);
       const relativeHairSummary = summarizeRelativeHairTrack(relativeHairTrack);
-      setFrames(previews);
+      setFrames(previews);\n      setMaskFrames(allMaskFrames);
       setTracking({
         frames: wearerSamples.length,
         faceFrames,
@@ -193,7 +193,7 @@ export function MotionVideoSampler() {
       {frames.length > 0 && (
         <>
           <p className="mt-4 text-sm font-medium">Select the product region</p>
-          <p className="mt-1 text-xs text-ink-muted">Click the centre of the wig or hair product in a frame. The selection is refined against the pink semantic hair mask within a local radius.</p>
+          <p className="mt-1 text-xs text-ink-muted">Click the centre of the wig or hair product in a frame. The selection is refined against the pink semantic hair mask, then propagated through every sampled frame (not just the four visual previews).</p>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {frames.map((frame) => (
               <figure key={frame.timestampMs} className="overflow-hidden rounded-xl border border-line/40">
@@ -231,7 +231,7 @@ export function MotionVideoSampler() {
             <div className="mt-3 rounded-xl border border-line/40 p-3 text-sm" aria-live="polite">
               <p className="font-medium">Selected region · {(seedSelection.timestampMs / 1000).toFixed(1)}s</p>
               <p className="mt-1 text-ink-muted">{seedSelection.result.pixels.toLocaleString()} hair-class pixels · {(seedSelection.result.ratio * 100).toFixed(2)}% of frame mask</p>
-              <p className="mt-1 text-ink-muted">Forward propagation: {seedSelection.track.filter((point) => point.tracked).length}/{seedSelection.track.length} sampled frames tracked</p>
+              <p className="mt-1 text-ink-muted">Forward propagation: {seedSelection.track.filter((point) => point.tracked).length}/{seedSelection.track.length} sampled frames tracked · {maskFrames.length} masks retained</p>
               {seedSelection.result.bounds
                 ? <p className="mt-1 text-ink-muted">Bounds: x {seedSelection.result.bounds.left.toFixed(2)}–{seedSelection.result.bounds.right.toFixed(2)}, y {seedSelection.result.bounds.top.toFixed(2)}–{seedSelection.result.bounds.bottom.toFixed(2)}</p>
                 : <p className="mt-1 text-clay">No semantic hair pixels found near that point. Try another point on the pink region.</p>}
