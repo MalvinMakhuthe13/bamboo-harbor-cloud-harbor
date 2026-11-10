@@ -351,3 +351,37 @@ test("reverse tracking predicts movement in the reverse time direction", async (
   assert.ok(track[2].region.center!.x < track[3].region.center!.x);
   assert.ok(track[3].region.center!.x < track[4].region.center!.x);
 });
+
+
+test("summarises directional movement shared by neighbouring hair regions", async () => {
+  const { summarizeHairSectionCoupling } = await import("./hair-region-tracking.ts");
+  const sections = ["top", "left", "centre", "right", "lower"] as const;
+  const observations = [0, 1, 2, 3, 4, 5].flatMap((step) =>
+    sections.map((section) => ({
+      timestampMs: step * 500,
+      section,
+      offsetX: step * 0.02,
+      offsetY: 0,
+    })),
+  );
+  const summary = summarizeHairSectionCoupling(observations);
+  const centre = summary.find((item) => item.section === "centre")!;
+  assert.equal(centre.quality, "usable");
+  assert.ok(centre.meanDirectionalCoherence !== null && centre.meanDirectionalCoherence > 0.99);
+  assert.equal(centre.neighbourSamplePairs, 3);
+});
+
+test("does not invent neighbour motion when regional observations are missing", async () => {
+  const { summarizeHairSectionCoupling } = await import("./hair-region-tracking.ts");
+  const observations = [0, 500, 1000].map((timestampMs) => ({
+    timestampMs, section: "centre" as const, offsetX: timestampMs / 5000, offsetY: 0,
+  }));
+  const summary = summarizeHairSectionCoupling(observations);
+  assert.ok(summary.every((item) => item.quality === "insufficient"));
+  assert.ok(summary.every((item) => item.meanDirectionalCoherence === null));
+});
+
+test("rejects invalid minimum sample counts for coupling diagnostics", async () => {
+  const { summarizeHairSectionCoupling } = await import("./hair-region-tracking.ts");
+  assert.throws(() => summarizeHairSectionCoupling([], 1), /at least 2/);
+});
