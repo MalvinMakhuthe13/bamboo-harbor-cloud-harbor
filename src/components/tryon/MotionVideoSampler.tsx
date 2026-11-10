@@ -2,7 +2,7 @@ import { useState } from "react";
 import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-frames";
 import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 import { createProductSegmenter, type ProductSegmentationSample } from "@/lib/tryon/product-segmentation";
-import { buildRelativeHairTrack, summarizeRelativeHairTrack, selectSeededHairRegion, trackSeededHairForward, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
+import { buildRelativeHairTrack, summarizeRelativeHairTrack, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
 
 type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string; categoryMask: Uint8Array; maskWidth: number; maskHeight: number };
 type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion; track: SeededHairTrackPoint[] };
@@ -212,7 +212,7 @@ export function MotionVideoSampler() {
                     const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
                     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
                     const frameIndex = frames.findIndex((item) => item.timestampMs === frame.timestampMs);
-                    const propagated = trackSeededHairForward(
+                    const propagated = trackSeededHairBidirectional(
                       maskFrames,
                       frameIndex,
                       { x, y, radius: 0.18 },
@@ -237,7 +237,7 @@ export function MotionVideoSampler() {
             <div className="mt-3 rounded-xl border border-line/40 p-3 text-sm" aria-live="polite">
               <p className="font-medium">Selected region · {(seedSelection.timestampMs / 1000).toFixed(1)}s</p>
               <p className="mt-1 text-ink-muted">{seedSelection.result.pixels.toLocaleString()} hair-class pixels · {(seedSelection.result.ratio * 100).toFixed(2)}% of frame mask</p>
-              <p className="mt-1 text-ink-muted">Forward propagation: {seedSelection.track.filter((point) => point.tracked).length}/{seedSelection.track.length} sampled frames tracked · {maskFrames.length} masks retained</p>
+              <p className="mt-1 text-ink-muted">Bidirectional propagation: {seedSelection.track.filter((point) => point.tracked).length}/{seedSelection.track.length} sampled frames tracked · {maskFrames.length} masks retained</p>
               {seedSelection.result.bounds
                 ? <p className="mt-1 text-ink-muted">Bounds: x {seedSelection.result.bounds.left.toFixed(2)}–{seedSelection.result.bounds.right.toFixed(2)}, y {seedSelection.result.bounds.top.toFixed(2)}–{seedSelection.result.bounds.bottom.toFixed(2)}</p>
                 : <p className="mt-1 text-clay">No semantic hair pixels found near that point. Try another point on the pink region.</p>}
