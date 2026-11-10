@@ -79,7 +79,7 @@ export async function* extractVideoFrames(
   video.src = objectUrl;
 
   try {
-    await waitForMediaEvent(video, "loadedmetadata");
+    if (video.readyState < 1) await waitForMediaEvent(video, "loadedmetadata");
     if (!Number.isFinite(video.duration) || video.duration <= 0) {
       throw new Error("The selected video has no readable duration.");
     }
@@ -96,9 +96,12 @@ export async function* extractVideoFrames(
     if (!context) throw new Error("This browser could not create a video frame canvas.");
 
     for (const timestampMs of timestamps) {
-      const seeked = waitForMediaEvent(video, "seeked");
-      video.currentTime = timestampMs / 1000;
-      await seeked;
+      const targetTime = timestampMs / 1000;
+      if (Math.abs(video.currentTime - targetTime) > 0.001) {
+        const seeked = waitForMediaEvent(video, "seeked");
+        video.currentTime = targetTime;
+        await seeked;
+      }
       context.drawImage(video, 0, 0, width, height);
       const bitmap = await createImageBitmap(canvas);
       yield { timestampMs, width, height, bitmap };
