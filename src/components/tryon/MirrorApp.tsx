@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Nav } from "@/components/site/Nav";
 import { CATEGORY_LABEL, findProduct } from "@/lib/tryon/catalog";
+import { mintLucyToken } from "@/lib/tryon/lucy";
 import { renderTryOn } from "@/lib/tryon/render-tryon";
 import { useWardrobe } from "@/lib/tryon/store";
-import type { Product } from "@/lib/tryon/types";
+import type { Category, Product } from "@/lib/tryon/types";
 
 const PERSON_KEY = "isibuko-person";
 
@@ -21,15 +22,24 @@ const RANK: Record<string, number> = {
   pants: 5,
 };
 
+type LucyHandle = {
+  disconnect: () => void;
+  set: (state: { prompt: string; image: File | string; enhance: false }) => Promise<unknown>;
+};
+
 export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
   const { data, commit } = useWardrobe();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const liveVideoRef = useRef<HTMLVideoElement>(null);
+  const cameraRef = useRef<MediaStream | null>(null);
+  const lucyRef = useRef<LucyHandle | null>(null);
   const [person, setPerson] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [activeId, setActiveId] = useState(initialProductId ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [camOn, setCamOn] = useState(false);
+  const [liveOn, setLiveOn] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
   const pieces = data.products
@@ -58,6 +68,7 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
           return;
         }
         stream = next;
+        cameraRef.current = next;
         const video = videoRef.current;
         if (video) {
           video.srcObject = next;
@@ -69,8 +80,78 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
     return () => {
       dead = true;
       stream?.getTracks().forEach((track) => track.stop());
+      lucyRef.current?.disconnect();
+      lucyRef.current = null;
     };
   }, []);
+
+  function stopLive() {
+    lucyRef.current?.disconnect();
+    lucyRef.current = null;
+    setLiveOn(false);
+    setNote("Live stopped. A photograph still works.");
+  }
+
+  async function startLive() {
+    setError(null);
+    setBusy(true);
+    setNote("Starting Lucy. The camera is edited as it streams.");
+    try {
+      const probe = await mintLucyToken();
+      if (!probe.ok) {
+        setError(probe.error);
+        setNote(null);
+        return;
+      }
+      cameraRef.current?.getTracks().forEach((track) => track.stop());
+      cameraRef.current = null;
+      const { createDecartClient, models } = await import("@decartai/sdk");
+      const model = models.realtime("lucy-vton-latest");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: "user",
+          frameRate: model.fps,
+          width: model.width,
+          height: model.height,
+        },
+      });
+      cameraRef.current = stream;
+      const client = createDecartClient({
+        apiKeyProvider: async () => {
+          const next = await mintLucyToken();
+          if (!next.ok) throw new Error(next.error);
+          return next.token;
+        },
+      });
+      const session = await client.realtime.connect(stream, {
+        model,
+        mirror: "auto",
+        onRemoteStream: (edited: MediaStream) => {
+          const video = liveVideoRef.current;
+          if (!video) return;
+          video.srcObject = edited;
+          void video.play().catch(() => undefined);
+          setLiveOn(true);
+        },
+      });
+      lucyRef.current = {
+        disconnect: () => {
+          session.disconnect();
+          stream.getTracks().forEach((track) => track.stop());
+        },
+        set: (state) => session.set(state),
+      };
+      setLiveOn(true);
+      setResult(null);
+      setNote("Live. Tap a photograph. It goes on the camera. This bills Decart by the second and stops after three minutes.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The live mirror did not start.");
+      setNote(null);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function remember(next: string) {
     setPerson(next);
@@ -122,6 +203,11 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
       setError("That piece has no photograph.");
       return;
     }
+    setActiveId(product.id);
+    if (lucyRef.current) {
+      await wearLive(product);
+      return;
+    }
     if (!person) {
       setActiveId(product.id);
       setError("Use a photo of you first, or tap a sample shopper.");
@@ -171,27 +257,53 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
     }
   }
 
-  const showing = result ?? person;
+  async function wearLive(product: Product) {
+    const session = lucyRef.current;
+    if (!session || !product.image) return;
+    setBusy(true);
+    setError(null);
+    setNote(`Putting ${product.name} on the live camera.`);
+    try {
+      const image = product.image.startsWith("https://")
+        ? product.image
+        : new File([await (await fetch(product.image)).blob()], `${product.id}.jpg`, { type: "image/jpeg" });
+      await session.set({ prompt: lucyPrompt(product.category, product.name), image, enhance: false });
+      setNote(`${product.name} is on the live camera. Tap another photograph to switch.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That piece did not go on.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const showing = liveOn ? null : result ?? person;
 
   return (
     <main className="min-h-screen bg-paper text-ink">
       <Nav />
       <div className="mx-auto max-w-6xl px-5 py-8">
-        <p className="text-sm tracking-widest text-clay uppercase">Click a photograph</p>
+        <p className="text-sm tracking-widest text-clay uppercase">Lucy VTON, or a photograph</p>
         <h1 className="font-display mt-3 max-w-3xl text-4xl leading-tight md:text-5xl">
-          It goes on you, for real.
+          Tap a photograph. It goes on.
         </h1>
         <p className="mt-3 max-w-2xl text-ink-muted">
-          Wigs, nails, glasses and clothes are photographs. Tap one and it is put onto a still of
-          you. One frame is sent to make that picture. The camera feed itself is not streamed.
+          Start live and Lucy edits the camera as it streams. Tap a wig, nails, or a shirt and that
+          photograph is the garment. Without a Decart key, the same tap makes one still instead.
         </p>
 
         <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <section>
             <div className="relative overflow-hidden rounded-[28px] bg-ink">
               <video
+                ref={liveVideoRef}
+                className={`aspect-video w-full object-cover ${liveOn ? "" : "hidden"}`}
+                autoPlay
+                muted
+                playsInline
+              />
+              <video
                 ref={videoRef}
-                className={`aspect-[3/4] w-full scale-x-[-1] object-cover ${showing ? "hidden" : ""}`}
+                className={`aspect-[3/4] w-full scale-x-[-1] object-cover ${showing || liveOn ? "hidden" : ""}`}
                 autoPlay
                 muted
                 playsInline
@@ -203,20 +315,29 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
                   className="aspect-[3/4] w-full object-cover"
                 />
               )}
-              {!showing && !camOn && (
+              {!showing && !liveOn && !camOn && (
                 <div className="absolute inset-0 grid place-items-center px-6 text-center text-paper">
-                  Camera is off. Upload a photograph or use a sample shopper.
+                  Camera is off. Start live, upload a photograph, or use a sample shopper.
                 </div>
               )}
               {busy && (
                 <div className="absolute inset-0 grid place-items-center bg-ink/55 px-6 text-center text-paper">
-                  Making the photograph…
+                  {liveOn ? "Putting it on…" : "Working…"}
                 </div>
               )}
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              {!person && camOn && (
+              {liveOn ? (
+                <button type="button" className="min-h-11 rounded-full bg-ink px-5 text-paper" onClick={stopLive}>
+                  Stop live
+                </button>
+              ) : (
+                <button type="button" className="min-h-11 rounded-full bg-ink px-5 text-paper" onClick={() => void startLive()} disabled={busy}>
+                  Start live
+                </button>
+              )}
+              {!person && camOn && !liveOn && (
                 <button type="button" className="min-h-11 rounded-full bg-ink px-5 text-paper" onClick={capture}>
                   Use this frame
                 </button>
@@ -317,6 +438,13 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
       </div>
     </main>
   );
+}
+
+function lucyPrompt(category: Category, name: string): string {
+  if (category === "shirt") return `Substitute the upper body garment with ${name}.`;
+  if (category === "pants") return `Substitute the lower body garment with ${name}.`;
+  if (category === "wig") return `Substitute the hair with ${name}.`;
+  return `Add ${name} to the outfit.`;
 }
 
 function drawCover(video: HTMLVideoElement, max: number): string {

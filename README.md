@@ -1,10 +1,10 @@
 # Isibuko
 
-Live try-on for wigs, nails, glasses, jewellery and clothes. The camera stays on the device. A pasted shop link (Superbalist or any product page) puts that piece on the body.
+Live try-on for wigs, nails, glasses, jewellery and clothes. Start live to run Lucy VTON on the camera (needs a Decart key on the server). Without that key, a tapped product photograph is put on one still.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the rail, tap a shirt, or paste a product link. Pick a size. The ease changes the fit, and the folds follow the body.
+Open the mirror, start live, and tap a piece. The photograph is the garment.
