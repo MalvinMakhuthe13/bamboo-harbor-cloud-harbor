@@ -41,6 +41,7 @@ import {
   hairSectionInfluence,
   motionAccelerationDeadzone,
   hairStrandDamping,
+  verletDampingFactor,
   resolveEllipsoidContact,
   hairStiffness,
   headFromFace,
@@ -1604,7 +1605,7 @@ function simulate(
 ) {
   const g = GRAVITY_CM_S2 * dt * dt;
   const blend = constraintBlend(stiffness);
-  const damping = Math.pow(Math.max(0.9, Math.min(0.995, dampingRetention)), dt * 60);
+  const damping = verletDampingFactor(dampingRetention, dt);
   const grabBlend = (1 - Math.pow(1 - GRAB_LERP, dt * 60)) * pullStrength;
   if (!nodes[0].pos.lengthSq() && !nodes[1]?.pos.lengthSq()) {
     for (let i = 0; i < nodes.length; i++) {
