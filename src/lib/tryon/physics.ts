@@ -578,3 +578,14 @@ export function summarizeHairMotion(
     strandCount,
   };
 }
+
+export type HairMotionState = "unavailable" | "moving" | "settling" | "settled";
+
+/** Human-readable interpretation of the measured share of settled visible strands. */
+export function hairMotionState(strandCount: number, settledPercent: number): HairMotionState {
+  if (!Number.isFinite(strandCount) || strandCount < 1 || !Number.isFinite(settledPercent)) return "unavailable";
+  const settled = Math.max(0, Math.min(100, settledPercent));
+  if (settled >= 100) return "settled";
+  if (settled > 0) return "settling";
+  return "moving";
+}
