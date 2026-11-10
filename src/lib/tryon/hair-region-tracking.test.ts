@@ -126,7 +126,9 @@ test("tracks both before and after the selected frame in chronological order", a
   assert.deepEqual(track.map((point) => point.timestampMs), [0, 500, 1000, 1500]);
   assert.equal(track.length, 4);
   assert.ok(track.every((point) => point.tracked));
-  assert.ok(track[0].region.center!.x < track[3].region.center!.x);
+  assert.ok(track[0].region.center!.x < track[1].region.center!.x);
+  assert.ok(track[1].region.center!.x < track[2].region.center!.x);
+  assert.ok(track[2].region.center!.x < track[3].region.center!.x);
 });
 
 test("rejects an invalid bidirectional start index", async () => {
@@ -310,4 +312,42 @@ test("summarises each regional anchor independently", () => {
   assert.equal(top.peakDisplacement, 0.1);
   assert.equal(lower.sampleCount, 2);
   assert.equal(lower.peakAtMs, 500);
+});
+
+
+test("assigns each selected component pixel to one exclusive regional zone", async () => {
+  const { selectSeededHairRegion, buildHairSectionTrack } = await import("./hair-region-tracking.ts");
+  const mask = new Uint8Array(100);
+  for (let y = 2; y <= 7; y++) {
+    for (let x = 2; x <= 7; x++) mask[y * 10 + x] = 1;
+  }
+  const selected = selectSeededHairRegion(mask, 10, 10, { x: 0.5, y: 0.5, radius: 0.5 });
+  const track = [{
+    timestampMs: 0, seed: { x: 0.5, y: 0.5 }, region: selected,
+    tracked: true, recovered: false,
+  }];
+  const observations = buildHairSectionTrack(track, [wearer(0)]);
+  assert.deepEqual(observations.map((item) => item.section), ["top", "left", "centre", "right", "lower"]);
+  assert.ok(observations.every((item) => Number.isFinite(item.offsetX) && Number.isFinite(item.offsetY)));
+});
+
+test("reverse tracking predicts movement in the reverse time direction", async () => {
+  const { trackSeededHairBidirectional } = await import("./hair-region-tracking.ts");
+  const makeMask = (cx: number) => {
+    const mask = new Uint8Array(100);
+    mask[4 * 10 + cx] = 1;
+    mask[4 * 10 + cx + 1] = 1;
+    mask[5 * 10 + cx] = 1;
+    return mask;
+  };
+  const frames = [2, 3, 4, 5, 6].map((cx, index) => ({
+    timestampMs: index * 500, categories: makeMask(cx), width: 10, height: 10,
+  }));
+  const track = trackSeededHairBidirectional(frames, 3, { x: 0.55, y: 0.45, radius: 0.2 }, 0.2);
+  assert.equal(track.length, 5);
+  assert.ok(track.every((point) => point.tracked));
+  assert.ok(track[0].region.center!.x < track[1].region.center!.x);
+  assert.ok(track[1].region.center!.x < track[2].region.center!.x);
+  assert.ok(track[2].region.center!.x < track[3].region.center!.x);
+  assert.ok(track[3].region.center!.x < track[4].region.center!.x);
 });
