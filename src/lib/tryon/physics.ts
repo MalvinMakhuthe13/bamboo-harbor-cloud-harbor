@@ -389,3 +389,68 @@ export function projectOutsideEllipsoid(
     z: point.z * boundaryScale + normal.z * clearance,
   };
 }
+
+
+export type EllipsoidContact = {
+  position: Vector3Like;
+  previous: Vector3Like;
+};
+
+/**
+ * Resolves an ellipsoid contact while preserving tangential movement.
+ * Inward normal velocity is removed and a small amount of tangential
+ * friction is applied. Inputs and outputs share the same coordinate space.
+ */
+export function resolveEllipsoidContact(
+  point: Vector3Like,
+  previous: Vector3Like,
+  radii: Vector3Like,
+  clearance = 0,
+  friction = 0.06,
+): EllipsoidContact | null {
+  if (![previous.x, previous.y, previous.z, friction].every(Number.isFinite) ||
+      friction < 0 || friction > 1) return null;
+  const position = projectOutsideEllipsoid(point, radii, clearance);
+  if (!position) return null;
+
+  const normal = {
+    x: position.x / (radii.x * radii.x),
+    y: position.y / (radii.y * radii.y),
+    z: position.z / (radii.z * radii.z),
+  };
+  const normalLength = Math.hypot(normal.x, normal.y, normal.z);
+  if (!Number.isFinite(normalLength) || normalLength < 1e-8) return null;
+  normal.x /= normalLength;
+  normal.y /= normalLength;
+  normal.z /= normalLength;
+
+  const velocity = {
+    x: point.x - previous.x,
+    y: point.y - previous.y,
+    z: point.z - previous.z,
+  };
+  const inwardSpeed = velocity.x * normal.x + velocity.y * normal.y + velocity.z * normal.z;
+  if (inwardSpeed < 0) {
+    velocity.x -= inwardSpeed * normal.x;
+    velocity.y -= inwardSpeed * normal.y;
+    velocity.z -= inwardSpeed * normal.z;
+  }
+  const normalSpeed = velocity.x * normal.x + velocity.y * normal.y + velocity.z * normal.z;
+  const tangent = {
+    x: velocity.x - normalSpeed * normal.x,
+    y: velocity.y - normalSpeed * normal.y,
+    z: velocity.z - normalSpeed * normal.z,
+  };
+  velocity.x -= tangent.x * friction;
+  velocity.y -= tangent.y * friction;
+  velocity.z -= tangent.z * friction;
+
+  return {
+    position,
+    previous: {
+      x: position.x - velocity.x,
+      y: position.y - velocity.y,
+      z: position.z - velocity.z,
+    },
+  };
+}
