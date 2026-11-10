@@ -29,6 +29,7 @@ import {
   fingerFromPalm,
   foldAmplitudeCm,
   frameDeltaSeconds,
+  trackingBlend,
   garmentEase,
   glassesScale,
   hairDropCm,
@@ -241,6 +242,7 @@ export function startEngine(opts: {
   let poseWorldHold: { x: number; y: number; z: number }[] | null = null;
   let poseImageHold: { x: number; y: number; z: number; visibility: number }[] | null = null;
   let poseSeen = 0;
+  let faceTransformReady = false;
   let faceWidthHold: number | null = null;
   let wristHold: number | null = null;
   let fingerHold: number | null = null;
@@ -389,8 +391,19 @@ export function startEngine(opts: {
           if (matrix && marks) {
             const m = new THREE.Matrix4().fromArray(matrix.data);
             const sc = new THREE.Vector3();
-            m.decompose(headPos, headQuat, sc);
-            if (Math.abs(headPos.z) < 5) headPos.multiplyScalar(100);
+            const targetPos = new THREE.Vector3();
+            const targetQuat = new THREE.Quaternion();
+            m.decompose(targetPos, targetQuat, sc);
+            if (Math.abs(targetPos.z) < 5) targetPos.multiplyScalar(100);
+            if (!faceTransformReady) {
+              headPos.copy(targetPos);
+              headQuat.copy(targetQuat);
+              faceTransformReady = true;
+            } else {
+              const blend = trackingBlend(dt, 16);
+              headPos.lerp(targetPos, blend);
+              headQuat.slerp(targetQuat, blend);
+            }
             faceOn = true;
             const left = marks[234];
             const right = marks[454];
@@ -422,8 +435,31 @@ export function startEngine(opts: {
           try {
             const res = poseLandmarker.detectForVideo(video, nextStamp());
             if (res.worldLandmarks?.[0] && res.landmarks?.[0] && res.worldLandmarks[0].length >= 29) {
-              poseWorldHold = res.worldLandmarks[0];
-              poseImageHold = res.landmarks[0];
+              const blend = trackingBlend(dt, 10);
+              const world = res.worldLandmarks[0];
+              const image = res.landmarks[0];
+              if (!poseWorldHold || poseWorldHold.length !== world.length) {
+                poseWorldHold = world.map((point) => ({ ...point }));
+                poseImageHold = image.map((point) => ({ ...point }));
+              } else {
+                poseWorldHold = world.map((point, index) => {
+                  const previous = poseWorldHold![index];
+                  return {
+                    x: previous.x + (point.x - previous.x) * blend,
+                    y: previous.y + (point.y - previous.y) * blend,
+                    z: previous.z + (point.z - previous.z) * blend,
+                  };
+                });
+                poseImageHold = image.map((point, index) => {
+                  const previous = poseImageHold![index];
+                  return {
+                    x: previous.x + (point.x - previous.x) * blend,
+                    y: previous.y + (point.y - previous.y) * blend,
+                    z: previous.z + (point.z - previous.z) * blend,
+                    visibility: previous.visibility + (point.visibility - previous.visibility) * blend,
+                  };
+                });
+              }
               poseSeen = now;
             }
             res.close?.();
@@ -445,6 +481,7 @@ export function startEngine(opts: {
       hipQuat.setFromEuler(euler);
       headPos.set(0, 8, -74);
       faceOn = false;
+      faceTransformReady = false;
     }
 
     const yawNow = Math.atan2(
