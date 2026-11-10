@@ -329,3 +329,21 @@ export function stableHairJitter(index: number, salt = 0): number {
   const value = Math.sin((index + 1) * 127.1 + salt * 311.7) * 43758.5453;
   return value - Math.floor(value);
 }
+
+
+/**
+ * Converts strand distance from a grabbed lock into a response rate.
+ * Nearby locks follow promptly; farther locks respond more softly, creating
+ * staggered motion without welding neighbouring strands together.
+ */
+export function hairSectionResponseHz(distance: number): number {
+  if (!Number.isFinite(distance) || distance < 0) return 8;
+  return Math.max(7, 28 / (1 + distance * 0.72));
+}
+
+/** Frame-rate-independent smoothing for a strand's neighbour-follow influence. */
+export function hairSectionInfluence(current: number, target: number, dt: number, distance: number): number {
+  const safeCurrent = Number.isFinite(current) ? Math.max(0, Math.min(1, current)) : 0;
+  const safeTarget = Number.isFinite(target) ? Math.max(0, Math.min(1, target)) : 0;
+  return safeCurrent + (safeTarget - safeCurrent) * trackingBlend(dt, hairSectionResponseHz(distance));
+}
