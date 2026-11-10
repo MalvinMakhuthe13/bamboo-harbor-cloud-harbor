@@ -506,3 +506,19 @@ export function bodyMotionAcceleration(
   }
   return { x, y, z };
 }
+
+
+/** Velocity of the head relative to the torso; shared body translation cancels out. */
+export function relativeMotionVelocity(
+  headVelocity: { x: number; y: number; z: number },
+  torsoVelocity: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } {
+  if (![headVelocity.x, headVelocity.y, headVelocity.z, torsoVelocity.x, torsoVelocity.y, torsoVelocity.z].every(Number.isFinite)) {
+    return { x: 0, y: 0, z: 0 };
+  }
+  return {
+    x: headVelocity.x - torsoVelocity.x,
+    y: headVelocity.y - torsoVelocity.y,
+    z: headVelocity.z - torsoVelocity.z,
+  };
+}
