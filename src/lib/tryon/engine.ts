@@ -272,6 +272,9 @@ export function startEngine(opts: {
   let grabbed = false;
   let grabStrand = -1;
   let grabJoint = -1;
+  const lastPinchWorld = new THREE.Vector3();
+  const pinchFrameVelocity = new THREE.Vector3();
+  let pinchWorldReady = false;
   let neckGrab = -1;
   let disposed = false;
   let axesLocked = false;
@@ -584,6 +587,15 @@ export function startEngine(opts: {
       pinch = updatePinchState(pinch, pinchDistance);
       if (pinch && pinchPoint) {
         pinchDot.position.copy(normToWorld(pinchPoint.x, pinchPoint.y, pinchPoint.z));
+        if (pinchWorldReady) {
+          pinchFrameVelocity.subVectors(pinchDot.position, lastPinchWorld);
+          const speed = pinchFrameVelocity.length();
+          if (speed > 3.5) pinchFrameVelocity.multiplyScalar(3.5 / speed);
+        } else {
+          pinchFrameVelocity.set(0, 0, 0);
+          pinchWorldReady = true;
+        }
+        lastPinchWorld.copy(pinchDot.position);
         pinchDot.visible = true;
         if (!wasPinching) tryGrab(pinchPoint.x, pinchPoint.y, pinchPoint.z);
       } else if (!pinch) {
@@ -1079,11 +1091,21 @@ export function startEngine(opts: {
   }
 
   function releaseGrab() {
+    if (grabStrand >= 0 && grabStrand < strands.length) {
+      const nodes = strands[grabStrand].nodes;
+      const index = Math.min(Math.max(grabJoint, 1), nodes.length - 1);
+      if (nodes[index]) nodes[index].prev.copy(nodes[index].pos).sub(pinchFrameVelocity);
+    }
+    if (neckGrab > 0 && neckNodes[neckGrab]) {
+      neckNodes[neckGrab].prev.copy(neckNodes[neckGrab].pos).sub(pinchFrameVelocity);
+    }
     grabStrand = -1;
     grabJoint = -1;
     neckGrab = -1;
     clothGrab = -1;
     grabbed = false;
+    pinchWorldReady = false;
+    pinchFrameVelocity.set(0, 0, 0);
   }
 
   function rebuildStrands(style: WigStyle) {
