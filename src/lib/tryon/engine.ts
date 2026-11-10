@@ -1097,9 +1097,20 @@ export function startEngine(opts: {
 
   function releaseGrab() {
     if (grabStrand >= 0 && grabStrand < strands.length) {
-      const nodes = strands[grabStrand].nodes;
-      const index = Math.min(Math.max(grabJoint, 1), nodes.length - 1);
-      if (nodes[index]) nodes[index].prev.copy(nodes[index].pos).sub(pinchFrameVelocity);
+      const indexFor = (nodes: VNode[]) => Math.min(Math.max(grabJoint, 1), nodes.length - 1);
+      const primary = strands[grabStrand].nodes;
+      const primaryIndex = indexFor(primary);
+      if (primary[primaryIndex]) {
+        primary[primaryIndex].prev.copy(primary[primaryIndex].pos).sub(pinchFrameVelocity);
+      }
+      // A grabbed lock has already transferred motion to nearby locks while held.
+      // Preserve that shared momentum on release instead of leaving the neighbours behind.
+      for (const neighbour of sectionWeights(strands.length, grabStrand)) {
+        const nodes = strands[neighbour.index].nodes;
+        const index = indexFor(nodes);
+        if (!nodes[index]) continue;
+        nodes[index].prev.copy(nodes[index].pos).subScaledVector(pinchFrameVelocity, neighbour.weight * SECTION_FOLLOW);
+      }
     }
     if (neckGrab > 0 && neckNodes[neckGrab]) {
       neckNodes[neckGrab].prev.copy(neckNodes[neckGrab].pos).sub(pinchFrameVelocity);
