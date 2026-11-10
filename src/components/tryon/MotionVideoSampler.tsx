@@ -1,17 +1,26 @@
 import { useState } from "react";
 import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-frames";
+import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 
 type FramePreview = { timestampMs: number; dataUrl: string };
+type TrackingSummary = {
+  frames: number;
+  faceFrames: number;
+  shoulderFrames: number;
+  yawProxyRange: number | null;
+};
 
 export function MotionVideoSampler() {
   const [status, setStatus] = useState("No video analysed yet.");
   const [error, setError] = useState<string | null>(null);
   const [frames, setFrames] = useState<FramePreview[]>([]);
+  const [tracking, setTracking] = useState<TrackingSummary | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function analyse(file: File | undefined) {
     setError(null);
     setFrames([]);
+    setTracking(null);
     if (!file) {
       setStatus("No video selected.");
       return;
@@ -24,34 +33,53 @@ export function MotionVideoSampler() {
     }
 
     setBusy(true);
-    setStatus("Reading video locally…");
+    setStatus("Loading on-device face and pose trackers…");
     const previews: FramePreview[] = [];
-    let sampled = 0;
+    const samples: WearerTrackingSample[] = [];
+    let tracker: Awaited<ReturnType<typeof createWearerTrackers>> | null = null;
     try {
+      tracker = await createWearerTrackers();
+      setStatus("Tracking face and shoulders locally…");
       for await (const frame of extractVideoFrames(file, {
         intervalMs: 500,
         maxDurationMs: 15_000,
         maxDimension: 320,
       })) {
-        sampled += 1;
-        if (previews.length < 4) {
-          const canvas = document.createElement("canvas");
-          canvas.width = frame.width;
-          canvas.height = frame.height;
-          const context = canvas.getContext("2d");
-          if (context) {
-            context.drawImage(frame.bitmap, 0, 0);
-            previews.push({ timestampMs: frame.timestampMs, dataUrl: canvas.toDataURL("image/jpeg", 0.72) });
+        try {
+          samples.push(tracker.detect(frame.bitmap, frame.timestampMs));
+          if (previews.length < 4) {
+            const canvas = document.createElement("canvas");
+            canvas.width = frame.width;
+            canvas.height = frame.height;
+            const context = canvas.getContext("2d");
+            if (context) {
+              context.drawImage(frame.bitmap, 0, 0);
+              previews.push({ timestampMs: frame.timestampMs, dataUrl: canvas.toDataURL("image/jpeg", 0.72) });
+            }
           }
+        } finally {
+          frame.bitmap.close();
         }
-        frame.bitmap.close();
       }
+
+      const faceFrames = samples.filter((sample) => sample.faceDetected).length;
+      const shoulderFrames = samples.filter((sample) => sample.shouldersDetected).length;
+      const yawValues = samples
+        .map((sample) => sample.headYawProxy)
+        .filter((value): value is number => value !== null);
       setFrames(previews);
-      setStatus(`Extracted ${sampled} frames from the first 15 seconds. No video was uploaded.`);
+      setTracking({
+        frames: samples.length,
+        faceFrames,
+        shoulderFrames,
+        yawProxyRange: yawValues.length ? Math.max(...yawValues) - Math.min(...yawValues) : null,
+      });
+      setStatus(`Tracked ${faceFrames}/${samples.length} faces and ${shoulderFrames}/${samples.length} shoulder pairs. Processing stayed on this device.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not analyse this video.");
       setStatus("Video analysis stopped.");
     } finally {
+      tracker?.close();
       setBusy(false);
     }
   }
@@ -61,9 +89,9 @@ export function MotionVideoSampler() {
       <p className="text-sm tracking-widest text-clay uppercase">Local processing test</p>
       <h2 className="font-display mt-2 text-2xl">Sample a fitting video</h2>
       <p className="mt-2 text-sm text-ink-muted">
-        Select a video from this device. Isibuko extracts low-resolution frames in your browser;
-        the video is not uploaded. This validates frame extraction only — product tracking and
-        motion-profile generation are the next stages.
+        Select a seller demonstration video. Isibuko extracts frames and tracks the wearer's face
+        and shoulders locally using MediaPipe. No video or frames are uploaded. Product segmentation
+        and product-relative motion tracking are still separate stages.
       </p>
       <label className="mt-4 block text-sm">
         Choose a demonstration video
@@ -77,6 +105,14 @@ export function MotionVideoSampler() {
       </label>
       <p className="mt-3 text-sm text-ink-muted" aria-live="polite">{busy ? "Processing…" : status}</p>
       {error && <p className="mt-2 text-sm text-clay" role="alert">{error}</p>}
+      {tracking && (
+        <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div><dt className="text-ink-muted">Frames tracked</dt><dd>{tracking.frames}</dd></div>
+          <div><dt className="text-ink-muted">Face detected</dt><dd>{tracking.faceFrames}/{tracking.frames}</dd></div>
+          <div><dt className="text-ink-muted">Shoulders detected</dt><dd>{tracking.shoulderFrames}/{tracking.frames}</dd></div>
+          <div><dt className="text-ink-muted">Head yaw proxy range</dt><dd>{tracking.yawProxyRange?.toFixed(3) ?? "Unavailable"}</dd></div>
+        </dl>
+      )}
       {frames.length > 0 && (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {frames.map((frame) => (
