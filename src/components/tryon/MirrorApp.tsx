@@ -307,6 +307,8 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
                 </div>
                 <Measure label="Body acceleration" value={metrics.bodyAcceleration} suffix=" cm/s²" />
                 <Measure label="Head-relative acceleration" value={metrics.headRelativeAcceleration} suffix=" cm/s²" />
+                <Measure label="Average hair speed" value={metrics.hairMotionSpeed} suffix=" cm/s" />
+                <Measure label="Settled strands" value={metrics.settledHairPercent} suffix="%" />
               </dl>
               <p className="mt-2 text-xs text-muted">These are filtered tracking estimates, not calibrated physical measurements. Low visibility or a lost pose disables the inertia input.</p>
             </details>
