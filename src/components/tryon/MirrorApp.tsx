@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORY_LABEL, CATEGORY_ORDER, findProduct } from "@/lib/tryon/catalog";
 import { matchSize } from "@/lib/tryon/math";
-import { garmentEase } from "@/lib/tryon/physics";
+import { garmentEase, hairMotionState } from "@/lib/tryon/physics";
 import { useWardrobe } from "@/lib/tryon/store";
 import type { LiveMetrics, TryonState } from "@/lib/tryon/types";
 import type { EngineHandle } from "@/lib/tryon/engine";
@@ -309,6 +309,10 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
                 <Measure label="Head-relative acceleration" value={metrics.headRelativeAcceleration} suffix=" cm/s²" />
                 <Measure label="Average simulated hair speed" value={metrics.hairMotionSpeed} suffix=" cm/s" />
                 <Measure label="Settled strands (<1.5 cm/s)" value={metrics.settledHairPercent} suffix="%" />
+                <div>
+                  <dt className="text-muted">Hair motion state</dt>
+                  <dd className="capitalize">{hairMotionState(metrics.visibleHairStrands, metrics.settledHairPercent)}</dd>
+                </div>
                 <Measure label="Visible strands tracked" value={metrics.visibleHairStrands} />
               </dl>
               <p className="mt-2 text-xs text-muted">These are filtered tracking estimates, not calibrated physical measurements. Low visibility or a lost pose disables the inertia input.</p>
