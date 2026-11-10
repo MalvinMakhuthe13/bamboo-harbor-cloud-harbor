@@ -232,10 +232,10 @@ export function trackSeededHairForward(
     const frame = frames[index];
     let predicted = currentSeed;
     if (lastCenter && previousCenter) {
-      const elapsed = lastCenter.timestampMs - previousCenter.timestampMs;
+      const elapsed = Math.abs(lastCenter.timestampMs - previousCenter.timestampMs);
       const nextElapsed = frame.timestampMs - lastCenter.timestampMs;
-      if (elapsed > 0 && nextElapsed >= 0) {
-        const steps = Math.min(2, nextElapsed / elapsed);
+      if (elapsed > 0 && Number.isFinite(nextElapsed)) {
+        const steps = Math.max(-2, Math.min(2, nextElapsed / elapsed));
         predicted = {
           x: Math.max(0, Math.min(1, lastCenter.x + (lastCenter.x - previousCenter.x) * steps)),
           y: Math.max(0, Math.min(1, lastCenter.y + (lastCenter.y - previousCenter.y) * steps)),
@@ -471,37 +471,37 @@ export function buildHairSectionTrack(
     const boxWidth = bounds.right - bounds.left;
     const boxHeight = bounds.bottom - bounds.top;
     if (boxWidth <= 0 || boxHeight <= 0) continue;
-    const zones: Record<HairSectionName, (x: number, y: number) => boolean> = {
-      top: (_x, y) => y < 0.28,
-      left: (x, y) => x < 0.36 && y >= 0.2,
-      centre: (x, y) => x >= 0.36 && x <= 0.64 && y >= 0.2 && y < 0.8,
-      right: (x, y) => x > 0.64 && y >= 0.2,
-      lower: (_x, y) => y >= 0.72,
-    };
-    for (const section of Object.keys(zones) as HairSectionName[]) {
-      let sumX = 0;
-      let sumY = 0;
-      let count = 0;
-      for (let py = 0; py < height; py++) {
-        for (let px = 0; px < width; px++) {
-          if (!mask[py * width + px]) continue;
-          const nx = (px + 0.5) / width;
-          const ny = (py + 0.5) / height;
-          const localX = (nx - bounds.left) / boxWidth;
-          const localY = (ny - bounds.top) / boxHeight;
-          if (localX < 0 || localX > 1 || localY < 0 || localY > 1 ||
-              !zones[section](localX, localY)) continue;
-          sumX += nx;
-          sumY += ny;
-          count++;
-        }
+    const sections: HairSectionName[] = ["top", "left", "centre", "right", "lower"];
+    const accumulators = new Map(sections.map((section) => [section, { sumX: 0, sumY: 0, count: 0 }]));
+    // One pass; every selected component pixel belongs to at most one zone.
+    for (let py = 0; py < height; py++) {
+      for (let px = 0; px < width; px++) {
+        if (!mask[py * width + px]) continue;
+        const nx = (px + 0.5) / width;
+        const ny = (py + 0.5) / height;
+        const localX = (nx - bounds.left) / boxWidth;
+        const localY = (ny - bounds.top) / boxHeight;
+        if (localX < 0 || localX > 1 || localY < 0 || localY > 1) continue;
+        let section: HairSectionName;
+        if (localY < 0.25) section = "top";
+        else if (localY >= 0.75) section = "lower";
+        else if (localX < 0.36) section = "left";
+        else if (localX > 0.64) section = "right";
+        else section = "centre";
+        const accumulator = accumulators.get(section)!;
+        accumulator.sumX += nx;
+        accumulator.sumY += ny;
+        accumulator.count++;
       }
-      if (!count) continue;
+    }
+    for (const section of sections) {
+      const accumulator = accumulators.get(section)!;
+      if (!accumulator.count) continue;
       observations.push({
         timestampMs: point.timestampMs,
         section,
-        offsetX: (sumX / count - sample.headCenterX) / sample.headWidth,
-        offsetY: (sumY / count - sample.headCenterY) / sample.headWidth,
+        offsetX: (accumulator.sumX / accumulator.count - sample.headCenterX) / sample.headWidth,
+        offsetY: (accumulator.sumY / accumulator.count - sample.headCenterY) / sample.headWidth,
       });
     }
   }
