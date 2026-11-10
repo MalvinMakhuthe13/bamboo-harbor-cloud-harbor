@@ -478,3 +478,31 @@ export function resolveEllipsoidContact(
     },
   };
 }
+
+
+/** Estimate bounded world-space acceleration from two tracked body velocities. */
+export function bodyMotionAcceleration(
+  previous: { x: number; y: number; z: number },
+  current: { x: number; y: number; z: number },
+  elapsedSeconds: number,
+  maxAcceleration = 180,
+): { x: number; y: number; z: number } {
+  if (
+    ![previous.x, previous.y, previous.z, current.x, current.y, current.z, elapsedSeconds, maxAcceleration]
+      .every(Number.isFinite) ||
+    elapsedSeconds <= 0 ||
+    maxAcceleration <= 0
+  ) return { x: 0, y: 0, z: 0 };
+  let x = (current.x - previous.x) / elapsedSeconds;
+  let y = (current.y - previous.y) / elapsedSeconds;
+  let z = (current.z - previous.z) / elapsedSeconds;
+  const magnitude = Math.hypot(x, y, z);
+  if (!Number.isFinite(magnitude)) return { x: 0, y: 0, z: 0 };
+  if (magnitude > maxAcceleration) {
+    const scale = maxAcceleration / magnitude;
+    x *= scale;
+    y *= scale;
+    z *= scale;
+  }
+  return { x, y, z };
+}
