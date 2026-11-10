@@ -108,3 +108,28 @@ function regionMask() {
   mask[5 * 10 + 4] = 1;
   return mask;
 }
+
+
+test("tracks both before and after the selected frame in chronological order", async () => {
+  const { trackSeededHairBidirectional } = await import("./hair-region-tracking.ts");
+  const makeMask = (cx: number) => {
+    const mask = new Uint8Array(100);
+    mask[4 * 10 + cx] = 1;
+    mask[4 * 10 + cx + 1] = 1;
+    mask[5 * 10 + cx] = 1;
+    return mask;
+  };
+  const frames = [4, 5, 6, 7].map((cx, index) => ({
+    timestampMs: index * 500, categories: makeMask(cx), width: 10, height: 10,
+  }));
+  const track = trackSeededHairBidirectional(frames, 2, { x: 0.65, y: 0.45, radius: 0.2 }, 0.3);
+  assert.deepEqual(track.map((point) => point.timestampMs), [0, 500, 1000, 1500]);
+  assert.equal(track.length, 4);
+  assert.ok(track.every((point) => point.tracked));
+  assert.ok(track[0].region.center!.x < track[3].region.center!.x);
+});
+
+test("rejects an invalid bidirectional start index", async () => {
+  const { trackSeededHairBidirectional } = await import("./hair-region-tracking.ts");
+  assert.throws(() => trackSeededHairBidirectional([], 0, { x: 0.5, y: 0.5, radius: 0.2 }));
+});
