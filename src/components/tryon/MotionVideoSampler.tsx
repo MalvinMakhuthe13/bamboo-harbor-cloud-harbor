@@ -2,7 +2,7 @@ import { useState } from "react";
 import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-frames";
 import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 import { createProductSegmenter, type ProductSegmentationSample } from "@/lib/tryon/product-segmentation";
-import { buildRelativeHairTrack, summarizeRelativeHairTrack, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
+import { buildRelativeHairTrack, summarizeRelativeHairTrack, analyzeHairMotionProxy, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
 
 type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string; categoryMask: Uint8Array; maskWidth: number; maskHeight: number };
 type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion; track: SeededHairTrackPoint[] };
@@ -18,6 +18,7 @@ type TrackingSummary = {
   relativeHairSamples: number;
   horizontalJitter: number | null;
   verticalJitter: number | null;
+  hairMotionProxy: ReturnType<typeof analyzeHairMotionProxy>;
 };
 
 export function MotionVideoSampler() {
@@ -134,6 +135,7 @@ export function MotionVideoSampler() {
       const hairSamples = segmentationSamples.filter((sample) => sample.hairDetected);
       const relativeHairTrack = buildRelativeHairTrack(wearerSamples, segmentationSamples);
       const relativeHairSummary = summarizeRelativeHairTrack(relativeHairTrack);
+      const hairMotionProxy = analyzeHairMotionProxy(wearerSamples, relativeHairTrack);
       setFrames(previews);
       setMaskFrames(allMaskFrames);
       setTracking({
@@ -150,6 +152,7 @@ export function MotionVideoSampler() {
         relativeHairSamples: relativeHairSummary.sampleCount,
         horizontalJitter: relativeHairSummary.horizontalJitter,
         verticalJitter: relativeHairSummary.verticalJitter,
+        hairMotionProxy,
       });
       setStatus(`Processed ${wearerSamples.length} frames locally. Face: ${faceFrames}; shoulders: ${shoulderFrames}; hair regions: ${hairSamples.length}. No video was uploaded.`);
     } catch (caught) {
@@ -194,6 +197,10 @@ export function MotionVideoSampler() {
           <div><dt className="text-ink-muted">Face-relative hair track</dt><dd>{tracking.relativeHairSamples}/{tracking.frames} frames</dd></div>
           <div><dt className="text-ink-muted">Hair horizontal jitter</dt><dd>{tracking.horizontalJitter?.toFixed(3) ?? "Unavailable"}</dd></div>
           <div><dt className="text-ink-muted">Hair vertical jitter</dt><dd>{tracking.verticalJitter?.toFixed(3) ?? "Unavailable"}</dd></div>
+          <div><dt className="text-ink-muted">Paired motion samples</dt><dd>{tracking.hairMotionProxy.sampleCount}</dd></div>
+          <div><dt className="text-ink-muted">Hair displacement proxy</dt><dd>{tracking.hairMotionProxy.peakRelativeDisplacement.toFixed(3)}</dd></div>
+          <div><dt className="text-ink-muted">Observed response lag</dt><dd>{tracking.hairMotionProxy.responseLagMs === null ? "Unavailable" : `${tracking.hairMotionProxy.responseLagMs} ms`}</dd></div>
+          <div><dt className="text-ink-muted">Motion diagnostic quality</dt><dd>{tracking.hairMotionProxy.quality}</dd></div>
         </dl>
       )}
       {frames.length > 0 && (
@@ -232,7 +239,7 @@ export function MotionVideoSampler() {
               </figure>
             ))}
           </div>
-          <p className="mt-2 text-xs text-ink-muted">Overlay key: pink = semantic hair, blue = face skin, amber = clothing. These are broad model classes, not confirmed product boundaries.</p>
+          <p className="mt-2 text-xs text-ink-muted">Overlay key: pink = semantic hair, blue = face skin, amber = clothing. These are broad model classes, not confirmed product boundaries. Motion response and lag are relative proxies, not calibrated wig physics.</p>
           {seedSelection && (
             <div className="mt-3 rounded-xl border border-line/40 p-3 text-sm" aria-live="polite">
               <p className="font-medium">Selected region · {(seedSelection.timestampMs / 1000).toFixed(1)}s</p>
