@@ -268,6 +268,11 @@ export function startEngine(opts: {
   let swing = 0;
   let swingVel = 0;
   let prevYaw = 0;
+  let bodyMotionStamp = 0;
+  let bodyMotionReady = false;
+  const previousBodyMid = new THREE.Vector3();
+  const previousBodyVelocity = new THREE.Vector3();
+  const bodyAcceleration = new THREE.Vector3();
 
   let cameraOn = false;
   let faceOn = false;
@@ -542,6 +547,26 @@ export function startEngine(opts: {
       put(28, ankR);
     }
 
+    if (poseOn && poseSeen > bodyMotionStamp) {
+      const bodyMid = tmp.copy(shL).add(shR).multiplyScalar(0.5)
+        .add(tmpB.copy(hipL).add(hipR).multiplyScalar(0.5)).multiplyScalar(0.5);
+      if (bodyMotionReady) {
+        const elapsed = Math.max(1 / 120, Math.min(0.2, (poseSeen - bodyMotionStamp) / 1000));
+        const velocity = tmpC.subVectors(bodyMid, previousBodyMid).multiplyScalar(1 / elapsed);
+        const acceleration = bodyMotionAcceleration(previousBodyVelocity, velocity, elapsed, 180);
+        bodyAcceleration.lerp(new THREE.Vector3(acceleration.x, acceleration.y, acceleration.z), 0.35);
+        previousBodyVelocity.copy(velocity);
+      } else {
+        previousBodyVelocity.set(0, 0, 0);
+        bodyMotionReady = true;
+      }
+      previousBodyMid.copy(bodyMid);
+      bodyMotionStamp = poseSeen;
+    } else if (!poseOn) {
+      bodyAcceleration.multiplyScalar(0.88);
+      if (bodyAcceleration.lengthSq() < 0.04) bodyAcceleration.set(0, 0, 0);
+    }
+
     if (cameraOn && freshFrame && liveHands.length) {
       const depth = faceOn ? headPos.z : -68;
       liveHands.forEach((hand, handIndex) => {
@@ -797,6 +822,7 @@ export function startEngine(opts: {
         radius,
         pull || 1,
         hairStrandDamping(strand.lengthMul, Math.max(0, Math.min(1, -strand.local.z / 10))),
+        bodyAcceleration,
       );
     }
     // Resolve local strand contacts after integration so neighbouring locks do not
@@ -1531,6 +1557,7 @@ function simulate(
   headRadius: number,
   pullStrength = 1,
   dampingRetention = VERLET_DAMP,
+  bodyAcceleration: THREE.Vector3 | null = null,
 ) {
   const g = GRAVITY_CM_S2 * dt * dt;
   const blend = constraintBlend(stiffness);
@@ -1557,6 +1584,10 @@ function simulate(
     const vz = (n.pos.z - n.prev.z) * damping;
     n.prev.copy(n.pos);
     n.pos.set(n.pos.x + vx, n.pos.y + vy - g, n.pos.z + vz);
+    if (bodyAcceleration) {
+      // Inertial lag is opposite the wearer's measured torso acceleration.
+      n.pos.addScaledVector(bodyAcceleration, -0.18 * dt * dt);
+    }
   }
   const corr = new THREE.Vector3();
   for (let pass = 0; pass < CONSTRAINT_PASSES; pass++) {
