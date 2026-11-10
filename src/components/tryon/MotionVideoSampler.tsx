@@ -23,7 +23,8 @@ type TrackingSummary = {
 export function MotionVideoSampler() {
   const [status, setStatus] = useState("No video analysed yet.");
   const [error, setError] = useState<string | null>(null);
-  const [frames, setFrames] = useState<FramePreview[]>([]);\n  const [maskFrames, setMaskFrames] = useState<{ timestampMs: number; categories: Uint8Array; width: number; height: number }[]>([]);
+  const [frames, setFrames] = useState<FramePreview[]>([]);
+  const [maskFrames, setMaskFrames] = useState<{ timestampMs: number; categories: Uint8Array; width: number; height: number }[]>([]);
   const [tracking, setTracking] = useState<TrackingSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [seedSelection, setSeedSelection] = useState<SeedSelection | null>(null);
@@ -31,6 +32,7 @@ export function MotionVideoSampler() {
   async function analyse(file: File | undefined) {
     setError(null);
     setFrames([]);
+    setMaskFrames([]);
     setTracking(null);
     setSeedSelection(null);
     if (!file) {
@@ -46,7 +48,8 @@ export function MotionVideoSampler() {
 
     setBusy(true);
     setStatus("Loading on-device face, pose and segmentation models…");
-    const previews: FramePreview[] = [];\n    const allMaskFrames: { timestampMs: number; categories: Uint8Array; width: number; height: number }[] = [];
+    const previews: FramePreview[] = [];
+    const allMaskFrames: { timestampMs: number; categories: Uint8Array; width: number; height: number }[] = [];
     const wearerSamples: WearerTrackingSample[] = [];
     const segmentationSamples: ProductSegmentationSample[] = [];
     let tracker: Awaited<ReturnType<typeof createWearerTrackers>> | null = null;
@@ -61,9 +64,11 @@ export function MotionVideoSampler() {
       })) {
         try {
           wearerSamples.push(tracker.detect(frame.bitmap, frame.timestampMs));
-          const includePreviewMask = previews.length < 4;
-          const segmentation = segmenter.detect(frame.bitmap, frame.timestampMs, includePreviewMask);
+          const segmentation = segmenter.detect(frame.bitmap, frame.timestampMs, true);
           segmentationSamples.push(segmentation);
+          const categoryMask = segmentation.categoryMask ?? new Uint8Array();
+          allMaskFrames.push({ timestampMs: frame.timestampMs, categories: categoryMask, width: segmentation.width, height: segmentation.height });
+          const includePreviewMask = previews.length < 4;
           if (includePreviewMask) {
             const canvas = document.createElement("canvas");
             canvas.width = frame.width;
@@ -129,7 +134,8 @@ export function MotionVideoSampler() {
       const hairSamples = segmentationSamples.filter((sample) => sample.hairDetected);
       const relativeHairTrack = buildRelativeHairTrack(wearerSamples, segmentationSamples);
       const relativeHairSummary = summarizeRelativeHairTrack(relativeHairTrack);
-      setFrames(previews);\n      setMaskFrames(allMaskFrames);
+      setFrames(previews);
+      setMaskFrames(allMaskFrames);\n      setMaskFrames(allMaskFrames);
       setTracking({
         frames: wearerSamples.length,
         faceFrames,
@@ -207,7 +213,7 @@ export function MotionVideoSampler() {
                     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
                     const frameIndex = frames.findIndex((item) => item.timestampMs === frame.timestampMs);
                     const propagated = trackSeededHairForward(
-                      frames.map((item) => ({ timestampMs: item.timestampMs, categories: item.categoryMask, width: item.maskWidth, height: item.maskHeight })),
+                      maskFrames,
                       frameIndex,
                       { x, y, radius: 0.18 },
                     );
