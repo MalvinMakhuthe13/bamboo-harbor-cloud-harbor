@@ -50,7 +50,7 @@ export function buildRelativeHairTrack(
         sample.headCenterX === null || sample.headCenterY === null ||
         sample.headWidth === null || sample.headWidth <= 0) continue;
 
-    const confidence = Math.min(1, region.hair.ratio * 8) * sample.faceConfidence;
+    const confidence = Math.sqrt(Math.min(1, region.hair.ratio * 8)) * sample.faceConfidence;
     if (!Number.isFinite(confidence) || confidence < minimumConfidence) continue;
     const raw: RelativeHairObservation = {
       timestampMs: sample.timestampMs,
@@ -523,7 +523,7 @@ export function summarizeHairSectionMotion(
       .filter((item) => item.section === section)
       .sort((a, b) => a.timestampMs - b.timestampMs);
     if (samples.length < 2) return { section, sampleCount: samples.length, peakDisplacement: 0, peakAtMs: null };
-    const baseline = samples.slice(0, Math.min(3, samples.length));
+    const baseline = samples.slice(0, 1);
     const baseX = baseline.reduce((sum, item) => sum + item.offsetX, 0) / baseline.length;
     const baseY = baseline.reduce((sum, item) => sum + item.offsetY, 0) / baseline.length;
     const displacement = samples.map((item) => Math.hypot(item.offsetX - baseX, item.offsetY - baseY));
@@ -605,7 +605,9 @@ export function summarizeHairSectionCoupling(
         if (!neighbourPeak || magnitude > neighbourPeak.magnitude) neighbourPeak = { time, magnitude };
       }
     }
+    const baselineTimes = new Set([...own.keys()].sort((a, b) => a - b).slice(0, 3));
     for (const [time, vector] of own) {
+      if (baselineTimes.has(time)) continue;
       const magnitude = Math.hypot(vector.x, vector.y);
       if (magnitude < 1e-6) continue;
       const adjacent = neighbours.map((name) => displacement.get(name)!.get(time)).filter(
