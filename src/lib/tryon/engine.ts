@@ -34,6 +34,7 @@ import {
   garmentEase,
   glassesScale,
   hairDropCm,
+  hairSectionInfluence,
   hairStiffness,
   headFromFace,
   kneeBendAmount,
@@ -71,6 +72,7 @@ type Strand = {
   lengthMul: number;
   nodes: VNode[];
   ready: boolean;
+  influence: number;
   geo: THREE.BufferGeometry;
   mesh: THREE.Mesh;
 };
@@ -756,25 +758,30 @@ export function startEngine(opts: {
     const total = hairDropCm(state.hairLength, state.style);
     const stiff = hairStiffness(state.sway, state.material === "curly");
     const radius = 8.1 * size;
-    const pulls = new Float32Array(strands.length);
+    const targetPulls = new Float32Array(strands.length);
+    const distances = new Int16Array(strands.length);
     sectionNow = 0;
     if (grabStrand >= 0 && grabStrand < strands.length) {
-      pulls[grabStrand] = 1;
+      targetPulls[grabStrand] = 1;
       sectionNow = 1;
       for (const neighbour of sectionWeights(strands.length, grabStrand)) {
-        pulls[neighbour.index] = neighbour.weight * SECTION_FOLLOW;
+        targetPulls[neighbour.index] = neighbour.weight * SECTION_FOLLOW;
+        distances[neighbour.index] = Math.abs(neighbour.index - grabStrand);
         sectionNow += 1;
       }
     }
     for (let s = 0; s < strands.length; s++) {
       const strand = strands[s];
       strand.mesh.visible = true;
+      strand.influence = hairSectionInfluence(strand.influence, targetPulls[s], dt, distances[s]);
       tmp.copy(strand.local);
       tmp.y += state.wigLift / Math.max(size, 0.4);
       tmp.multiplyScalar(size).applyQuaternion(headQuat).add(headPos);
       const seg = (total * strand.lengthMul) / Math.max(1, strand.nodes.length - 1);
-      const pull = pulls[s] ?? 0;
-      const joint = pull > 0 ? Math.min(Math.max(grabJoint, 1), strand.nodes.length - 1) : -1;
+      const pull = strand.influence;
+      const joint = targetPulls[s] > 0.01 && pull > 0.01
+        ? Math.min(Math.max(grabJoint, 1), strand.nodes.length - 1)
+        : -1;
       simulate(
         strand.nodes,
         tmp,
@@ -782,7 +789,7 @@ export function startEngine(opts: {
         dt,
         stiff,
         joint,
-        pull > 0 ? pinchDot.position : null,
+        joint >= 0 ? pinchDot.position : null,
         headPos,
         radius,
         pull || 1,
@@ -1157,6 +1164,7 @@ export function startEngine(opts: {
       lengthMul,
       nodes: Array.from({ length: joints }, () => ({ pos: new THREE.Vector3(), prev: new THREE.Vector3() })),
       ready: false,
+      influence: 0,
       geo,
       mesh,
     });
