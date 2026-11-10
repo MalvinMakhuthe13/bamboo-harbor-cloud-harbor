@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
+import { angleDeltaRadians, frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter, hairSectionInfluence, hairSectionResponseHz, hairStrandDamping, VERLET_DAMP } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -185,4 +185,16 @@ test("strand damping remains bounded for invalid and extreme inputs", () => {
   assert.equal(hairStrandDamping(Number.NaN, 1), VERLET_DAMP);
   assert.equal(hairStrandDamping(100, 100), 0.985);
   assert.equal(hairStrandDamping(-10, -10), 0.932);
+});
+
+
+test("head yaw delta takes the short path across the angle wrap", () => {
+  const delta = angleDeltaRadians(-Math.PI + 0.02, Math.PI - 0.02);
+  assert.ok(Math.abs(delta - 0.04) < 1e-10);
+  assert.ok(Math.abs(angleDeltaRadians(Math.PI - 0.02, -Math.PI + 0.02) + 0.04) < 1e-10);
+});
+
+test("head yaw delta rejects non-finite angles", () => {
+  assert.equal(angleDeltaRadians(Number.NaN, 1), 0);
+  assert.equal(angleDeltaRadians(1, Number.POSITIVE_INFINITY), 0);
 });
