@@ -9,6 +9,7 @@ import type { LiveMetrics, Material, NailShape, TryonState, WigStyle } from "@/l
 import { estimateFromPose, PINCH_MAX, priorFromHeight, round1 } from "@/lib/tryon/math";
 import {
   CAT_EYE_ROLL,
+  angleDeltaRadians,
   CONSTRAINT_PASSES,
   EAR_SWING_X,
   EAR_SWING_Z,
@@ -498,7 +499,7 @@ export function startEngine(opts: {
       2 * (headQuat.w * headQuat.y + headQuat.x * headQuat.z),
       1 - 2 * (headQuat.y * headQuat.y + headQuat.z * headQuat.z),
     );
-    const yawRate = yawNow - prevYaw;
+    const yawRate = angleDeltaRadians(yawNow, prevYaw);
     prevYaw = yawNow;
     const swung = stepPendulum(swing, swingVel, yawRate, dt);
     swing = swung.swing;
