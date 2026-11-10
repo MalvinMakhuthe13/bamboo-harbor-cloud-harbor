@@ -206,20 +206,24 @@ function MirrorPage() {
             </div>
           )}
           <dl className="grid grid-cols-2 gap-2 text-sm text-muted">
-            <div>Frame rate</div>
+            <div>Picture</div>
             <div className="text-paper">{metrics ? `${metrics.fps} fps` : "—"}</div>
+            <div>Tracking</div>
+            <div className="text-paper">{metrics ? `${metrics.trackFps} fps` : "—"}</div>
             <div>Face</div>
-            <div className="text-paper">{metrics?.face ? `${metrics.faceMs} ms` : "waiting"}</div>
+            <div className="text-paper">{metrics ? `${metrics.face ? "found" : "missing"} · ${metrics.faceMs} ms` : "waiting"}</div>
             <div>Pose</div>
-            <div className="text-paper">{metrics?.pose ? `${metrics.poseMs} ms` : "waiting"}</div>
+            <div className="text-paper">{metrics ? `${metrics.pose ? "found" : "missing"} · ${metrics.poseMs} ms` : "waiting"}</div>
             <div>Hands</div>
             <div className="text-paper">{metrics ? `${metrics.hands} · ${metrics.handMs} ms` : "—"}</div>
             <div>Segment</div>
-            <div className="text-paper">{metrics?.segment ? `${metrics.segmentMs} ms` : "waiting"}</div>
+            <div className="text-paper">{metrics ? `${metrics.segment ? "mask" : "none"} · ${metrics.segmentMs} ms` : "waiting"}</div>
             <div>Composite</div>
             <div className="text-paper">{metrics ? `${metrics.compositeMs} ms` : "—"}</div>
+            <div>Runtime</div>
+            <div className="text-paper">{metrics?.delegate ?? "—"}</div>
           </dl>
-          <p className="text-sm text-muted">Drag the piece to nudge it. It eases back. The camera is not restarted when you change product, colour, or size.</p>
+          <p className="text-sm text-muted">Use your camera, pick a piece, and move. Changing product, colour, or size does not stop the camera. The studio photo is only a labelled test.</p>
         </aside>
       </div>
     </main>

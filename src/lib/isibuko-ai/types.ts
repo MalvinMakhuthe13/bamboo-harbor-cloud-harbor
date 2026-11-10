@@ -95,6 +95,8 @@ export type LiveMetrics = {
   handMs: number;
   segmentMs: number;
   compositeMs: number;
+  /** How often a new face, pose, hand, or mask result arrives. */
+  trackFps: number;
   delegate: string;
   source: "camera" | "studio" | "off";
   body: BodyEstimate;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { startEngine, type Drag, type EngineHandle } from "@/lib/isibuko-ai/engine";
 import type { FrameRequest, LiveMetrics } from "@/lib/isibuko-ai/types";
 
@@ -16,6 +16,9 @@ export function Stage({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const handleRef = useRef<EngineHandle | null>(null);
+  const [mode, setMode] = useState<"ask" | "camera" | "studio">("ask");
+  const [cameraError, setCameraError] = useState("");
+  const [engineReady, setEngineReady] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -30,16 +33,17 @@ export function Stage({
         drag: dragRef.current,
         onMetrics,
         onStatus,
-        autoStudio: true,
       });
     } catch (error) {
       onStatus(error instanceof Error ? error.message : "The mirror could not start.");
       return;
     }
     handleRef.current = handle;
+    setEngineReady(true);
     return () => {
       handle.dispose();
       handleRef.current = null;
+      setEngineReady(false);
     };
     // The engine reads the latest request through refs. Mount once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -89,16 +93,93 @@ export function Stage({
         }}
       />
       <div className="pointer-events-none absolute right-4 bottom-4 left-4 flex flex-wrap gap-2">
-        <EngineButton label="My camera" onClick={() => void handleRef.current?.startCamera().catch((error) => onStatus(error instanceof Error ? error.message : "Camera permission was blocked."))} />
-        <EngineButton label="Studio photo" onClick={() => void handleRef.current?.startStudio().catch((error) => onStatus(error instanceof Error ? error.message : "Studio photo failed."))} />
+        {mode === "studio" && (
+          <p className="pointer-events-none rounded-full bg-ink/80 px-3 py-2 text-sm text-brass-2">Test photo. Not your camera.</p>
+        )}
+        <EngineButton
+          label="Use my camera"
+          primary
+          disabled={!engineReady}
+          onClick={() => {
+            setCameraError("");
+            const handle = handleRef.current;
+            if (!handle) return;
+            void handle
+              .startCamera()
+              .then(() => setMode("camera"))
+              .catch((error) => {
+                const message = error instanceof Error ? error.message : "Camera permission was blocked.";
+                setCameraError(message);
+                onStatus(message);
+              });
+          }}
+        />
+        <EngineButton
+          label="Studio photo — test only"
+          disabled={!engineReady}
+          onClick={() => {
+            const handle = handleRef.current;
+            if (!handle) return;
+            void handle
+              .startStudio()
+              .then(() => setMode("studio"))
+              .catch((error) => onStatus(error instanceof Error ? error.message : "Studio photo failed."));
+          }}
+        />
       </div>
+      {mode === "ask" && (
+        <div className="absolute inset-0 flex items-end justify-center bg-ink/55 p-6 sm:items-center">
+          <div className="w-full max-w-md rounded-3xl border border-line bg-ink-2 p-5">
+            <p className="font-display text-3xl text-paper">Wear it on camera</p>
+            <p className="mt-2 text-sm text-muted">Your camera stays on while you move and change pieces. Frames stay on this device. A studio photo is only for testing, and it is never treated as live.</p>
+            {cameraError && <p className="mt-3 text-sm text-clay">{cameraError}</p>}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!engineReady}
+                className="min-h-11 rounded-full bg-brass px-4 text-sm text-ink disabled:opacity-50"
+                onClick={() => {
+                  setCameraError("");
+                  const handle = handleRef.current;
+                  if (!handle) return;
+                  void handle
+                    .startCamera()
+                    .then(() => setMode("camera"))
+                    .catch((error) => {
+                      const message = error instanceof Error ? error.message : "Camera permission was blocked.";
+                      setCameraError(message);
+                      onStatus(message);
+                    });
+                }}
+              >
+                Use my camera
+              </button>
+              <button
+                type="button"
+                disabled={!engineReady}
+                className="min-h-11 rounded-full border border-line px-4 text-sm text-paper disabled:opacity-50"
+                onClick={() => {
+                  const handle = handleRef.current;
+                  if (!handle) return;
+                  void handle
+                    .startStudio()
+                    .then(() => setMode("studio"))
+                    .catch((error) => onStatus(error instanceof Error ? error.message : "Studio photo failed."));
+                }}
+              >
+                Studio photo — test only
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function EngineButton({ label, onClick }: { label: string; onClick: () => void }) {
+function EngineButton({ label, onClick, primary = false, disabled = false }: { label: string; onClick: () => void; primary?: boolean; disabled?: boolean }) {
   return (
-    <button type="button" onClick={onClick} className="pointer-events-auto min-h-11 rounded-full bg-ink/80 px-4 text-sm text-paper">
+    <button type="button" disabled={disabled} onClick={onClick} className={`pointer-events-auto min-h-11 rounded-full px-4 text-sm disabled:opacity-50 ${primary ? "bg-brass text-ink" : "bg-ink/80 text-paper"}`}>
       {label}
     </button>
   );

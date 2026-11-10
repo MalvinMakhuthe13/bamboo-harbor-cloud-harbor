@@ -96,7 +96,7 @@ describe("appearance replacement policy", () => {
 
 describe("product conditioning", () => {
   it("maps categories onto hair, clothing, or an accessory sprite", () => {
-    assert.equal(regionMode("wig"), "none");
+    assert.equal(regionMode("wig"), "hair");
     assert.equal(regionMode("shirt"), "clothing");
     assert.equal(regionMode("dress"), "clothing");
     assert.equal(regionMode("glasses"), "none");

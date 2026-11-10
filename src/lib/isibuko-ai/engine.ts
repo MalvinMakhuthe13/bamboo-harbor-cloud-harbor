@@ -1,15 +1,6 @@
-import {
-  FaceLandmarker,
-  FilesetResolver,
-  HandLandmarker,
-  ImageSegmenter,
-  PoseLandmarker,
-  type NormalizedLandmark,
-} from "@mediapipe/tasks-vision";
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
 import {
   clothingQuad,
-  armsAreRaised,
   earringSprite,
   glassesSprite,
   hairFrame,
@@ -28,11 +19,6 @@ import {
 import { COMPOSITE_FRAG, FULLSCREEN_VERT, SPRITE_FRAG, SPRITE_VERT } from "@/lib/isibuko-ai/shaders";
 import type { FrameRequest, LiveMetrics, Pt } from "@/lib/isibuko-ai/types";
 
-const WASM = "/mediapipe";
-const FACE_MODEL = "/models/face_landmarker.task";
-const HAND_MODEL = "/models/hand_landmarker.task";
-const POSE_MODEL = "/models/pose_landmarker_lite.task";
-const SEG_MODEL = "/models/selfie_multiclass.tflite";
 
 export type Drag = { x: number; y: number; hold: boolean };
 
@@ -43,7 +29,8 @@ export type EngineHandle = {
   dispose: () => void;
 };
 
-type Lm = NormalizedLandmark;
+type Lm = { x: number; y: number; z?: number; visibility?: number };
+type Job = "face" | "pose" | "hands" | "segment";
 
 function flip(lm: Lm): Pt {
   return { x: 1 - lm.x, y: lm.y };
@@ -108,9 +95,8 @@ export function startEngine(opts: {
   drag: Drag;
   onMetrics: (metrics: LiveMetrics) => void;
   onStatus: (status: string) => void;
-  autoStudio?: boolean;
 }): EngineHandle {
-  const { video, canvas, getRequest, drag, onMetrics, onStatus, autoStudio } = opts;
+  const { video, canvas, getRequest, drag, onMetrics, onStatus } = opts;
   const glMaybe = canvas.getContext("webgl2", { alpha: false, premultipliedAlpha: false, antialias: false });
   if (!glMaybe) throw new Error("WebGL2 is not available in this browser.");
   const gl: WebGL2RenderingContext = glMaybe;
@@ -190,37 +176,42 @@ export function startEngine(opts: {
     polish: loc("uPolish"),
     nailHalf: loc("uNailHalf"),
     nailTip: loc("uNailTip"),
+    backdrop: loc("uBackdrop"),
+    hasProduct: loc("uHasProduct"),
   };
   const spriteTint = gl.getUniformLocation(spriteProg, "uTint");
   const spriteTintOn = gl.getUniformLocation(spriteProg, "uTintOn");
   const spriteLens = gl.getUniformLocation(spriteProg, "uLens");
 
-  const infer = document.createElement("canvas");
-  const inferCtx = infer.getContext("2d", { willReadFrequently: true });
   const originalError = console.error;
   console.error = (...args: unknown[]) => {
     const text = args.map((item) => (typeof item === "string" ? item : "")).join(" ");
     if (text.includes("INFO:") || text.includes("XNNPACK") || text.includes("TensorFlow")) return;
     originalError.apply(console, args as never);
   };
-  let face: FaceLandmarker | null = null;
-  let pose: PoseLandmarker | null = null;
-  let hands: HandLandmarker | null = null;
-  let segmenter: ImageSegmenter | null = null;
   let disposed = false;
   let raf = 0;
   let clock = 0;
-  let frameN = 0;
+  let landReady = false;
+  let segReady = false;
+  let landInflight = false;
+  let segInflight = false;
+  let delegateName = "CPU";
+  let tracks = 0;
+  let trackMark = performance.now();
+  let trackFps = 0;
+  const landWorker = new Worker("/isibuko/tracker.js");
+  const segWorker = new Worker("/isibuko/tracker.js");
   let source: LiveMetrics["source"] = "off";
   let stopSource: (() => void) | null = null;
+  let stillUploaded = false;
+  let studioImg: HTMLImageElement | null = null;
   let status = "";
   let productUrl = "";
   let productImg: HTMLImageElement | null = null;
   let spriteUrl = "";
   let loadingUrl = "";
   let hasMask = false;
-  let maskNote = "mask off";
-  let maskBuf: Uint8Array | null = null;
   const memory = new Map<string, Pt>();
   const nailBuf = new Float32Array(40);
   let faceLm: Lm[] | null = null;
@@ -234,6 +225,17 @@ export function startEngine(opts: {
   let fpsMark = performance.now();
   let fps = 0;
   let lastMetric = 0;
+  const blit = document.createElement("canvas");
+  const blitCtx = blit.getContext("2d", { alpha: false });
+  const scratch = document.createElement("canvas");
+  const scratchCtx = scratch.getContext("2d", { alpha: false });
+  const probe = document.createElement("canvas");
+  probe.width = 4;
+  probe.height = 4;
+  const probeCtx = probe.getContext("2d", { willReadFrequently: true });
+  let backdrop: [number, number, number] = [0.72, 0.7, 0.67];
+  let loggedFace = false;
+  let probeTick = 0;
 
   function setStatus(next: string) {
     if (next === status) return;
@@ -250,15 +252,34 @@ export function startEngine(opts: {
   function clearSource() {
     stopSource?.();
     stopSource = null;
+    studioImg = null;
+    stillUploaded = false;
+    faceLm = null;
+    poseLm = null;
+    poseWorld = null;
+    handLms = [];
+    hasMask = false;
     source = "off";
   }
 
-  async function useStream(stream: MediaStream, kind: "camera" | "studio", extra?: () => void) {
+  function frameSize(): { w: number; h: number } | null {
+    if (source === "studio" && studioImg?.naturalWidth) return { w: studioImg.naturalWidth, h: studioImg.naturalHeight };
+    if (video.readyState >= 2 && video.videoWidth) return { w: video.videoWidth, h: video.videoHeight };
+    return null;
+  }
+
+  function frameSource(): HTMLVideoElement | HTMLImageElement | null {
+    if (source === "studio" && studioImg) return studioImg;
+    if (video.readyState >= 2 && video.videoWidth) return video;
+    return null;
+  }
+
+  async function useStream(stream: MediaStream, extra?: () => void) {
     clearSource();
     video.srcObject = stream;
     video.muted = true;
     await video.play();
-    source = kind;
+    source = "camera";
     stopSource = () => {
       extra?.();
       stream.getTracks().forEach((track) => track.stop());
@@ -271,47 +292,28 @@ export function startEngine(opts: {
       audio: false,
       video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
     });
-    await useStream(stream, "camera");
+    await useStream(stream);
     setStatus("Live camera. Frames stay on this device.");
   }
 
   async function startStudio() {
     const img = await loadImage("/studio/person.jpg");
-    const still = document.createElement("canvas");
-    still.width = img.naturalWidth;
-    still.height = img.naturalHeight;
-    const ctx = still.getContext("2d");
-    if (!ctx) throw new Error("Could not prepare the studio photograph.");
-    const paint = () => {
-      ctx.drawImage(img, 0, 0);
+    clearSource();
+    studioImg = img;
+    stillUploaded = false;
+    source = "studio";
+    stopSource = () => {
+      studioImg = null;
     };
-    paint();
-    const stream = still.captureStream(20);
-    const timer = window.setInterval(paint, 250);
-    await useStream(stream, "studio", () => window.clearInterval(timer));
-    setStatus("Studio photograph. Start the camera for a live mirror. Same pipeline.");
-  }
-
-  function inferenceFrame() {
-    if (!inferCtx || video.readyState < 2 || !video.videoWidth) return false;
-    const scale = Math.min(1, 256 / Math.max(video.videoWidth, video.videoHeight));
-    const w = Math.max(2, Math.round(video.videoWidth * scale));
-    const h = Math.max(2, Math.round(video.videoHeight * scale));
-    if (infer.width !== w || infer.height !== h) {
-      infer.width = w;
-      infer.height = h;
-    }
-    inferCtx.drawImage(video, 0, 0, w, h);
-    return true;
+    setStatus("Studio photograph for testing only. This is not your camera.");
   }
 
   function resize() {
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-    if (!vw || !vh) return;
-    const scale = Math.min(1, 840 / Math.max(vw, vh));
-    const w = Math.max(2, Math.round(vw * scale));
-    const h = Math.max(2, Math.round(vh * scale));
+    const size = frameSize();
+    if (!size) return;
+    const scale = Math.min(1, 840 / Math.max(size.w, size.h));
+    const w = Math.max(2, Math.round(size.w * scale));
+    const h = Math.max(2, Math.round(size.h * scale));
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
@@ -376,6 +378,7 @@ export function startEngine(opts: {
     const modeId = mode === "clothing" ? 1 : mode === "hair" ? 2 : 0;
     const tint = request.tint;
     const dragPt = { x: drag.x, y: drag.y };
+    const picture = frameSource();
 
     gl.useProgram(composite);
     gl.disable(gl.BLEND);
@@ -383,7 +386,21 @@ export function startEngine(opts: {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, camTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    if (video.readyState >= 2) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    if (picture && source === "studio") {
+      if (!stillUploaded) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, picture);
+        stillUploaded = true;
+      }
+    } else if (picture && blitCtx) {
+      if (blit.width !== canvas.width || blit.height !== canvas.height) {
+        blit.width = canvas.width;
+        blit.height = canvas.height;
+      }
+      blitCtx.drawImage(picture, 0, 0, blit.width, blit.height);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, blit);
+    } else if (picture) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, picture);
+    }
     gl.uniform1i(gl.getUniformLocation(composite, "uCam"), 0);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, prodTex);
@@ -398,6 +415,8 @@ export function startEngine(opts: {
     gl.uniform3f(u.tint, tint?.[0] ?? 1, tint?.[1] ?? 1, tint?.[2] ?? 1);
     gl.uniform1f(u.tintOn, tint ? 1 : 0);
     gl.uniform2f(u.drag, mode === "hair" ? dragPt.x : 0, mode === "hair" ? dragPt.y : 0);
+    gl.uniform1f(u.hasProduct, productImg ? 1 : 0);
+    gl.uniform3f(u.backdrop, backdrop[0], backdrop[1], backdrop[2]);
 
     const facePts = faceLm;
     let hair = facePts
@@ -439,6 +458,10 @@ export function startEngine(opts: {
       if (hipL.y > 1.02) hipL = { ...hipL, y: Math.min(hipL.y, shL.y + shoulderW * 1.2) };
       if (hipR.y > 1.02) hipR = { ...hipR, y: Math.min(hipR.y, shR.y + shoulderW * 1.2) };
     }
+    const elL = poseLm && shL && seen(poseLm[13], 0.2) ? remember("elL", flip(poseLm[13]!)) : shL;
+    const elR = poseLm && shR && seen(poseLm[14], 0.2) ? remember("elR", flip(poseLm[14]!)) : shR;
+    const wrL = poseLm && elL && seen(poseLm[15], 0.2) ? remember("wrL", flip(poseLm[15]!)) : elL;
+    const wrR = poseLm && elR && seen(poseLm[16], 0.2) ? remember("wrR", flip(poseLm[16]!)) : elR;
     const clothing =
       mode === "clothing" && shL && shR && hipL && hipR && category && category !== "wig" && category !== "hat"
         ? clothingQuad({
@@ -450,6 +473,7 @@ export function startEngine(opts: {
             ankleL: poseLm && seen(poseLm[27], 0.2) ? remember("anL", flip(poseLm[27]!)) : null,
             ankleR: poseLm && seen(poseLm[28], 0.2) ? remember("anR", flip(poseLm[28]!)) : null,
             scale: request.sizeScale,
+            sleevesInPhoto: false,
           })
         : null;
     const chin = memory.get("chin") ?? null;
@@ -469,18 +493,14 @@ export function startEngine(opts: {
       vec(u.botR, move(clothing.botR));
       vec(u.shL, move(shL));
       vec(u.shR, move(shR));
-      const elL = poseLm && seen(poseLm[13], 0.2) ? remember("elL", flip(poseLm[13]!)) : shL;
-      const elR = poseLm && seen(poseLm[14], 0.2) ? remember("elR", flip(poseLm[14]!)) : shR;
-      const wrL = poseLm && seen(poseLm[15], 0.2) ? remember("wrL", flip(poseLm[15]!)) : elL;
-      const wrR = poseLm && seen(poseLm[16], 0.2) ? remember("wrR", flip(poseLm[16]!)) : elR;
-      vec(u.elL, move(elL));
-      vec(u.wrL, move(wrL));
-      vec(u.elR, move(elR));
-      vec(u.wrR, move(wrR));
-      const arm = Math.hypot(elL.x - shL.x, elL.y - shL.y);
-      const raised = armsAreRaised({ shoulderL: shL, shoulderR: shR, elbowL: elL, elbowR: elR, wristL: wrL, wristR: wrR });
-      gl.uniform1f(u.armW, Math.max(arm * 0.34, 0.035));
-      gl.uniform1f(u.hasArms, hasSleeves(category) && raised ? 1 : 0);
+      vec(u.elL, move(elL ?? shL));
+      vec(u.wrL, move(wrL ?? elL ?? shL));
+      vec(u.elR, move(elR ?? shR));
+      vec(u.wrR, move(wrR ?? elR ?? shR));
+      const span = Math.hypot(shR.x - shL.x, shR.y - shL.y);
+      const arm = Math.hypot((elL ?? shL).x - shL.x, (elL ?? shL).y - shL.y);
+      gl.uniform1f(u.armW, Math.max(arm * 0.42, span * 0.2));
+      gl.uniform1f(u.hasArms, hasSleeves(category) && elL && wrL && elR && wrR ? 1 : 0);
     } else {
       gl.uniform1f(u.hasArms, 0);
       vec(u.topL, { x: 0, y: 0 });
@@ -537,17 +557,23 @@ export function startEngine(opts: {
         y: (flip(facePts[263]!).y + flip(facePts[362]!).y) / 2,
       });
       const rot = Math.atan2(eyeR.y - eyeL.y, eyeR.x - eyeL.x);
+      const level = eyeL.x <= eyeR.x ? rot : rot + Math.PI;
+      const upright = Math.atan2(Math.sin(level), Math.cos(level));
       const forehead = memory.get("forehead")!;
       const cheekL = memory.get("cheekL")!;
       const cheekR = memory.get("cheekR")!;
       const chin = memory.get("chin")!;
       const faceW = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
       if (category === "glasses") sprites.push(nudge(glassesSprite(eyeL, eyeR, aspect, scale)));
-      if (category === "wig") sprites.push(nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale)));
-      if (category === "hat") sprites.push(nudge(hatSprite(forehead, cheekL, cheekR, rot, aspect, scale, request.productId === "hat-cap")));
+      if (category === "hat") sprites.push(nudge(hatSprite(forehead, cheekL, cheekR, upright, aspect, scale, request.productId === "hat-cap")));
+      if (category === "wig" && hasMask) {
+        const opening = request.productId === "wig-bob" ? 0.37 : request.productId === "wig-braids" ? 0.11 : 0.12;
+        sprites.push(nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale, opening, 0.26)));
+      }
       if (category === "earrings") {
-        sprites.push(nudge(earringSprite(cheekL, faceW, aspect, scale, 0, -1)));
-        sprites.push(nudge(earringSprite(cheekR, faceW, aspect, scale, 0, 1)));
+        const midX = (cheekL.x + cheekR.x) / 2;
+        sprites.push(nudge(earringSprite(cheekL, faceW, aspect, scale, 0, cheekL.x < midX ? -1 : 1)));
+        sprites.push(nudge(earringSprite(cheekR, faceW, aspect, scale, 0, cheekR.x < midX ? -1 : 1)));
       }
       if (category === "necklace") {
         const left = shL ?? { x: chin.x - faceW, y: chin.y + faceW * 0.85 };
@@ -598,71 +624,150 @@ export function startEngine(opts: {
     return { ...sprite, cx: sprite.cx + drag.x, cy: sprite.cy + drag.y };
   }
 
-  function track(now: number) {
-    const request = getRequest();
-    const category = request.category;
-    clock = Math.max(clock + 1, now);
-    try {
-      if (face && frameN % 2 === 0) {
-        const t = performance.now();
-        const res = face.detectForVideo(infer, clock);
-        times.face = performance.now() - t;
-        if (res.faceLandmarks[0]) {
-          faceLm = res.faceLandmarks[0];
-          faceMiss = 0;
-        } else if (++faceMiss > 8) faceLm = null;
-      }
-      const wantPose = !category || category === "shirt" || category === "jacket" || category === "dress" || category === "pants" || category === "watch" || category === "necklace";
-      const wantHands = category === "nails" || category === "ring";
-      const wantSeg = regionMode(category) !== "none";
-      if (pose && wantPose && frameN % 4 === 1) {
-        const t = performance.now();
-        const res = pose.detectForVideo(infer, clock);
-        times.pose = performance.now() - t;
-        if (res.landmarks[0]) {
-          poseLm = res.landmarks[0];
-          poseWorld = res.worldLandmarks[0] ?? null;
-          poseMiss = 0;
-        } else if (++poseMiss > 6) {
-          poseLm = null;
-          poseWorld = null;
-        }
-      }
-      if (hands && wantHands && frameN % 6 === 5) {
-        const t = performance.now();
-        const res = hands.detectForVideo(infer, clock);
-        times.hand = performance.now() - t;
-        handLms = res.landmarks;
-      }
-      if (segmenter && wantSeg && frameN % 8 === 3) {
-        const t = performance.now();
-        const res = segmenter.segmentForVideo(infer, clock);
-        times.segment = performance.now() - t;
-        const mask = res.categoryMask;
-        if (mask) {
-          const src = mask.getAsUint8Array();
-          if (!maskBuf || maskBuf.length !== src.length) maskBuf = new Uint8Array(src.length);
-          maskBuf.set(src);
-          const counts = [0, 0, 0, 0, 0, 0, 0];
-          for (let i = 0; i < maskBuf.length; i += 47) {
-            const value = maskBuf[i] ?? 0;
-            counts[Math.min(6, value)] = (counts[Math.min(6, value)] ?? 0) + 1;
-          }
-          maskNote = `${mask.width}x${mask.height} ${counts.join("/")}`;
-          const rgba = new Uint8Array(mask.width * mask.height * 4);
-          for (let i = 0; i < src.length; i++) rgba[i * 4] = src[i] ?? 0;
-          gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-          gl.bindTexture(gl.TEXTURE_2D, maskTex);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, mask.width, mask.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
-          hasMask = true;
-          mask.close();
-        } else maskNote = "no category mask";
-      }
-    } catch (error) {
-      maskNote = error instanceof Error ? error.message : "Tracking failed on this frame.";
+  let jobCursor = 0;
+
+  function nextLandJob(category: FrameRequest["category"]): Job {
+    const clothing = regionMode(category) === "clothing";
+    const jobs: Job[] = clothing
+      ? ["pose", "face", "pose"]
+      : category === "nails" || category === "ring"
+        ? ["hands", "hands", "face"]
+        : category === "watch" || category === "necklace" || category === "hat"
+          ? ["pose", "face"]
+          : ["face"];
+    const job = jobs[jobCursor % jobs.length] ?? "face";
+    jobCursor += 1;
+    return job;
+  }
+
+  function sampleBackdrop(picture: HTMLVideoElement | HTMLImageElement, w: number, h: number) {
+    if (!probeCtx) return;
+    probeTick += 1;
+    if (probeTick % 12 !== 1) return;
+    probeCtx.drawImage(picture, 0, 0, w, h, 0, 0, 4, 4);
+    const data = probeCtx.getImageData(0, 0, 4, 4).data;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    for (const i of [0, 3, 12, 15]) {
+      r += data[i * 4] ?? 0;
+      g += data[i * 4 + 1] ?? 0;
+      b += data[i * 4 + 2] ?? 0;
     }
-    frameN += 1;
+    backdrop = [r / 4 / 255, g / 4 / 255, b / 4 / 255];
+  }
+
+  function sendFrame(worker: Worker, job: Job, edge: number) {
+    const picture = frameSource();
+    const size = frameSize();
+    if (!picture || !size) return;
+    const scale = Math.min(1, edge / Math.max(size.w, size.h));
+    const w = Math.max(2, Math.round(size.w * scale));
+    const h = Math.max(2, Math.round(size.h * scale));
+    if (!scratchCtx) return;
+    scratch.width = w;
+    scratch.height = h;
+    scratchCtx.drawImage(picture, 0, 0, w, h);
+    clock = Math.max(clock + 1, Math.round(performance.now()));
+    const ts = clock;
+    if (regionMode(getRequest().category) === "hair") sampleBackdrop(picture, size.w, size.h);
+    void createImageBitmap(scratch)
+      .then((bitmap) => {
+        if (disposed) {
+          bitmap.close();
+          if (job === "segment") segInflight = false;
+          else landInflight = false;
+          return;
+        }
+        worker.postMessage({ type: "frame", job, bitmap, ts }, [bitmap]);
+      })
+      .catch((error) => {
+        console.warn(error instanceof Error ? error.message : "Could not copy a frame for tracking.");
+        if (job === "segment") segInflight = false;
+        else landInflight = false;
+      });
+  }
+
+  function pumpLand() {
+    if (landInflight || !landReady || disposed || !frameSource()) return;
+    landInflight = true;
+    sendFrame(landWorker, nextLandJob(getRequest().category), 192);
+  }
+
+  let segNotBefore = 0;
+
+  function pumpSeg() {
+    if (segInflight || !segReady || disposed || !frameSource()) return;
+    if (performance.now() < segNotBefore) return;
+    const category = getRequest().category;
+    const needs = regionMode(category) === "clothing" || regionMode(category) === "hair";
+    if (!needs) return;
+    segInflight = true;
+    sendFrame(segWorker, "segment", times.segment > 420 ? 112 : 144);
+  }
+
+  function uploadMask(width: number, height: number, data: Uint8Array) {
+    const rgba = new Uint8Array(width * height * 4);
+    for (let i = 0; i < data.length; i++) rgba[i * 4] = data[i] ?? 0;
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.bindTexture(gl.TEXTURE_2D, maskTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+    hasMask = true;
+  }
+
+  function applyResult(msg: {
+    job?: Job;
+    ms?: number;
+    face?: Lm[] | null;
+    pose?: Lm[] | null;
+    world?: { x: number; y: number; z: number }[] | null;
+    hands?: Lm[][];
+    mask?: { width: number; height: number; data: Uint8Array } | null;
+    error?: string;
+  }) {
+    const now = performance.now();
+    tracks += 1;
+    if (now - trackMark > 1000) {
+      trackFps = Math.round((tracks * 1000) / (now - trackMark));
+      tracks = 0;
+      trackMark = now;
+    }
+    const ms = msg.ms ?? 0;
+    if (msg.error) console.warn(msg.job, msg.error);
+    if (!loggedFace && msg.job === "face") {
+      loggedFace = true;
+      const info = msg as { count?: number; width?: number; height?: number };
+      console.info(`face frame ${info.width}x${info.height} faces ${info.count ?? 0} in ${ms.toFixed(0)} ms`);
+    }
+    if (msg.job === "face") {
+      times.face = ms;
+      if (msg.face) {
+        faceLm = msg.face;
+        faceMiss = 0;
+      } else if (++faceMiss > 8) faceLm = null;
+    } else if (msg.job === "pose") {
+      times.pose = ms;
+      if (msg.pose) {
+        poseLm = msg.pose;
+        poseWorld = msg.world ?? null;
+        poseMiss = 0;
+      } else if (++poseMiss > 6) {
+        poseLm = null;
+        poseWorld = null;
+      }
+    } else if (msg.job === "hands") {
+      times.hand = ms;
+      handLms = msg.hands ?? [];
+    } else if (msg.job === "segment" && msg.mask) {
+      times.segment = ms;
+      uploadMask(msg.mask.width, msg.mask.height, msg.mask.data);
+      segNotBefore = performance.now() + Math.min(350, Math.max(80, ms * 0.35));
+    } else if (msg.job === "segment") {
+      times.segment = ms;
+    }
+    if (msg.job === "segment") pumpSeg();
+    else pumpLand();
   }
 
   function publish(request: FrameRequest) {
@@ -705,7 +810,8 @@ export function startEngine(opts: {
       handMs: Math.round(times.hand),
       segmentMs: Math.round(times.segment),
       compositeMs: Math.round(times.composite),
-      delegate: "CPU",
+      delegate: landReady || segReady ? delegateName : "loading",
+      trackFps,
       source,
       body,
       productId: request.productId,
@@ -719,12 +825,12 @@ export function startEngine(opts: {
       drag.x *= 0.86;
       drag.y *= 0.86;
     }
-    if (video.readyState < 2 || !video.videoWidth) return;
-    if (!inferenceFrame()) return;
+    if (!frameSource()) return;
     resize();
     const request = getRequest();
     ensureProduct(request.image);
-    track(now);
+    pumpLand();
+    pumpSeg();
     try {
       draw(request);
     } catch (error) {
@@ -732,56 +838,57 @@ export function startEngine(opts: {
     }
     publish(request);
     if (source !== "off") {
-      if (!faceLm && request.category !== "pants" && request.category !== "nails") setStatus("Looking for a face. Face the mirror.");
+      if (!landReady) {
+        setStatus(source === "camera" ? "Live camera is on. The tracker is still loading. The picture keeps moving." : "Studio photograph for testing only. The tracker is still loading.");
+      } else if (!faceLm && request.category !== "pants" && request.category !== "nails") setStatus("Looking for a face. Face the mirror.");
       else if (regionMode(request.category) === "clothing" && !poseLm) setStatus("Step back so both shoulders are in frame.");
       else if (request.category === "nails" && handLms.length === 0) setStatus("Hold a hand up so the nails can be read.");
-      else if (source === "camera") setStatus("Live camera. Changing products does not restart it.");
-      else setStatus("Studio photograph. Start the camera when you want the live mirror.");
+      else if (source === "camera") setStatus("Live camera. You are wearing it. Move — changing the piece does not stop the camera.");
+      else setStatus("Studio photograph for testing only. This is not your camera.");
     }
   }
 
-  async function boot() {
-    setStatus("Loading Isibuko models on this device.");
-    try {
-      const vision = await FilesetResolver.forVisionTasks(WASM);
-      const base = { delegate: "CPU" as const };
-      face = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: { ...base, modelAssetPath: FACE_MODEL },
-        runningMode: "VIDEO",
-        numFaces: 1,
-      });
-      pose = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: { ...base, modelAssetPath: POSE_MODEL },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      });
-      hands = await HandLandmarker.createFromOptions(vision, {
-        baseOptions: { ...base, modelAssetPath: HAND_MODEL },
-        runningMode: "VIDEO",
-        numHands: 2,
-      });
-      segmenter = await ImageSegmenter.createFromOptions(vision, {
-        baseOptions: { ...base, modelAssetPath: SEG_MODEL },
-        runningMode: "VIDEO",
-        outputCategoryMask: true,
-        outputConfidenceMasks: false,
-      });
-      if (disposed) return;
-      setStatus("Models ready.");
-      if (autoStudio) {
-        try {
-          await startStudio();
-        } catch (error) {
-          setStatus(error instanceof Error ? error.message : "The studio photograph could not start.");
-        }
+  function attach(worker: Worker, kind: "land" | "seg") {
+    worker.onmessage = (event: MessageEvent) => {
+      const msg = event.data as { type?: string; message?: string; delegate?: string; job?: Job };
+      if (msg.type === "ready") {
+        if (kind === "land") landReady = true;
+        else segReady = true;
+        if (msg.delegate) delegateName = msg.delegate;
+        if (kind === "land") pumpLand();
+        else pumpSeg();
+        return;
       }
-      raf = requestAnimationFrame(loop);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Isibuko models failed to load.");
-    }
+      if (msg.type === "progress") return;
+      if (msg.type === "error") {
+        if (kind === "land") landInflight = false;
+        else segInflight = false;
+        setStatus(msg.message || "The live tracker failed to start.");
+        return;
+      }
+      if (msg.type === "result") {
+        if (msg.job === "segment") segInflight = false;
+        else landInflight = false;
+        applyResult(event.data as Parameters<typeof applyResult>[0]);
+      }
+    };
+    worker.onerror = () => {
+      if (kind === "land") landInflight = false;
+      else segInflight = false;
+      setStatus("The live tracker stopped. Reload the mirror.");
+    };
   }
 
-  void boot();
+  function boot() {
+    setStatus("Turn on your camera to wear this live.");
+    attach(landWorker, "land");
+    attach(segWorker, "seg");
+    landWorker.postMessage({ type: "init", models: ["face", "pose", "hands"] });
+    segWorker.postMessage({ type: "init", models: ["segment"] });
+    raf = requestAnimationFrame(loop);
+  }
+
+  boot();
 
   return {
     startCamera,
@@ -794,10 +901,8 @@ export function startEngine(opts: {
       disposed = true;
       cancelAnimationFrame(raf);
       clearSource();
-      face?.close();
-      pose?.close();
-      hands?.close();
-      segmenter?.close();
+      landWorker.terminate();
+      segWorker.terminate();
       console.error = originalError;
     },
   };

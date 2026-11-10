@@ -38,12 +38,12 @@ function BenchPage() {
         </p>
         <h2 className="font-display mt-8 text-2xl">What is not done</h2>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-muted">
-          <li>No owned generative video weights. Temporal stability is landmark smoothing and a mask held across frames, not a diffusion prior.</li>
-          <li>A front garment photograph replaces the torso. Sleeves do not yet follow a raised arm, and the shoulder line is a straight fit rather than a draped shoulder.</li>
-          <li>A wig plate is placed on the head. Its transparent face opening still shows the shopper's own hair. It is not a generative hairstyle.</li>
-          <li>Depth is assumed from breadth. There is no depth camera.</li>
-          <li>Side and rear views use the same front photograph, so a hard profile will look less faithful.</li>
-          <li>Physical camera tests in this build use a studio photograph when the preview cannot grant a camera. Frame timings on the mirror are measured; they are not a phone lab report.</li>
+          <li>No owned generative video weights. The mirror composites a product photograph onto the tracked body. It does not synthesise cloth, hair or identity.</li>
+          <li>Clothing replaces the segmented torso and arms, so the old garment is covered where the body is visible. It is still a fitted photograph, not a draped simulation. A chest-up frame cannot show trousers.</li>
+          <li>A wig hides the old hair inside the hair mask and places the product’s own cut on the head. Edges on a busy background are approximate. It is not a generative hairstyle.</li>
+          <li>Glasses, hats, earrings, necklaces, watches and rings are anchored to landmarks. Nails recolour the tracked nail, which needs a visible hand.</li>
+          <li>Depth is assumed from breadth. There is no depth camera. Side and rear views reuse the front photograph.</li>
+          <li>The shopper’s camera is opt-in. The studio photograph is labelled and is never treated as a live camera. Timings on this page’s mirror are measured in the current browser, not a phone lab.</li>
         </ul>
       </div>
     </main>

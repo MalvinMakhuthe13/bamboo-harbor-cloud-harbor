@@ -49,6 +49,8 @@ uniform int uNailCount;
 uniform vec3 uPolish;
 uniform float uNailHalf;
 uniform float uNailTip;
+uniform vec3 uBackdrop;
+uniform float uHasProduct;
 
 vec3 lumaTint(vec3 rgb) {
   if (uTintOn < 0.5) return rgb;
@@ -203,34 +205,20 @@ void main() {
       armL = armSample(p, uShL, uElbowL, uWristL, -1.0);
       armR = armSample(p, uShR, uElbowR, uWristR, 1.0);
     }
-    bool inGeom = sampleUv.x >= 0.0 || armL.x >= 0.0 || armR.x >= 0.0;
-    bool region = (clothes || other || (body && uCoverSkin > 0.5)) && !hair && !face && !bg;
-    if (inGeom && region) {
-      vec2 uv = sampleUv;
-      if (uv.x < 0.0) {
-        if (armL.x >= 0.0) uv = armL;
-        if (armR.x >= 0.0) uv = armR;
-      }
+    bool paintable = (clothes || body || other) && !hair && !face && !bg;
+    bool onSleeve = (armL.x >= 0.0 || armR.x >= 0.0) && paintable;
+    bool onTorso = sampleUv.x >= 0.0 && paintable;
+    if (onTorso || onSleeve) {
+      vec2 uv = onTorso ? sampleUv : (armL.x >= 0.0 ? armL : armR);
       vec4 prod = texture(uProd, uv);
       float green = prod.g - max(prod.r, prod.b);
       if (green > 0.22 && prod.g > 0.25) prod.a = 0.0;
-      if (prod.a > 0.05) {
-        vec3 lit = shade(lumaTint(prod.rgb), cam.rgb);
-        rgb = mix(rgb, lit, prod.a);
-      }
-    }
-  }
-
-  if (uMode == 2 && uHasMask > 0.5 && !protect && !(hand && body)) {
-    float edge = 0.0;
-    vec2 huv = hairSample(p, edge);
-    bool allow = huv.x >= 0.0 && !bg ? true : huv.x >= 0.0;
-    if (face && protect) allow = false;
-    if (huv.x >= 0.0 && edge > 0.0 && allow) {
-      vec4 prod = texture(uProd, huv);
-      float green = prod.g - max(prod.r, prod.b);
-      if (green > 0.22 && prod.g > 0.25) prod.a = 0.0;
-      if (prod.a > 0.04) {
+      if (prod.a > 0.2) {
+        float edge = 1.0;
+        if (clsAt(camUv + vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);
+        if (clsAt(camUv - vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);
+        if (clsAt(camUv + vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
+        if (clsAt(camUv - vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
         vec3 lit = shade(lumaTint(prod.rgb), cam.rgb);
         rgb = mix(rgb, lit, prod.a * edge);
       }
@@ -272,7 +260,7 @@ out vec4 o;
 void main() {
   vec4 s = texture(uSprite, vUv);
   float green = s.g - max(s.r, s.b);
-  if (green > 0.12 && s.g > 0.15) s.a *= clamp(1.0 - (green - 0.08) * 4.0, 0.0, 1.0);
+  if (green > 0.05 && s.g > 0.12) s.a *= clamp(1.0 - green * 10.0, 0.0, 1.0);
   float luma = dot(s.rgb, vec3(0.2126, 0.7152, 0.0722));
   float sat = max(s.r, max(s.g, s.b)) - min(s.r, min(s.g, s.b));
   if (uLens > 0.5 && luma < 0.2 && sat < 0.08) s.a *= 0.28;

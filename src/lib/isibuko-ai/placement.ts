@@ -12,7 +12,7 @@ export const CLASS = {
 export type RegionMode = "none" | "clothing" | "hair";
 
 export function regionMode(category: Category | null): RegionMode {
-  if (category === "wig") return "none";
+  if (category === "wig") return "hair";
   if (category === "shirt" || category === "jacket" || category === "dress" || category === "pants") return "clothing";
   return "none";
 }
@@ -86,6 +86,8 @@ export function clothingQuad(opts: {
   ankleL?: Pt | null;
   ankleR?: Pt | null;
   scale: number;
+  /** When the arms hang, the product photo's own sleeves are mapped with the torso. */
+  sleevesInPhoto?: boolean;
 }): Quad {
   const s = opts.scale;
   if (opts.category === "pants") {
@@ -118,12 +120,14 @@ export function clothingQuad(opts: {
   let botL = scaleAbout(hipMid, add(opts.hipL, up, -torso * extra), s);
   let botR = scaleAbout(hipMid, add(opts.hipR, up, -torso * extra), s);
   if (opts.category === "shirt" || opts.category === "jacket") {
-    const across = norm(sub(opts.shoulderR, opts.shoulderL));
-    const sleeve = span * (opts.category === "jacket" ? 0.16 : 0.1) * s;
-    topL = add(topL, across, -sleeve);
-    topR = add(topR, across, sleeve);
-    botL = add(botL, across, -sleeve * 0.35);
-    botR = add(botR, across, sleeve * 0.35);
+    if (opts.sleevesInPhoto !== false) {
+      const across = norm(sub(opts.shoulderR, opts.shoulderL));
+      const sleeve = span * (opts.category === "jacket" ? 0.16 : 0.1) * s;
+      topL = add(topL, across, -sleeve);
+      topR = add(topR, across, sleeve);
+      botL = add(botL, across, -sleeve * 0.35);
+      botR = add(botR, across, sleeve * 0.35);
+    }
   }
   return { topL, topR, botL, botR };
 }
@@ -193,39 +197,41 @@ export function inEllipse(p: Pt, center: Pt, halfW: number, halfH: number, rot: 
 export type Sprite = { cx: number; cy: number; w: number; h: number; rot: number };
 
 export function glassesSprite(eyeL: Pt, eyeR: Pt, imageAspect: number, scale: number): Sprite {
-  const ipd = Math.max(dist(eyeL, eyeR), 1e-4);
+  const left = eyeL.x <= eyeR.x ? eyeL : eyeR;
+  const right = eyeL.x <= eyeR.x ? eyeR : eyeL;
+  const ipd = Math.max(dist(left, right), 1e-4);
   const w = ipd * 2.55 * scale;
   const h = w * imageAspect;
   return {
-    cx: (eyeL.x + eyeR.x) / 2,
-    cy: (eyeL.y + eyeR.y) / 2 + ipd * 0.06,
+    cx: (left.x + right.x) / 2,
+    cy: (left.y + right.y) / 2 + ipd * 0.12,
     w,
     h,
-    rot: Math.atan2(eyeR.y - eyeL.y, eyeR.x - eyeL.x),
+    rot: Math.atan2(right.y - left.y, right.x - left.x),
   };
 }
 
-export function wigSprite(forehead: Pt, chin: Pt, cheekL: Pt, cheekR: Pt, imageAspect: number, scale: number): Sprite {
+export function wigSprite(forehead: Pt, chin: Pt, cheekL: Pt, cheekR: Pt, imageAspect: number, scale: number, opening = 0.16, holeFrac = 0.26): Sprite {
   const faceW = Math.max(dist(cheekL, cheekR), 1e-4);
-  const faceH = Math.max(chin.y - forehead.y, 0.05);
-  const w = faceW * 2.35 * scale;
+  const left = cheekL.x <= cheekR.x ? cheekL : cheekR;
+  const right = cheekL.x <= cheekR.x ? cheekR : cheekL;
+  const w = (faceW * 0.92 * scale) / Math.max(holeFrac, 0.08);
   const h = w * imageAspect;
-  const opening = 0.2;
-  const crownY = forehead.y - faceH * 0.62;
+  const rot = Math.atan2(right.y - left.y, right.x - left.x);
   return {
-    cx: (cheekL.x + cheekR.x) / 2,
-    cy: crownY - (opening - 0.5) * h,
+    cx: (left.x + right.x) / 2,
+    cy: forehead.y + h * (0.5 - opening),
     w,
     h,
-    rot: Math.atan2(cheekR.y - cheekL.y, cheekR.x - cheekL.x),
+    rot,
   };
 }
 
 export function earringSprite(ear: Pt, faceW: number, imageAspect: number, scale: number, drop: number, side: number): Sprite {
-  const w = faceW * 0.12 * scale;
+  const w = faceW * 0.22 * scale;
   return {
-    cx: ear.x + faceW * 0.2 * side,
-    cy: ear.y + faceW * 0.34 + drop,
+    cx: ear.x + faceW * 0.04 * side,
+    cy: ear.y + faceW * 0.02 + drop,
     w,
     h: w * imageAspect,
     rot: 0,
@@ -238,7 +244,7 @@ export function hatSprite(forehead: Pt, cheekL: Pt, cheekR: Pt, eyeRot: number, 
   const h = w * imageAspect;
   return {
     cx: forehead.x,
-    cy: forehead.y - h * 0.3,
+    cy: forehead.y - h * 0.18,
     w,
     h,
     rot: eyeRot,
