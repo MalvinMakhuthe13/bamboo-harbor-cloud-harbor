@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState } from "./physics.ts";
+import { frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState, stableHairJitter } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -63,4 +63,17 @@ test("invalid pinch samples do not cause an accidental release", () => {
 
 test("an open hand releases an active pinch", () => {
   assert.equal(updatePinchState(true, Number.POSITIVE_INFINITY), false);
+});
+
+
+test("hair lock placement is deterministic across rebuilds", () => {
+  assert.equal(stableHairJitter(12, 1), stableHairJitter(12, 1));
+  assert.notEqual(stableHairJitter(12, 1), stableHairJitter(13, 1));
+});
+
+test("hair lock jitter stays in the unit interval", () => {
+  for (let i = 0; i < 200; i++) {
+    const value = stableHairJitter(i, 2);
+    assert.ok(value >= 0 && value < 1);
+  }
 });
