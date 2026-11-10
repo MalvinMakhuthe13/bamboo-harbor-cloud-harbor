@@ -50,6 +50,10 @@ export type Product = {
   image?: string;
   /** Real product photographs from distinct angles; not yet rendered as a live 3D fit. */
   assetViews?: ProductAssetViews;
+  /** Seller-provided demonstration video for future offline product-motion analysis. */
+  motionReferenceVideo?: string;
+  /** Seller attests they own or have permission to use the motion reference video. */
+  motionReferenceConsent?: boolean;
   sourceUrl?: string;
 };
 
