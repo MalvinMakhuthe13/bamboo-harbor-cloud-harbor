@@ -2,9 +2,10 @@ import { useState } from "react";
 import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-frames";
 import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 import { createProductSegmenter, type ProductSegmentationSample } from "@/lib/tryon/product-segmentation";
-import { buildRelativeHairTrack, summarizeRelativeHairTrack } from "@/lib/tryon/hair-region-tracking";
+import { buildRelativeHairTrack, summarizeRelativeHairTrack, selectSeededHairRegion, type SeededHairRegion } from "@/lib/tryon/hair-region-tracking";
 
-type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string };
+type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string; categoryMask: Uint8Array; maskWidth: number; maskHeight: number };
+type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion };
 type TrackingSummary = {
   frames: number;
   faceFrames: number;
@@ -25,11 +26,13 @@ export function MotionVideoSampler() {
   const [frames, setFrames] = useState<FramePreview[]>([]);
   const [tracking, setTracking] = useState<TrackingSummary | null>(null);
   const [busy, setBusy] = useState(false);
+  const [seedSelection, setSeedSelection] = useState<SeedSelection | null>(null);
 
   async function analyse(file: File | undefined) {
     setError(null);
     setFrames([]);
     setTracking(null);
+    setSeedSelection(null);
     if (!file) {
       setStatus("No video selected.");
       return;
@@ -107,6 +110,9 @@ export function MotionVideoSampler() {
                 timestampMs: frame.timestampMs,
                 dataUrl,
                 maskDataUrl: maskCanvas.toDataURL("image/jpeg", 0.78),
+                categoryMask: segmentation.categoryMask ? new Uint8Array(segmentation.categoryMask) : new Uint8Array(),
+                maskWidth: segmentation.width,
+                maskHeight: segmentation.height,
               });
             }
           }
@@ -185,15 +191,44 @@ export function MotionVideoSampler() {
         </dl>
       )}
       {frames.length > 0 && (
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {frames.map((frame) => (
-            <figure key={frame.timestampMs} className="overflow-hidden rounded-xl border border-line/40">
-              <img src={frame.maskDataUrl} alt={`Semantic segmentation overlay at ${(frame.timestampMs / 1000).toFixed(1)} seconds`} className="aspect-video w-full object-cover" />
-              <figcaption className="px-2 py-1 text-xs text-ink-muted">{(frame.timestampMs / 1000).toFixed(1)}s · segmentation overlay</figcaption>
-            </figure>
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-ink-muted">Overlay key: pink = semantic hair, blue = face skin, amber = clothing. These are broad model classes, not confirmed product boundaries.</p>
+        <>
+          <p className="mt-4 text-sm font-medium">Select the product region</p>
+          <p className="mt-1 text-xs text-ink-muted">Click the centre of the wig or hair product in a frame. The selection is refined against the pink semantic hair mask within a local radius.</p>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {frames.map((frame) => (
+              <figure key={frame.timestampMs} className="overflow-hidden rounded-xl border border-line/40">
+                <button
+                  type="button"
+                  className="relative block w-full cursor-crosshair"
+                  aria-label={`Select hair product region at ${(frame.timestampMs / 1000).toFixed(1)} seconds`}
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+                    const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+                    const result = selectSeededHairRegion(frame.categoryMask, frame.maskWidth, frame.maskHeight, { x, y, radius: 0.18 });
+                    setSeedSelection({ timestampMs: frame.timestampMs, x, y, result });
+                  }}
+                >
+                  <img src={frame.maskDataUrl} alt={`Semantic segmentation overlay at ${(frame.timestampMs / 1000).toFixed(1)} seconds`} className="block w-full" />
+                  {seedSelection?.timestampMs === frame.timestampMs && (
+                    <span className="pointer-events-none absolute rounded-full border-2 border-white bg-clay/20" style={{ left: `${seedSelection.x * 100}%`, top: `${seedSelection.y * 100}%`, width: "36%", aspectRatio: "1", transform: "translate(-50%, -50%)" }} />
+                  )}
+                </button>
+                <figcaption className="px-2 py-1 text-xs text-ink-muted">{(frame.timestampMs / 1000).toFixed(1)}s · click to select</figcaption>
+              </figure>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">Overlay key: pink = semantic hair, blue = face skin, amber = clothing. These are broad model classes, not confirmed product boundaries.</p>
+          {seedSelection && (
+            <div className="mt-3 rounded-xl border border-line/40 p-3 text-sm" aria-live="polite">
+              <p className="font-medium">Selected region · {(seedSelection.timestampMs / 1000).toFixed(1)}s</p>
+              <p className="mt-1 text-ink-muted">{seedSelection.result.pixels.toLocaleString()} hair-class pixels · {(seedSelection.result.ratio * 100).toFixed(2)}% of frame mask</p>
+              {seedSelection.result.bounds
+                ? <p className="mt-1 text-ink-muted">Bounds: x {seedSelection.result.bounds.left.toFixed(2)}–{seedSelection.result.bounds.right.toFixed(2)}, y {seedSelection.result.bounds.top.toFixed(2)}–{seedSelection.result.bounds.bottom.toFixed(2)}</p>
+                : <p className="mt-1 text-clay">No semantic hair pixels found near that point. Try another point on the pink region.</p>}
+            </div>
+          )}
+        </>
       )}
     </section>
   );
