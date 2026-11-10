@@ -790,6 +790,7 @@ export function startEngine(opts: {
     // Resolve local strand contacts after integration so neighbouring locks do not
     // fight each other's Verlet constraints during the same update.
     resolveHairContacts(strands, grabStrand, grabJoint);
+    resolveHairClumps(strands, dt, grabStrand, grabJoint);
     for (const strand of strands) {
       writeRibbon(strand, ribbonWidthCm(state.style));
       if (!strand.ready) strand.ready = true;
@@ -1299,6 +1300,41 @@ function resolveHairContacts(strands: Strand[], grabbedStrand: number, grabbedJo
         a[j].prev.sub(delta);
         b[j].prev.add(delta);
       }
+    }
+  }
+}
+
+
+/**
+ * Soft lock cohesion: neighbouring roots retain a loose shared bundle as the
+ * hair swings. This is deliberately weaker than strand-length constraints and
+ * never welds the ribbons into one rigid sheet.
+ */
+function resolveHairClumps(strands: Strand[], dt: number, grabbedStrand: number, grabbedJoint: number) {
+  const blend = Math.min(0.12, 0.035 * dt * 60);
+  const maxCorrection = 0.08;
+  const delta = new THREE.Vector3();
+  for (let s = 0; s < strands.length - 1; s++) {
+    const a = strands[s];
+    const b = strands[s + 1];
+    const count = Math.min(a.nodes.length, b.nodes.length);
+    const rootGap = a.local.distanceTo(b.local);
+    const restGap = rootGap + 0.18;
+    for (let j = 2; j < count; j++) {
+      if ((s === grabbedStrand && j === grabbedJoint) || (s + 1 === grabbedStrand && j === grabbedJoint)) continue;
+      const pa = a.nodes[j].pos;
+      const pb = b.nodes[j].pos;
+      delta.subVectors(pb, pa);
+      const distance = delta.length();
+      if (distance <= restGap || distance < 1e-6) continue;
+      const amount = Math.min(maxCorrection, (distance - restGap) * blend * 0.5);
+      delta.multiplyScalar(amount / distance);
+      pa.add(delta);
+      pb.sub(delta);
+      // Keep Verlet history aligned with the positional correction so clumping
+      // does not create an artificial impulse on the next frame.
+      a.nodes[j].prev.add(delta);
+      b.nodes[j].prev.sub(delta);
     }
   }
 }
