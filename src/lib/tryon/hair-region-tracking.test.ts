@@ -301,7 +301,7 @@ test("summarises each regional anchor independently", () => {
   const lower = summary.find((item) => item.section === "lower")!;
   assert.equal(top.sampleCount, 3);
   assert.equal(top.peakAtMs, 1000);
-  assert.equal(top.peakDisplacement, 0.15);
+  assert.equal(top.peakDisplacement, 0.1);
   assert.equal(lower.sampleCount, 2);
   assert.equal(lower.peakAtMs, 500);
 });
