@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeHairMotionProxy, analyzeSeededHairMotion, buildRelativeHairTrack, summarizeRelativeHairTrack } from "./hair-region-tracking.ts";
+import { analyzeHairMotionProxy, analyzeSeededHairMotion, buildHairSectionTrack, summarizeHairSectionMotion, buildRelativeHairTrack, summarizeRelativeHairTrack } from "./hair-region-tracking.ts";
 import type { WearerTrackingSample } from "./wearer-tracking.ts";
 import type { ProductSegmentationSample } from "./product-segmentation.ts";
 
@@ -267,4 +267,41 @@ test("reports insufficient selected-component motion when face pairing is unavai
   const summary = analyzeSeededHairMotion(track, [wearer(0, false)]);
   assert.equal(summary.pairedSamples, 0);
   assert.equal(summary.quality, "insufficient");
+});
+
+
+test("builds five face-relative regional anchors from selected component bounds", () => {
+  const track = [{
+    timestampMs: 0,
+    seed: { x: 0.5, y: 0.3 },
+    region: {
+      pixels: 100, ratio: 0.1,
+      bounds: { left: 0.3, top: 0.1, right: 0.7, bottom: 0.7 },
+      center: { x: 0.5, y: 0.4 },
+    },
+    tracked: true,
+    recovered: false,
+  }];
+  const anchors = buildHairSectionTrack(track, [wearer(0)]);
+  assert.equal(anchors.length, 5);
+  assert.deepEqual(anchors.map((item) => item.section), ["top", "left", "centre", "right", "lower"]);
+  assert.ok(anchors.every((item) => Number.isFinite(item.offsetX) && Number.isFinite(item.offsetY)));
+});
+
+test("summarises each regional anchor independently", () => {
+  const observations = [
+    { timestampMs: 0, section: "top" as const, offsetX: 0, offsetY: 0 },
+    { timestampMs: 500, section: "top" as const, offsetX: 0.1, offsetY: 0 },
+    { timestampMs: 1000, section: "top" as const, offsetX: 0.2, offsetY: 0 },
+    { timestampMs: 0, section: "lower" as const, offsetX: 0, offsetY: 0 },
+    { timestampMs: 500, section: "lower" as const, offsetX: 0, offsetY: 0.1 },
+  ];
+  const summary = summarizeHairSectionMotion(observations);
+  const top = summary.find((item) => item.section === "top")!;
+  const lower = summary.find((item) => item.section === "lower")!;
+  assert.equal(top.sampleCount, 3);
+  assert.equal(top.peakAtMs, 1000);
+  assert.equal(top.peakDisplacement, 0.15);
+  assert.equal(lower.sampleCount, 2);
+  assert.equal(lower.peakAtMs, 500);
 });
