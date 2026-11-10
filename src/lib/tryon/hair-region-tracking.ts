@@ -186,3 +186,29 @@ export function trackSeededHairForward(
   }
   return track;
 }
+
+
+/**
+ * Tracks from the selected frame in both temporal directions and returns
+ * points in chronological order. This is still local semantic-mask matching:
+ * it cannot guarantee identity through occlusion or similar adjacent hair.
+ */
+export function trackSeededHairBidirectional(
+  frames: SeededHairFrame[],
+  startIndex: number,
+  seed: HairSeed,
+  searchRadius = 0.18,
+): SeededHairTrackPoint[] {
+  if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex >= frames.length) {
+    throw new RangeError("Start index must refer to an available frame.");
+  }
+  const backwardReversed = trackSeededHairForward(
+    frames.slice(0, startIndex + 1).reverse(),
+    0,
+    seed,
+    searchRadius,
+  );
+  const backward = backwardReversed.reverse().slice(0, -1);
+  const forward = trackSeededHairForward(frames, startIndex, seed, searchRadius);
+  return [...backward, ...forward];
+}
