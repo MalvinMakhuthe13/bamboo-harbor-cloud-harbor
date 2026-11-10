@@ -2,10 +2,10 @@ import { useState } from "react";
 import { extractVideoFrames, validateMotionVideoFile } from "@/lib/tryon/video-frames";
 import { createWearerTrackers, type WearerTrackingSample } from "@/lib/tryon/wearer-tracking";
 import { createProductSegmenter, type ProductSegmentationSample } from "@/lib/tryon/product-segmentation";
-import { buildRelativeHairTrack, summarizeRelativeHairTrack, analyzeHairMotionProxy, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
+import { buildRelativeHairTrack, summarizeRelativeHairTrack, analyzeHairMotionProxy, analyzeSeededHairMotion, selectSeededHairRegion, trackSeededHairBidirectional, type SeededHairRegion, type SeededHairTrackPoint } from "@/lib/tryon/hair-region-tracking";
 
 type FramePreview = { timestampMs: number; dataUrl: string; maskDataUrl: string; categoryMask: Uint8Array; maskWidth: number; maskHeight: number };
-type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion; track: SeededHairTrackPoint[] };
+type SeedSelection = { timestampMs: number; x: number; y: number; result: SeededHairRegion; track: SeededHairTrackPoint[]; motion: ReturnType<typeof analyzeSeededHairMotion> };
 type TrackingSummary = {
   frames: number;
   faceFrames: number;
@@ -29,6 +29,7 @@ export function MotionVideoSampler() {
   const [tracking, setTracking] = useState<TrackingSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [seedSelection, setSeedSelection] = useState<SeedSelection | null>(null);
+  const [wearerSamples, setWearerSamples] = useState<WearerTrackingSample[]>([]);
 
   async function analyse(file: File | undefined) {
     setError(null);
@@ -36,6 +37,7 @@ export function MotionVideoSampler() {
     setMaskFrames([]);
     setTracking(null);
     setSeedSelection(null);
+    setWearerSamples([]);
     if (!file) {
       setStatus("No video selected.");
       return;
@@ -136,6 +138,7 @@ export function MotionVideoSampler() {
       const relativeHairTrack = buildRelativeHairTrack(wearerSamples, segmentationSamples);
       const relativeHairSummary = summarizeRelativeHairTrack(relativeHairTrack);
       const hairMotionProxy = analyzeHairMotionProxy(wearerSamples, relativeHairTrack);
+      setWearerSamples(wearerSamples);
       setFrames(previews);
       setMaskFrames(allMaskFrames);
       setTracking({
@@ -225,7 +228,7 @@ export function MotionVideoSampler() {
                       { x, y, radius: 0.18 },
                     );
                     const result = propagated[0]?.region ?? selectSeededHairRegion(frame.categoryMask, frame.maskWidth, frame.maskHeight, { x, y, radius: 0.18 });
-                    setSeedSelection({ timestampMs: frame.timestampMs, x, y, result, track: propagated });
+                    setSeedSelection({ timestampMs: frame.timestampMs, x, y, result, track: propagated, motion: analyzeSeededHairMotion(propagated, wearerSamples) });
                   }}
                 >
                   <img src={frame.maskDataUrl} alt={`Semantic segmentation overlay at ${(frame.timestampMs / 1000).toFixed(1)} seconds`} className="block w-full" />
@@ -239,12 +242,15 @@ export function MotionVideoSampler() {
               </figure>
             ))}
           </div>
-          <p className="mt-2 text-xs text-ink-muted">Overlay key: pink = semantic hair, blue = face skin, amber = clothing. These are broad model classes, not confirmed product boundaries. Motion response and lag are relative proxies, not calibrated wig physics.</p>
+          <p className="mt-2 text-xs text-ink-muted">Overlay key: pink = semantic hair, blue = face skin, amber = clothing. These are broad model classes, not confirmed product boundaries. Motion response and lag are relative proxies, not calibrated wig physics. Selected-component motion is normalised against face width.</p>
           {seedSelection && (
             <div className="mt-3 rounded-xl border border-line/40 p-3 text-sm" aria-live="polite">
               <p className="font-medium">Selected region · {(seedSelection.timestampMs / 1000).toFixed(1)}s</p>
               <p className="mt-1 text-ink-muted">{seedSelection.result.pixels.toLocaleString()} hair-class pixels · {(seedSelection.result.ratio * 100).toFixed(2)}% of frame mask</p>
               <p className="mt-1 text-ink-muted">Bidirectional tracking: {seedSelection.track.filter((point) => point.tracked).length}/{seedSelection.track.length} frames found · {seedSelection.track.filter((point) => point.recovered).length} recovered after mask loss · {maskFrames.length} masks retained</p>
+              <p className="mt-2 font-medium">Selected-component motion</p>
+              <p className="mt-1 text-ink-muted">Face-relative displacement: {seedSelection.motion.peakFaceRelativeDisplacement.toFixed(3)} · response lag: {seedSelection.motion.responseLagMs === null ? "Unavailable" : `${seedSelection.motion.responseLagMs} ms`}</p>
+              <p className="mt-1 text-ink-muted">Face-paired samples: {seedSelection.motion.pairedSamples} · coverage: {(seedSelection.motion.trackingCoverage * 100).toFixed(0)}% · recovered: {seedSelection.motion.recoveredFrames} · quality: {seedSelection.motion.quality}</p>
               {seedSelection.result.bounds
                 ? <p className="mt-1 text-ink-muted">Bounds: x {seedSelection.result.bounds.left.toFixed(2)}–{seedSelection.result.bounds.right.toFixed(2)}, y {seedSelection.result.bounds.top.toFixed(2)}–{seedSelection.result.bounds.bottom.toFixed(2)}</p>
                 : <p className="mt-1 text-clay">No semantic hair pixels found near that point. Try another point on the pink region.</p>}
