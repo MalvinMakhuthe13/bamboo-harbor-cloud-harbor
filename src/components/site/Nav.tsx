@@ -22,6 +22,9 @@ export function Nav({ tone = "paper" }: { tone?: "paper" | "ink" }) {
         <Link to="/science" className="inline-flex min-h-11 items-center rounded-full px-3">
           Fit math
         </Link>
+        <Link to="/bench" className="inline-flex min-h-11 items-center rounded-full px-3">
+          Engine
+        </Link>
       </nav>
     </header>
   );

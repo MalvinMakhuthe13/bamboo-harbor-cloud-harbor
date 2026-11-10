@@ -1,0 +1,289 @@
+import type { Category, Product, SizeRow, Swatch } from "@/lib/isibuko-ai/types";
+
+const shirtSizes: SizeRow[] = [
+  { label: "S", chest: [82, 90], waist: [66, 74], shoulder: [38, 42] },
+  { label: "M", chest: [90, 98], waist: [74, 82], shoulder: [42, 45] },
+  { label: "L", chest: [98, 106], waist: [82, 92], shoulder: [45, 48] },
+  { label: "XL", chest: [106, 116], waist: [92, 104], shoulder: [48, 52] },
+];
+
+const pantSizes: SizeRow[] = [
+  { label: "S", waist: [66, 74], hip: [88, 96] },
+  { label: "M", waist: [74, 82], hip: [96, 104] },
+  { label: "L", waist: [82, 92], hip: [104, 112] },
+  { label: "XL", waist: [92, 104], hip: [112, 122] },
+];
+
+const wigSizes: SizeRow[] = [
+  { label: "Petite", head: [51, 54] },
+  { label: "Average", head: [54, 57] },
+  { label: "Large", head: [57, 60] },
+];
+
+const glassSizes: SizeRow[] = [
+  { label: "Narrow", face: [11.5, 13] },
+  { label: "Medium", face: [13, 14.4] },
+  { label: "Wide", face: [14.4, 16.2] },
+];
+
+const watchSizes: SizeRow[] = [
+  { label: "S", wrist: [13, 15.5] },
+  { label: "M", wrist: [15.5, 17.5] },
+  { label: "L", wrist: [17.5, 20] },
+];
+
+const ringSizes: SizeRow[] = [
+  { label: "P", finger: [1.45, 1.6] },
+  { label: "R", finger: [1.6, 1.75] },
+  { label: "T", finger: [1.75, 1.95] },
+];
+
+const natural: Swatch = { id: "natural", name: "As photographed", tint: null };
+
+export const CATEGORY_ORDER: Category[] = [
+  "shirt",
+  "jacket",
+  "dress",
+  "pants",
+  "wig",
+  "glasses",
+  "hat",
+  "earrings",
+  "necklace",
+  "watch",
+  "ring",
+  "nails",
+];
+
+export const CATEGORY_LABEL: Record<Category, string> = {
+  shirt: "Shirts",
+  jacket: "Coats",
+  dress: "Dresses",
+  pants: "Trousers",
+  wig: "Hair",
+  glasses: "Glasses",
+  hat: "Hats",
+  earrings: "Earrings",
+  necklace: "Necklaces",
+  watch: "Watches",
+  ring: "Rings",
+  nails: "Nails",
+};
+
+export const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: "shirt-linen",
+    name: "Sand linen",
+    category: "shirt",
+    blurb: "Washed linen shirt. The photograph replaces the shirt you are already wearing.",
+    image: "/catalog/shirt-linen.png",
+    priceZar: 890,
+    sizes: shirtSizes,
+    nail: "almond",
+    swatches: [natural, { id: "ink", name: "Ink", tint: [0.16, 0.15, 0.14] }, { id: "white", name: "White", tint: [0.93, 0.91, 0.86] }],
+  },
+  {
+    id: "shirt-silk",
+    name: "Black silk",
+    category: "shirt",
+    blurb: "Soft silk blouse. Existing cloth inside the torso is replaced, not covered with a cartoon.",
+    image: "/catalog/shirt-silk.png",
+    priceZar: 1240,
+    sizes: shirtSizes,
+    nail: "almond",
+    swatches: [natural, { id: "wine", name: "Wine", tint: [0.42, 0.1, 0.16] }, { id: "ivory", name: "Ivory", tint: [0.9, 0.86, 0.78] }],
+  },
+  {
+    id: "jacket-camel",
+    name: "Camel coat",
+    category: "jacket",
+    blurb: "Wool coat, longer than the shirt. Hair in front of the shoulders stays in front.",
+    image: "/catalog/jacket-camel.png",
+    priceZar: 2890,
+    sizes: shirtSizes,
+    nail: "almond",
+    swatches: [natural, { id: "black", name: "Black", tint: [0.12, 0.11, 0.1] }, { id: "navy", name: "Navy", tint: [0.12, 0.16, 0.28] }],
+  },
+  {
+    id: "dress-slip",
+    name: "Black slip",
+    category: "dress",
+    blurb: "Satin slip. The dress follows the torso and continues past the hip.",
+    image: "/catalog/dress-slip.png",
+    priceZar: 1680,
+    sizes: shirtSizes,
+    nail: "almond",
+    swatches: [natural, { id: "bone", name: "Bone", tint: [0.86, 0.8, 0.7] }, { id: "oxblood", name: "Oxblood", tint: [0.38, 0.08, 0.1] }],
+  },
+  {
+    id: "pants-charcoal",
+    name: "Charcoal trouser",
+    category: "pants",
+    blurb: "Tailored wool trouser. Step back so the hips are in frame.",
+    image: "/catalog/pants-charcoal.png",
+    priceZar: 1420,
+    sizes: pantSizes,
+    nail: "almond",
+    swatches: [natural, { id: "stone", name: "Stone", tint: [0.72, 0.68, 0.6] }, { id: "black", name: "Black", tint: [0.1, 0.1, 0.1] }],
+  },
+  {
+    id: "wig-wave",
+    name: "Espresso wave",
+    category: "wig",
+    blurb: "Long wave with a fringe. Your face stays. The hair region is the wig.",
+    image: "/catalog/wig-wave.png",
+    priceZar: 2100,
+    sizes: wigSizes,
+    nail: "almond",
+    swatches: [natural, { id: "auburn", name: "Auburn", tint: [0.38, 0.18, 0.12] }, { id: "black", name: "Black", tint: [0.08, 0.07, 0.07] }],
+  },
+  {
+    id: "wig-bob",
+    name: "Honey bob",
+    category: "wig",
+    blurb: "Chin-length bob. Drag it and it eases back. The camera does not restart.",
+    image: "/catalog/wig-bob.png",
+    priceZar: 1860,
+    sizes: wigSizes,
+    nail: "almond",
+    swatches: [natural, { id: "copper", name: "Copper", tint: [0.55, 0.28, 0.14] }, { id: "ash", name: "Ash", tint: [0.62, 0.58, 0.52] }],
+  },
+  {
+    id: "wig-braids",
+    name: "Knotless braids",
+    category: "wig",
+    blurb: "Long braids and a lace hairline. Existing hair is what the segmenter replaces.",
+    image: "/catalog/wig-braids.png",
+    priceZar: 2640,
+    sizes: wigSizes,
+    nail: "almond",
+    swatches: [natural, { id: "dark", name: "Dark", tint: [0.1, 0.08, 0.07] }],
+  },
+  {
+    id: "glasses-cateye",
+    name: "Tortoise cat-eye",
+    category: "glasses",
+    blurb: "Acetate frames scaled to the distance between your eyes. Lenses stay clear.",
+    image: "/catalog/glasses-cateye.png",
+    priceZar: 980,
+    sizes: glassSizes,
+    nail: "almond",
+    swatches: [natural],
+  },
+  {
+    id: "glasses-gold",
+    name: "Gold rounds",
+    category: "glasses",
+    blurb: "Thin gold frames. They track the eye line, including when you tilt your head.",
+    image: "/catalog/glasses-gold.png",
+    priceZar: 1120,
+    sizes: glassSizes,
+    nail: "almond",
+    swatches: [natural],
+  },
+  {
+    id: "hat-fedora",
+    name: "Felt fedora",
+    category: "hat",
+    blurb: "Camel fedora sitting on the forehead line. It turns with the head.",
+    image: "/catalog/hat-fedora.png",
+    priceZar: 760,
+    sizes: wigSizes,
+    nail: "almond",
+    swatches: [natural, { id: "black", name: "Black", tint: [0.12, 0.11, 0.1] }],
+  },
+  {
+    id: "hat-cap",
+    name: "Black cap",
+    category: "hat",
+    blurb: "Cotton cap. Brim stays above the eyes.",
+    image: "/catalog/hat-cap.png",
+    priceZar: 420,
+    sizes: wigSizes,
+    nail: "almond",
+    swatches: [natural, { id: "sand", name: "Sand", tint: [0.72, 0.64, 0.5] }],
+  },
+  {
+    id: "earring-hoop",
+    name: "Gold hoop",
+    category: "earrings",
+    blurb: "One hoop at each ear. Drag swings them; they settle when you let go.",
+    image: "/catalog/earring-hoop.png",
+    priceZar: 640,
+    sizes: [],
+    nail: "almond",
+    swatches: [natural],
+  },
+  {
+    id: "necklace-pendant",
+    name: "Oval pendant",
+    category: "necklace",
+    blurb: "Chain across the shoulders, pendant below the chin.",
+    image: "/catalog/necklace-pendant.png",
+    priceZar: 890,
+    sizes: [],
+    nail: "almond",
+    swatches: [natural],
+  },
+  {
+    id: "watch-gold",
+    name: "Gold watch",
+    category: "watch",
+    blurb: "Sits on the wrist and follows the forearm.",
+    image: "/catalog/watch-gold.png",
+    priceZar: 3200,
+    sizes: watchSizes,
+    nail: "almond",
+    swatches: [natural],
+  },
+  {
+    id: "ring-signet",
+    name: "Signet ring",
+    category: "ring",
+    blurb: "On the ring finger. It uses the hand tracker, not a painted hand.",
+    image: "/catalog/ring-signet.png",
+    priceZar: 1540,
+    sizes: ringSizes,
+    nail: "almond",
+    swatches: [natural],
+  },
+  {
+    id: "nails-glass",
+    name: "Glass manicure",
+    category: "nails",
+    blurb: "Colour is mixed into the real nail. The finger underneath is yours.",
+    image: null,
+    priceZar: 380,
+    sizes: [],
+    nail: "almond",
+    swatches: [
+      { id: "petal", name: "Petal", tint: [0.91, 0.68, 0.7] },
+      { id: "ink", name: "Ink", tint: [0.1, 0.09, 0.09] },
+      { id: "wine", name: "Wine", tint: [0.48, 0.09, 0.14] },
+      { id: "cream", name: "Cream", tint: [0.95, 0.9, 0.82] },
+    ],
+  },
+  {
+    id: "nails-square",
+    name: "Square tip",
+    category: "nails",
+    blurb: "A shorter, squarer plate on the same tracked nails.",
+    image: null,
+    priceZar: 380,
+    sizes: [],
+    nail: "square",
+    swatches: [
+      { id: "nude", name: "Nude", tint: [0.86, 0.7, 0.62] },
+      { id: "red", name: "Red", tint: [0.62, 0.08, 0.1] },
+      { id: "white", name: "White", tint: [0.96, 0.95, 0.93] },
+    ],
+  },
+];
+
+export function findProduct(products: Product[], id: string | null | undefined): Product {
+  return products.find((item) => item.id === id) ?? products[0] ?? DEFAULT_PRODUCTS[0]!;
+}
+
+export function productsIn(products: Product[], category: Category): Product[] {
+  return products.filter((item) => item.category === category);
+}
