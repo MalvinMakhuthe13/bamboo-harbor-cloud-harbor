@@ -53,3 +53,21 @@ test("resets smoothing after a long gap and validates options", () => {
   assert.equal(track[1].offsetX, 1);
   assert.throws(() => buildRelativeHairTrack([], [], { smoothing: 0 }));
 });
+
+test("refines a hair mask around a merchant seed point", async () => {
+  const { selectSeededHairRegion } = await import("./hair-region-tracking.ts");
+  const mask = new Uint8Array(100);
+  mask[4 * 10 + 4] = 1;
+  mask[4 * 10 + 5] = 1;
+  mask[5 * 10 + 4] = 1;
+  mask[8 * 10 + 8] = 1;
+  const selected = selectSeededHairRegion(mask, 10, 10, { x: 0.45, y: 0.45, radius: 0.2 });
+  assert.equal(selected.pixels, 3);
+  assert.deepEqual(selected.bounds, { left: 0.4, top: 0.4, right: 0.6, bottom: 0.6 });
+  assert.equal(selected.center?.x, 0.5);
+});
+
+test("rejects invalid merchant seed coordinates", async () => {
+  const { selectSeededHairRegion } = await import("./hair-region-tracking.ts");
+  assert.throws(() => selectSeededHairRegion(new Uint8Array(4), 2, 2, { x: 2, y: 0.5, radius: 0.2 }));
+});
