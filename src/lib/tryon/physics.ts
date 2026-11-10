@@ -353,6 +353,12 @@ export function stableHairJitter(index: number, salt = 0): number {
  * the head. Longer rear sections keep more momentum; short front sections
  * settle sooner. Values remain close to the base Verlet damping.
  */
+/** Convert per-60-FPS Verlet velocity retention into a frame-rate-independent factor. */
+export function verletDampingFactor(dampingRetention: number, dt: number): number {
+  if (!Number.isFinite(dampingRetention) || !Number.isFinite(dt) || dt <= 0) return 0;
+  return Math.pow(clamp(dampingRetention, 0.9, 0.995), Math.min(dt, 1 / 30) * 60);
+}
+
 export function hairStrandDamping(lengthMul: number, rearBias: number): number {
   if (!Number.isFinite(lengthMul) || !Number.isFinite(rearBias)) return VERLET_DAMP;
   const length = clamp(lengthMul, 0.2, 1.4);
