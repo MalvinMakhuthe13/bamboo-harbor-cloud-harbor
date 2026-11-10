@@ -23,6 +23,9 @@ function Studio() {
   const [color, setColor] = useState("#1a1210");
   const [blurb, setBlurb] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [leftImageUrl, setLeftImageUrl] = useState("");
+  const [rightImageUrl, setRightImageUrl] = useState("");
+  const [backImageUrl, setBackImageUrl] = useState("");
   const [imageError, setImageError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -35,8 +38,10 @@ function Studio() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const image = imageUrl.trim();
-    if (image && !/^https:\/\//i.test(image) && !image.startsWith("/")) {
-      setImageError("Use a secure https image URL or a site-local image path.");
+    const views = { front: image, left: leftImageUrl.trim(), right: rightImageUrl.trim(), back: backImageUrl.trim() };
+    const invalidView = Object.values(views).find((url) => url && !/^https:\/\//i.test(url) && !url.startsWith("/"));
+    if (invalidView) {
+      setImageError("Use secure https image URLs or site-local image paths for every angle.");
       return;
     }
     setImageError(null);
@@ -48,6 +53,7 @@ function Studio() {
       color,
       blurb: blurb.trim() || "Added in the studio.",
       image: image || undefined,
+      assetViews: Object.values(views).some(Boolean) ? Object.fromEntries(Object.entries(views).filter(([, url]) => Boolean(url))) : undefined,
       custom: true,
       style: category === "wig" ? "straight" : undefined,
       nailShape: category === "nails" ? "almond" : undefined,
@@ -57,6 +63,9 @@ function Studio() {
     setName("");
     setBlurb("");
     setImageUrl("");
+    setLeftImageUrl("");
+    setRightImageUrl("");
+    setBackImageUrl("");
   }
 
   async function copySnippet(product: Product) {
@@ -167,6 +176,20 @@ function Studio() {
                 <p className="px-3 py-2 text-xs text-ink-muted">Photographic product reference · not yet composited onto the live shopper</p>
               </div>
             )}
+            <div className="mt-4 rounded-2xl border border-line/40 p-3">
+              <p className="text-sm font-medium">Additional product angles</p>
+              <p className="mt-1 text-xs text-ink-muted">Add real left, right and rear photographs. Matching views are the foundation for rotation-aware fitting; these are catalogue assets, not yet a live composite.</p>
+              {([
+                ["Left view", leftImageUrl, setLeftImageUrl],
+                ["Right view", rightImageUrl, setRightImageUrl],
+                ["Back view", backImageUrl, setBackImageUrl],
+              ] as const).map(([label, value, setter]) => (
+                <label key={label} className="mt-3 block text-sm">
+                  {label}
+                  <input className="mt-1 w-full rounded-xl border border-line/50 px-3 py-2" type="text" inputMode="url" placeholder="https://…/product-angle.jpg" value={value} onChange={(event) => { setter(event.target.value); setImageError(null); }} />
+                </label>
+              ))}
+            </div>
             {imageError && <p className="mt-2 text-sm text-clay">{imageError}</p>}
             <label className="mt-3 block text-sm">
               Note
@@ -198,6 +221,7 @@ function Studio() {
                       </p>
                       <p className="mt-1 text-sm">{product.blurb}</p>
                       {product.image && <p className="mt-1 text-xs text-ink-muted">Photograph attached</p>}
+                      {product.assetViews && <p className="mt-1 text-xs text-ink-muted">{Object.keys(product.assetViews).length} photographic angles supplied</p>}
                       {product.sizes.length > 0 && (
                         <p className="mt-2 text-sm text-ink-muted">
                           {product.sizes.map((row) => row.label).join(" · ")}
