@@ -448,9 +448,9 @@ export type HairSectionMotionProfile = {
 };
 
 /**
- * Creates five geometric anchor tracks inside the selected component bounds.
- * These are region anchors, not independently segmented strands or physical
- * hair sections. Coordinates are normalised by face width.
+ * Measures five exclusive pixel regions inside the selected connected
+ * component. These are semantic-mask subregions, not independently identified
+ * strands or physical hair sections. Coordinates are normalised by face width.
  */
 export function buildHairSectionTrack(
   track: SeededHairTrackPoint[],
@@ -508,7 +508,7 @@ export function buildHairSectionTrack(
   return observations;
 }
 
-/** Summarises the movement of each geometric anchor independently. */
+/** Summarises the movement of each mask-derived subregion independently. */
 export function summarizeHairSectionMotion(
   observations: HairSectionObservation[],
 ): HairSectionMotionProfile[] {
