@@ -28,6 +28,13 @@ export type SizeRow = {
   hip?: [number, number];
 };
 
+export type ProductAssetViews = {
+  front?: string;
+  left?: string;
+  right?: string;
+  back?: string;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -41,6 +48,8 @@ export type Product = {
   sizes: SizeRow[];
   priceZar?: number;
   image?: string;
+  /** Real product photographs from distinct angles; not yet rendered as a live 3D fit. */
+  assetViews?: ProductAssetViews;
   sourceUrl?: string;
 };
 
