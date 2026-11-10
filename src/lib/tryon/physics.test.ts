@@ -326,9 +326,10 @@ test("hair motion summary averages each strand equally and reports settled share
 });
 
 test("hair motion summary ignores empty and invalid strands", () => {
-  assert.deepEqual(summarizeHairMotion([[], [1, Number.NaN], [-1], [0.2, 0.4]]), {
-    averageSpeed: 0.3, settledPercent: 100, strandCount: 1,
-  });
+  const result = summarizeHairMotion([[], [1, Number.NaN], [-1], [0.2, 0.4]]);
+  assert.ok(Math.abs(result.averageSpeed - 0.3) < 1e-12);
+  assert.equal(result.settledPercent, 100);
+  assert.equal(result.strandCount, 1);
 });
 
 test("hair motion summary safely handles no strands and invalid thresholds", () => {
