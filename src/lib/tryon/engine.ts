@@ -1347,13 +1347,11 @@ function resolveHairBackContacts(
   const inverseHead = headQuat.clone().invert();
   const localCentre = centre.sub(headPos).applyQuaternion(inverseHead);
   const local = new THREE.Vector3();
-  const correction = new THREE.Vector3();
   const shoulderAxis = new THREE.Vector3().subVectors(shoulderRight, shoulderLeft);
   const shoulderLengthSq = shoulderAxis.lengthSq();
   const closestShoulder = new THREE.Vector3();
   const shoulderDelta = new THREE.Vector3();
   const shoulderClearance = 2.8;
-  const shoulderClearanceSq = shoulderClearance * shoulderClearance;
   // A compact nape volume prevents lower rear locks from cutting through
   // the neck while leaving the scalp roots and front-facing hair untouched.
   const napeCentre = new THREE.Vector3(0, -9.2, -1.6);
