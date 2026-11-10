@@ -111,7 +111,7 @@ export const MODEL_REGISTRY: ModelRecord[] = [
     runs: "not-running",
     live: false,
     weights: "None owned.",
-    notes: "Not shipped. Needs licensed training pairs and a GPU runtime. The live mirror does not pretend this is running.",
+    notes: "Not shipped. The lab page can prepare a shirt packet and will say the checkpoint is missing. It does not call this mirror.",
   },
 ];
 

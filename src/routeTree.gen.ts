@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BenchRouteImport } from './routes/bench'
+import { Route as LabRouteImport } from './routes/lab'
 import { Route as MirrorRouteImport } from './routes/mirror'
 import { Route as RailRouteImport } from './routes/rail'
 import { Route as ScienceRouteImport } from './routes/science'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const BenchRoute = BenchRouteImport.update({
   id: '/bench',
   path: '/bench',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabRoute = LabRouteImport.update({
+  id: '/lab',
+  path: '/lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MirrorRoute = MirrorRouteImport.update({
@@ -50,6 +56,7 @@ const StudioRoute = StudioRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/bench': typeof BenchRoute
+  '/lab': typeof LabRoute
   '/mirror': typeof MirrorRoute
   '/rail': typeof RailRoute
   '/science': typeof ScienceRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/bench': typeof BenchRoute
+  '/lab': typeof LabRoute
   '/mirror': typeof MirrorRoute
   '/rail': typeof RailRoute
   '/science': typeof ScienceRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/bench': typeof BenchRoute
+  '/lab': typeof LabRoute
   '/mirror': typeof MirrorRoute
   '/rail': typeof RailRoute
   '/science': typeof ScienceRoute
@@ -74,15 +83,16 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/bench' | '/mirror' | '/rail' | '/science' | '/studio'
+  fullPaths: '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/bench' | '/mirror' | '/rail' | '/science' | '/studio'
-  id: '__root__' | '/' | '/bench' | '/mirror' | '/rail' | '/science' | '/studio'
+  to: '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio'
+  id: '__root__' | '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BenchRoute: typeof BenchRoute
+  LabRoute: typeof LabRoute
   MirrorRoute: typeof MirrorRoute
   RailRoute: typeof RailRoute
   ScienceRoute: typeof ScienceRoute
@@ -103,6 +113,13 @@ declare module '@tanstack/react-router' {
       path: '/bench'
       fullPath: '/bench'
       preLoaderRoute: typeof BenchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab': {
+      id: '/lab'
+      path: '/lab'
+      fullPath: '/lab'
+      preLoaderRoute: typeof LabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mirror': {
@@ -139,6 +156,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BenchRoute: BenchRoute,
+  LabRoute: LabRoute,
   MirrorRoute: MirrorRoute,
   RailRoute: RailRoute,
   ScienceRoute: ScienceRoute,

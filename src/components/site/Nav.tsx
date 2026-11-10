@@ -25,6 +25,9 @@ export function Nav({ tone = "paper" }: { tone?: "paper" | "ink" }) {
         <Link to="/bench" className="inline-flex min-h-11 items-center rounded-full px-3">
           Engine
         </Link>
+        <Link to="/lab" className="inline-flex min-h-11 items-center rounded-full px-3">
+          Lab
+        </Link>
       </nav>
     </header>
   );

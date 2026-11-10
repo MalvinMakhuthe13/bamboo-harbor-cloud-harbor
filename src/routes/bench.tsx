@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Nav } from "@/components/site/Nav";
 import { MODEL_REGISTRY, WEIGHT_BYTES } from "@/lib/isibuko-ai/registry";
 
@@ -38,13 +38,18 @@ function BenchPage() {
         </p>
         <h2 className="font-display mt-8 text-2xl">What is not done</h2>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-muted">
-          <li>No owned generative video weights. The mirror composites a product photograph onto the tracked body. It does not synthesise cloth, hair or identity.</li>
+          <li>No owned generative video weights. The mirror composites a product photograph onto the tracked body. It does not synthesise cloth, hair or identity. The shirt experiment on the lab page is a separate, inactive pipeline.</li>
           <li>Clothing replaces the segmented torso and arms, so the old garment is covered where the body is visible. It is still a fitted photograph, not a draped simulation. A chest-up frame cannot show trousers.</li>
           <li>A wig hides the old hair inside the hair mask and places the product’s own cut on the head. Edges on a busy background are approximate. It is not a generative hairstyle.</li>
           <li>Glasses, hats, earrings, necklaces, watches and rings are anchored to landmarks. Nails recolour the tracked nail, which needs a visible hand.</li>
           <li>Depth is assumed from breadth. There is no depth camera. Side and rear views reuse the front photograph.</li>
           <li>The shopper’s camera is opt-in. The studio photograph is labelled and is never treated as a live camera. Timings on this page’s mirror are measured in the current browser, not a phone lab.</li>
         </ul>
+        <p className="mt-6 text-sm">
+          <Link to="/lab" className="underline">
+            Shirt experiment (not running)
+          </Link>
+        </p>
       </div>
     </main>
   );
