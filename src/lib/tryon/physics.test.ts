@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { frameDeltaSeconds, stepPendulum, trackingBlend } from "./physics.ts";
+import { frameDeltaSeconds, stepPendulum, trackingBlend, updatePinchState } from "./physics.ts";
 
 test("uses a 60 FPS initial timestep", () => {
   assert.equal(frameDeltaSeconds(100, null), 1 / 60);
@@ -43,4 +43,19 @@ test("tracking blend is frame-rate consistent over equal elapsed time", () => {
   const at30 = 1 - Math.pow(1 - trackingBlend(1 / 30, 12), 1);
   const at60 = 1 - Math.pow(1 - trackingBlend(1 / 60, 12), 2);
   assert.ok(Math.abs(at30 - at60) < 1e-10);
+});
+
+
+test("pinch requires a deliberate close threshold", () => {
+  assert.equal(updatePinchState(false, 0.06), false);
+  assert.equal(updatePinchState(false, 0.05), true);
+});
+
+test("pinch hysteresis prevents flicker near the close threshold", () => {
+  assert.equal(updatePinchState(true, 0.06), true);
+  assert.equal(updatePinchState(true, 0.079), false);
+});
+
+test("invalid pinch samples do not cause an accidental release", () => {
+  assert.equal(updatePinchState(true, Number.NaN), true);
 });
