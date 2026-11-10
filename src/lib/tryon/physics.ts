@@ -322,3 +322,10 @@ export function updatePinchState(wasPinching: boolean, distance: number, close =
   if (distance === Number.POSITIVE_INFINITY) return false;
   return wasPinching ? distance < release : distance < close;
 }
+
+/** Stable per-lock variation. Rebuilding a style must not reshuffle the wig layout. */
+export function stableHairJitter(index: number, salt = 0): number {
+  if (!Number.isFinite(index) || !Number.isFinite(salt)) return 0.5;
+  const value = Math.sin((index + 1) * 127.1 + salt * 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
