@@ -499,9 +499,9 @@ export function startEngine(opts: {
       2 * (headQuat.w * headQuat.y + headQuat.x * headQuat.z),
       1 - 2 * (headQuat.y * headQuat.y + headQuat.z * headQuat.z),
     );
-    const yawRate = angleDeltaRadians(yawNow, prevYaw);
+    const yawDelta = angleDeltaRadians(yawNow, prevYaw);
     prevYaw = yawNow;
-    const swung = stepPendulum(swing, swingVel, yawRate, dt);
+    const swung = stepPendulum(swing, swingVel, yawDelta, dt);
     swing = swung.swing;
     swingVel = swung.vel;
 
