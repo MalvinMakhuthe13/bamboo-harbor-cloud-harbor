@@ -83,3 +83,66 @@ export function summarizeRelativeHairTrack(track: RelativeHairObservation[]) {
     verticalJitter: Math.sqrt(track.reduce((sum, item) => sum + (item.offsetY - my) ** 2, 0) / track.length),
   };
 }
+
+export type HairSeed = { x: number; y: number; radius: number };
+export type SeededHairRegion = {
+  pixels: number;
+  ratio: number;
+  bounds: { left: number; top: number; right: number; bottom: number } | null;
+  center: { x: number; y: number } | null;
+};
+
+/**
+ * Refines a semantic hair mask around a merchant-selected seed point.
+ * The radius is normalised to the shorter mask dimension. This is a spatial
+ * selection aid, not instance segmentation or temporal identity tracking.
+ */
+export function selectSeededHairRegion(
+  categories: Uint8Array,
+  width: number,
+  height: number,
+  seed: HairSeed,
+): SeededHairRegion {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 ||
+      categories.length !== width * height) {
+    throw new RangeError("Mask dimensions and data length are invalid.");
+  }
+  if (![seed.x, seed.y, seed.radius].every(Number.isFinite) ||
+      seed.x < 0 || seed.x > 1 || seed.y < 0 || seed.y > 1 ||
+      seed.radius <= 0 || seed.radius > 1) {
+    throw new RangeError("Seed coordinates must be in [0, 1] and radius in (0, 1].");
+  }
+  const seedX = seed.x * width;
+  const seedY = seed.y * height;
+  const radius = seed.radius * Math.min(width, height);
+  const radiusSquared = radius * radius;
+  let pixels = 0;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const dx = x + 0.5 - seedX;
+      const dy = y + 0.5 - seedY;
+      if (dx * dx + dy * dy > radiusSquared || categories[y * width + x] !== 1) continue;
+      pixels++;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  const bounds = pixels ? {
+    left: minX / width,
+    top: minY / height,
+    right: (maxX + 1) / width,
+    bottom: (maxY + 1) / height,
+  } : null;
+  return {
+    pixels,
+    ratio: pixels / categories.length,
+    bounds,
+    center: bounds ? { x: (bounds.left + bounds.right) / 2, y: (bounds.top + bounds.bottom) / 2 } : null,
+  };
+}
