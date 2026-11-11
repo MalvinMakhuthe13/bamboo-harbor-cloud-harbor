@@ -9,6 +9,8 @@ attachments
 .node_modules.lock
 dist
 *.log
+__pycache__/
+*.pyc
 
 # Model weights and training sets stay out of Git.
 weights/
