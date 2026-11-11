@@ -157,6 +157,18 @@ describe("product conditioning", () => {
     );
   });
 
+  it("rejects a folded garment quad with crossed corners", () => {
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: 0.3, y: 0.3 },
+        topR: { x: 0.7, y: 0.3 },
+        botL: { x: 0.7, y: 0.7 },
+        botR: { x: 0.3, y: 0.7 },
+      }),
+      false,
+    );
+  });
+
   it("accepts a normal upper-body garment quad", () => {
     assert.equal(
       isPlausibleClothingQuad({
