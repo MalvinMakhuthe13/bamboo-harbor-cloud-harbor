@@ -1,5 +1,2 @@
-# Do not install this file into the Kaggle system environment.
-# services/isibuko-infer/install_isolated.py creates a venv with --system-site-packages.
-# numpy==2.2.6 and pillow==12.3.0 are installed there only when the image does not already
-# provide them, and only with --no-deps. Torch is never installed or upgraded.
-# The measured image is torch 2.11.0+cu130. Replacing it would drop CUDA.
+# Do not pip install this file. The Kaggle notebook uses the image interpreter as it is.
+# A missing numpy, Pillow, or torch import is a hard stop. Nothing is installed or upgraded.

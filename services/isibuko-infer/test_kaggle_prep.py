@@ -12,9 +12,10 @@ from PIL import Image
 
 from dataset_gate import admit, approve, catalog_drafts, content_id, correct, file_hash, problems, set_rights, write_manifest
 from dinov2_experiment import extract_patch_features, fit_splits, load_checkpoint, load_feature_images, run_experiment, save_checkpoint
-from install_isolated import ensure_venv_pip, install
+from dependency_check import check_dependencies, diagnostic, main as dependency_main
 from garment_intel import PARTS
 from gpu_probe import probe_gpu
+from install_isolated import ensure_venv_pip, install
 from kaggle_setup import BRANCH, REPO, build_report, clone_plan, main, prepare_checkout, read_git_token
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -256,13 +257,76 @@ class KagglePrepTests(unittest.TestCase):
         self.assertNotIn("torch", " ".join(pip[0]))
         self.assertTrue(missing["pipCalled"])
 
+    def test_notebook_uses_the_existing_interpreter_and_does_not_install(self):
         notebook = json.loads((ROOT / "kaggle" / "isibuko-gpu-setup.ipynb").read_text(encoding="utf-8"))
         code = ["".join(cell["source"]) for cell in notebook["cells"] if cell["cell_type"] == "code"]
-        self.assertIn("install_isolated.py", code[1])
-        self.assertNotIn("requirements-kaggle.txt", code[1])
+        joined = "\n".join(code)
+        self.assertNotIn("install_isolated.py", joined)
+        self.assertNotIn("ensurepip", joined)
+        self.assertNotIn("venv", joined)
+        self.assertNotIn("pip", joined)
+        self.assertIn("sys.executable", code[1])
+        self.assertIn("dependency_check.py", code[1])
+        self.assertIn("sys.executable", code[-1])
+        self.assertIn("gpuName", code[-1])
+        self.assertIn("vramMb", code[-1])
         self.assertNotIn("SystemExit", code[-1])
         self.assertIn("--require-gpu", code[-1])
         self.assertIn("RuntimeError", code[-1])
+
+        def missing_numpy(name):
+            if name == "numpy":
+                raise ModuleNotFoundError("No module named 'numpy'")
+            if name == "PIL":
+                return type("Pillow", (), {"__version__": "12.3.0"})()
+            raise ModuleNotFoundError(f"No module named {name}")
+
+        report = check_dependencies(missing_numpy)
+        self.assertFalse(report["ok"])
+        self.assertFalse(report["installed"])
+        self.assertIn("numpy", report["missing"])
+        self.assertIn("Nothing was installed", diagnostic(report))
+        self.assertEqual(dependency_main(missing_numpy), 3)
+
+        class Version:
+            cuda = "13.0"
+
+        class Cuda:
+            def is_available(self):
+                return True
+
+            def get_device_name(self, index):
+                del index
+                return "Tesla T4"
+
+            def get_device_properties(self, index):
+                del index
+                return type("Props", (), {"total_memory": 14911 * 1024 * 1024})()
+
+        class Torch:
+            __version__ = "2.11.0+cu130"
+            version = Version()
+            cuda = Cuda()
+
+        modules = {
+            "numpy": type("Numpy", (), {"__version__": "2.2.6"})(),
+            "PIL": type("Pillow", (), {"__version__": "12.3.0"})(),
+            "torch": Torch(),
+        }
+
+        def present(name):
+            if name not in modules:
+                raise ModuleNotFoundError(name)
+            return modules[name]
+
+        found = check_dependencies(present)
+        self.assertTrue(found["ok"])
+        self.assertFalse(found["installed"])
+        self.assertTrue(found["torch"]["cudaAvailable"])
+        self.assertEqual(found["torch"]["cudaVersion"], "13.0")
+        self.assertEqual(found["torch"]["gpuName"], "Tesla T4")
+        self.assertEqual(found["torch"]["vramMb"], 14911)
+        self.assertEqual(dependency_main(present), 0)
 
     def test_venv_pip_is_bootstrapped_without_the_system_pip(self):
         def recording(ready_at):
