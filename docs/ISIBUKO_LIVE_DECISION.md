@@ -95,7 +95,11 @@ The fastest credible route to the live product is:
 
 1. Leave the still FASHN run gated. Use it later, if approved, only to learn shirt fidelity. Do not call it once per frame.
 2. Do not integrate Lucy, and do not integrate the non-commercial video try-on weights.
-3. Treat Apache Wan plus StreamDiffusionV2 as the streaming substrate to study, not as try-on. The missing piece is original product-and-identity conditioning on top of a stream, fed by the camera track that now exists.
-4. Build that conditioning only after one real still exists and a GPU is approved. Until then the schedule stays on the photographic fallback.
+3. Wan2.1-T2V-1.3B is an Apache-2.0 text-to-video prior, not try-on. StreamDiffusionV2's code repository and model card are tagged Apache-2.0, but the paper builds on CausVid, and CausVid `LICENSE.md` is CC BY-NC-SA 4.0. The combined stack is not commercially cleared. Neither system accepts a merchant sku, a garment image, or a pose.
+4. Keep building the live foundation on CPU without waiting for the still benchmark. Perception, the product lock, the temporal schedule, and the conditioning packet do not need a `tryon.png`. The still FASHN run stays a separate gated experiment. It is not a prerequisite. The schedule stays on the photographic fallback until a commercially cleared video model is actually attached. Do not attach one in this phase.
 
 No download, GPU, or API spend is requested by this note.
+
+## Correction, 11 November 2026
+
+The still-image benchmark remains gated and is not cancelled. It is not a mandatory prerequisite for live-video engineering. Phase 2 of the live foundation (perception cache, product lock, temporal engine, conditioning packet, synthetic laboratory) proceeds on CPU with no weights and no generated frames. `39097cb` is unchanged: the flat-lay route is still unrun, and the NVIDIA parser is still refused.
