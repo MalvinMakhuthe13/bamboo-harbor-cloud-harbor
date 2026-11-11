@@ -15,6 +15,9 @@ export default tseslint.config(
       ".nitro/**",
       "node_modules/**",
       "src/routeTree.gen.ts",
+      // Vendored MediaPipe build. Project code under public/isibuko stays linted.
+      // services/ and kaggle/ are Python and are not ignored; their checks are the Python suites.
+      "public/mediapipe/**",
     ],
   },
   js.configs.recommended,

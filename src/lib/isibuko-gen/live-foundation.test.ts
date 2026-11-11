@@ -15,7 +15,7 @@ const HASH_B = "b".repeat(64);
 
 function pose(shift: number): Landmark[] {
   const point = (x: number, y: number): Landmark => ({ x, y, visibility: 1 });
-  const marks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0 }));
+  const marks: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0 }));
   marks[0] = point(0.5, 0.18);
   marks[11] = point(0.4 + shift, 0.34);
   marks[12] = point(0.6 + shift, 0.34);

@@ -1298,7 +1298,7 @@ export function startEngine(opts: {
   return finger.tip.distanceTo(finger.base) / FINGER_LENGTH_TO_BREADTH;
   }
 
-  let raf = requestAnimationFrame(loop);
+  const raf = requestAnimationFrame(loop);
   layout();
   const onResize = () => layout();
   window.addEventListener("resize", onResize);

@@ -323,7 +323,7 @@ export function startEngine(opts: {
     return null;
   }
 
-  async function useStream(stream: MediaStream, extra?: () => void) {
+  async function applyStream(stream: MediaStream, extra?: () => void) {
     clearSource();
     video.srcObject = stream;
     video.muted = true;
@@ -361,7 +361,7 @@ export function startEngine(opts: {
       audio: false,
       video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
     });
-    await useStream(stream);
+    await applyStream(stream);
     setStatus("Live camera. Frames stay on this device.");
   }
 
@@ -500,7 +500,7 @@ export function startEngine(opts: {
     gl.uniform3f(u.backdrop, backdrop[0], backdrop[1], backdrop[2]);
 
     const facePts = faceLm;
-    let hair = facePts
+    const hair = facePts
       ? hairFrame(
           remember("forehead", flip(facePts[10]!)),
           remember("chin", flip(facePts[152]!)),
@@ -1041,7 +1041,7 @@ export function startEngine(opts: {
   };
   document.addEventListener("visibilitychange", onVisibility);
 
-  function loop(now: number) {
+  function loop(_now: number) {
     if (disposed) return;
     raf = requestAnimationFrame(loop);
     if (pageHidden) return;
