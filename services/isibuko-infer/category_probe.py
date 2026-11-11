@@ -1,8 +1,7 @@
 """Offline CLIP category probe.
 
 This scores one product photograph against five fixed text prompts.
-The score is a cosine similarity. It is not a probability and it is not stored on a product.
-and it is not written to the wardrobe or the merchant review store.
+The score is a cosine similarity. It is not a probability, and it is not written to the wardrobe or the merchant review store.
 The model files are read from a local directory. This module does not download them.
 """
 
