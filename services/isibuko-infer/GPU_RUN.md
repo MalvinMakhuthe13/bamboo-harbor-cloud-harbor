@@ -4,6 +4,19 @@ Not executed. Do not run this until the weights download, a CUDA GPU, and a righ
 
 The service listens on `127.0.0.1` only. A success is a file named `tryon.png` written by `TryOnModel`. A refusal has `generated: false` and `image: null`.
 
+## Audit before any download
+
+From a clone of the Apache source, with no packages installed:
+
+```bash
+cd services/isibuko-infer
+python3 -c "import json,dependency_audit; from pathlib import Path; print(json.dumps(dependency_audit.audit_checkout(Path('/absolute/path/fashn-vton-1.5')), indent=2))"
+```
+
+On 11 November 2026 that audit of commit-depth clone of `fashn-AI/fashn-vton-1.5` reported `parserReachableFromRunner: false` and `parserReachableFromPackage: true`. The parser text is only in `pipeline.py` and `preprocessing/agnostic.py`. The stock `import fashn_vton` loads `pipeline.py`. The isolated runner must not.
+
+This audit does not execute the model. Do not continue to the download until that result is still false and the download is approved.
+
 ## What to install
 
 Do not `pip install fashn-human-parser`. Do not `pip install -e` the FASHN repository as published: its package import loads the parser.
