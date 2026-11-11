@@ -16,6 +16,7 @@ import { Route as MirrorRouteImport } from './routes/mirror'
 import { Route as RailRouteImport } from './routes/rail'
 import { Route as ScienceRouteImport } from './routes/science'
 import { Route as StudioRouteImport } from './routes/studio'
+import { Route as AnnotateRouteImport } from './routes/annotate'
 import { Route as WardrobeRouteImport } from './routes/wardrobe'
 
 const IndexRoute = IndexRouteImport.update({
@@ -53,6 +54,11 @@ const StudioRoute = StudioRouteImport.update({
   path: '/studio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnnotateRoute = AnnotateRouteImport.update({
+  id: '/annotate',
+  path: '/annotate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WardrobeRoute = WardrobeRouteImport.update({
   id: '/wardrobe',
   path: '/wardrobe',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/rail': typeof RailRoute
   '/science': typeof ScienceRoute
   '/studio': typeof StudioRoute
+  '/annotate': typeof AnnotateRoute
   '/wardrobe': typeof WardrobeRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/rail': typeof RailRoute
   '/science': typeof ScienceRoute
   '/studio': typeof StudioRoute
+  '/annotate': typeof AnnotateRoute
   '/wardrobe': typeof WardrobeRoute
 }
 export interface FileRoutesById {
@@ -88,14 +96,15 @@ export interface FileRoutesById {
   '/rail': typeof RailRoute
   '/science': typeof ScienceRoute
   '/studio': typeof StudioRoute
+  '/annotate': typeof AnnotateRoute
   '/wardrobe': typeof WardrobeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio' | '/wardrobe'
+  fullPaths: '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio' | '/annotate' | '/wardrobe'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio' | '/wardrobe'
-  id: '__root__' | '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio' | '/wardrobe'
+  to: '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio' | '/annotate' | '/wardrobe'
+  id: '__root__' | '/' | '/bench' | '/lab' | '/mirror' | '/rail' | '/science' | '/studio' | '/annotate' | '/wardrobe'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -106,6 +115,7 @@ export interface RootRouteChildren {
   RailRoute: typeof RailRoute
   ScienceRoute: typeof ScienceRoute
   StudioRoute: typeof StudioRoute
+  AnnotateRoute: typeof AnnotateRoute
   WardrobeRoute: typeof WardrobeRoute
 }
 
@@ -160,6 +170,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/annotate': {
+      id: '/annotate'
+      path: '/annotate'
+      fullPath: '/annotate'
+      preLoaderRoute: typeof AnnotateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/wardrobe': {
       id: '/wardrobe'
       path: '/wardrobe'
@@ -178,6 +195,7 @@ const rootRouteChildren: RootRouteChildren = {
   RailRoute: RailRoute,
   ScienceRoute: ScienceRoute,
   StudioRoute: StudioRoute,
+  AnnotateRoute: AnnotateRoute,
   WardrobeRoute: WardrobeRoute,
 }
 export const routeTree = rootRouteImport
