@@ -49,6 +49,7 @@ uniform int uNailCount;
 uniform vec3 uPolish;
 uniform float uNailHalf;
 uniform float uNailTip;
+uniform float uNailStart;
 uniform vec3 uBackdrop;
 uniform float uHasProduct;
 
@@ -173,10 +174,13 @@ float nailMask(vec2 p) {
     vec2 d = p - base;
     float along = dot(d, dir) / L;
     float across = dot(d, vec2(-dir.y, dir.x)) / L;
-    if (along > 0.42 && along < uNailTip && abs(across) < uNailHalf) {
-      float side = smoothstep(uNailHalf, uNailHalf * 0.45, abs(across));
-      float end = smoothstep(uNailTip, uNailTip - 0.22, along);
-      m = max(m, side * end);
+    float taper = mix(0.86, 0.58, smoothstep(uNailStart, uNailTip, along));
+    float halfWidth = uNailHalf * taper;
+    if (along > uNailStart && along < uNailTip && abs(across) < halfWidth) {
+      float side = 1.0 - smoothstep(halfWidth * 0.78, halfWidth, abs(across));
+      float root = smoothstep(uNailStart, uNailStart + 0.035, along);
+      float end = 1.0 - smoothstep(uNailTip - 0.035, uNailTip, along);
+      m = max(m, side * root * end);
     }
   }
   return m;
