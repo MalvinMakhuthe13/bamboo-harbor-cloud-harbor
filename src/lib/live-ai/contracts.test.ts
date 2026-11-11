@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   assertLiveSupported,
-  LiveAiError,
   validatePhotoRequest,
   type LiveAiProvider,
   type PhotoTryOnRequest,
-} from "./contracts";
+} from "./contracts.ts";
 
 const validRequest: PhotoTryOnRequest = {
   mode: "photo",
@@ -32,7 +32,7 @@ const validRequest: PhotoTryOnRequest = {
 
 describe("Isibuko Live AI contracts", () => {
   it("accepts an explicitly consented, rights-cleared photo request", () => {
-    expect(() => validatePhotoRequest(validRequest)).not.toThrow();
+    assert.doesNotThrow(() => validatePhotoRequest(validRequest));
   });
 
   it("rejects requests without explicit consent", () => {
@@ -40,8 +40,9 @@ describe("Isibuko Live AI contracts", () => {
       ...validRequest,
       consent: { ...validRequest.consent, granted: false as true },
     };
-    expect(() => validatePhotoRequest(request)).toThrowError(
-      expect.objectContaining({ code: "CONSENT_REQUIRED" }),
+    assert.throws(
+      () => validatePhotoRequest(request),
+      (error: unknown) => (error as { code?: string }).code === "CONSENT_REQUIRED",
     );
   });
 
@@ -50,8 +51,9 @@ describe("Isibuko Live AI contracts", () => {
       ...validRequest,
       product: { ...validRequest.product, rightsConfirmed: false },
     };
-    expect(() => validatePhotoRequest(request)).toThrowError(
-      expect.objectContaining({ code: "ASSET_RIGHTS_REQUIRED" }),
+    assert.throws(
+      () => validatePhotoRequest(request),
+      (error: unknown) => (error as { code?: string }).code === "ASSET_RIGHTS_REQUIRED",
     );
   });
 
@@ -60,8 +62,9 @@ describe("Isibuko Live AI contracts", () => {
       ...validRequest,
       image: new Blob(["not an image"], { type: "text/plain" }),
     };
-    expect(() => validatePhotoRequest(request)).toThrowError(
-      expect.objectContaining({ code: "INVALID_IMAGE" }),
+    assert.throws(
+      () => validatePhotoRequest(request),
+      (error: unknown) => (error as { code?: string }).code === "INVALID_IMAGE",
     );
   });
 
@@ -81,8 +84,9 @@ describe("Isibuko Live AI contracts", () => {
       },
     } satisfies LiveAiProvider;
 
-    expect(() => assertLiveSupported(provider)).toThrowError(
-      expect.objectContaining({ code: "UNSUPPORTED_MODE" }),
+    assert.throws(
+      () => assertLiveSupported(provider),
+      (error: unknown) => (error as { code?: string }).code === "UNSUPPORTED_MODE",
     );
   });
 });

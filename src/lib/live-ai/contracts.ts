@@ -83,9 +83,16 @@ export interface LiveAiProvider {
 }
 
 export class LiveAiError extends Error {
+  readonly code:
+    | "CONSENT_REQUIRED"
+    | "ASSET_RIGHTS_REQUIRED"
+    | "UNSUPPORTED_CATEGORY"
+    | "UNSUPPORTED_MODE"
+    | "INVALID_IMAGE";
+
   constructor(
     message: string,
-    readonly code:
+    code:
       | "CONSENT_REQUIRED"
       | "ASSET_RIGHTS_REQUIRED"
       | "UNSUPPORTED_CATEGORY"
@@ -94,6 +101,7 @@ export class LiveAiError extends Error {
   ) {
     super(message);
     this.name = "LiveAiError";
+    this.code = code;
   }
 }
 

@@ -1,0 +1,43 @@
+name: Isibuko visual-fit CI
+
+on:
+  pull_request:
+    branches:
+      - build/isibuko-decart-inspired-live-experience
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isibuko-visual-fit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Tests, types and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run Isibuko visual-fit tests
+        run: node --experimental-strip-types --test src/lib/isibuko-ai/engine-logic.test.ts src/lib/live-ai/contracts.test.ts
+
+      - name: Check TypeScript
+        run: npm run typecheck
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Build application bundle
+        run: node scripts/with-app-env.mjs vite build

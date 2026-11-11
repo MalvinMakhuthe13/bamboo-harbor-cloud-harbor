@@ -9,11 +9,21 @@ import {
   containPoint,
   glassesSprite,
   nailSegments,
+  wigSprite,
+  nailShapeFactors,
   hidesOriginalHair,
   regionMode,
   torsoUv,
 } from "./placement.ts";
 import { MODEL_REGISTRY, WEIGHT_BYTES } from "./registry.ts";
+import { COMPOSITE_FRAG } from "./shaders.ts";
+
+describe("shader edge definitions", () => {
+  it("uses defined ascending smoothstep edges for wig feathering", () => {
+    assert.ok(COMPOSITE_FRAG.includes("1.0 - smoothstep(0.78, 1.0, e)"));
+    assert.ok(!COMPOSITE_FRAG.includes("smoothstep(1.0, 0.78, e)"));
+  });
+});
 
 describe("appearance replacement policy", () => {
   it("never paints the protected face", () => {
@@ -181,6 +191,27 @@ describe("product conditioning", () => {
     const sprite = glassesSprite({ x: 0.4, y: 0.4 }, { x: 0.6, y: 0.4 }, 0.34, 1);
     assert.ok(Math.abs(sprite.w - 0.2 * 2.55) < 1e-6);
     assert.equal(sprite.cx, 0.5);
+  });
+
+  it("keeps polish inside the distal nail plate instead of extending past the fingertip", () => {
+    for (const shape of ["almond", "square", "stiletto"] as const) {
+      const factors = nailShapeFactors(shape);
+      assert.ok(factors.start >= 0.4 && factors.start < factors.tip);
+      assert.ok(factors.tip <= 1);
+      assert.ok(factors.half > 0 && factors.half <= 0.15);
+    }
+  });
+
+  it("sizes the wig plate to a plausible multiple of face width", () => {
+    const face = {
+      forehead: { x: 0.5, y: 0.3 },
+      chin: { x: 0.5, y: 0.7 },
+      cheekL: { x: 0.4, y: 0.5 },
+      cheekR: { x: 0.6, y: 0.5 },
+    };
+    const sprite = wigSprite(face.forehead, face.chin, face.cheekL, face.cheekR, 1.1, 1, 0.12, 0.42);
+    assert.ok(sprite.w / 0.2 < 2.3);
+    assert.ok(sprite.w / 0.2 > 2.0);
   });
 
   it("reads ten nail tips from two hands", () => {

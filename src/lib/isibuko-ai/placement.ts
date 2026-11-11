@@ -333,10 +333,12 @@ export function nailSegments(hands: Pt[][]): { tip: Pt; base: Pt }[] {
   return out.slice(0, 10);
 }
 
-export function nailShapeFactors(shape: NailShape): { half: number; tip: number } {
-  if (shape === "square") return { half: 0.22, tip: 1.02 };
-  if (shape === "stiletto") return { half: 0.12, tip: 1.32 };
-  return { half: 0.17, tip: 1.14 };
+export function nailShapeFactors(shape: NailShape): { half: number; start: number; tip: number } {
+  // Hand landmarks span the distal finger segment, not the nail plate itself.
+  // Keep polish on the fingertip and stop before it spills beyond the fingertip.
+  if (shape === "square") return { half: 0.13, start: 0.48, tip: 0.94 };
+  if (shape === "stiletto") return { half: 0.105, start: 0.45, tip: 0.98 };
+  return { half: 0.12, start: 0.46, tip: 0.96 };
 }
 
 export function containPoint(opts: {
