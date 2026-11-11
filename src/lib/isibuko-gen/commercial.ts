@@ -47,7 +47,7 @@ export const COMMERCIAL_PATHS: CommercialPath[] = [
     finetune: "Apache-2.0 allows adaptation. No Isibuko fine-tune exists, and none is started.",
     productConditioning: "Yes. Person image plus garment image, category tops. That matches a shirt still, not a video.",
     whyNotInstalled:
-      "Image model. It cannot keep a shirt coherent while someone turns. Downloading it would not make the mirror generative, and it has not been downloaded.",
+      "Still image only. The try-on weight card is Apache-2.0, but the pipeline also depends on FASHN Human Parser, whose card says it inherits the NVIDIA Source Code License for SegFormer. That dependency is not cleared. Weights are not downloaded.",
     source: "https://huggingface.co/fashn-ai/fashn-vton-1.5",
   },
   {
