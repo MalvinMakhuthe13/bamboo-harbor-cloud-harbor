@@ -84,6 +84,27 @@ function scaleAbout(center: Pt, p: Pt, s: number): Pt {
 
 export type Quad = { topL: Pt; topR: Pt; botL: Pt; botR: Pt };
 
+
+/**
+ * Reject implausible tracker geometry before it reaches the garment shader.
+ * A bad pose should temporarily hide the preview, never stretch a product
+ * across the frame or paint it at a guessed location.
+ */
+export function isPlausibleClothingQuad(quad: Quad): boolean {
+  const points = [quad.topL, quad.topR, quad.botL, quad.botR];
+  if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) return false;
+  if (points.some((point) => point.x < -0.2 || point.x > 1.2 || point.y < -0.2 || point.y > 1.2)) return false;
+
+  const topWidth = dist(quad.topL, quad.topR);
+  const bottomWidth = dist(quad.botL, quad.botR);
+  const length = dist(mid(quad.topL, quad.topR), mid(quad.botL, quad.botR));
+  if (topWidth < 0.045 || topWidth > 0.82) return false;
+  if (bottomWidth < 0.035 || bottomWidth > 1.05) return false;
+  if (length < 0.055 || length > 1.15) return false;
+  const widthRatio = bottomWidth / topWidth;
+  return widthRatio >= 0.35 && widthRatio <= 2.2;
+}
+
 export function clothingQuad(opts: {
   shoulderL: Pt;
   shoulderR: Pt;
