@@ -20,6 +20,7 @@ import {
   type PartName,
   type Point,
 } from "@/lib/isibuko-gen/annotate";
+import { packageImageName, storeZip } from "@/lib/isibuko-gen/dataset-zip";
 
 const STORAGE_KEY = "isibuko-annotation-session";
 
@@ -37,6 +38,7 @@ export function AnnotationStudio() {
   const [showMask, setShowMask] = useState(true);
   const [preview, setPreview] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const filesRef = useRef<Map<string, Uint8Array>>(new Map());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const active = session.samples.find((sample) => sample.sampleId === activeId) ?? null;
 
@@ -130,6 +132,7 @@ export function AnnotationStudio() {
       });
       const digest = await sha256(file);
       const sampleId = `${file.name}-${digest.slice(0, 8)}`;
+      filesRef.current.set(sampleId, new Uint8Array(await file.arrayBuffer()));
       setSession((current) => {
         const next = structuredClone(current);
         if (!next.samples.some((sample) => sample.assetHash === digest)) {
@@ -146,12 +149,25 @@ export function AnnotationStudio() {
     localStorage.setItem(STORAGE_KEY, sessionJson(session));
   }
 
-  function exportJson() {
-    const blob = new Blob([sessionJson(session)], { type: "application/json" });
+  function exportZip() {
+    const files: { name: string; data: Uint8Array }[] = [];
+    const samples = session.samples.map((sample) => ({ ...sample, imageFile: packageImageName(sample.sampleId, sample.imageName) }));
+    const missing = [];
+    for (const sample of samples) {
+      const data = filesRef.current.get(sample.sampleId);
+      if (!data) missing.push(sample.imageName);
+      else files.push({ name: sample.imageFile, data });
+    }
+    if (missing.length) {
+      setError(`Import the photograph again before exporting: ${missing.join(", ")}`);
+      return;
+    }
+    files.unshift({ name: "session.json", data: new TextEncoder().encode(JSON.stringify({ version: 1, samples })) });
+    const blob = new Blob([storeZip(files)], { type: "application/zip" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "isibuko-annotations.json";
+    link.download = "isibuko-dataset.zip";
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -254,8 +270,9 @@ export function AnnotationStudio() {
           <p className="text-ink-muted">Logos, material, and pattern are not inferred from this form. SHA-256 {active.assetHash.slice(0, 16)} stays the image identity.</p>
           <div className="flex gap-2">
             <button type="button" className="rounded bg-ink px-3 py-2 text-paper" onClick={save}>Save</button>
-            <button type="button" className="rounded border px-3 py-2" onClick={exportJson}>Export</button>
+            <button type="button" className="rounded border px-3 py-2" onClick={exportZip}>Export dataset ZIP</button>
           </div>
+          <p className="text-ink-muted">Upload that ZIP to Kaggle and run <code>python3 services/isibuko-infer/import_dataset.py --zip /kaggle/working/isibuko-dataset.zip --dest /kaggle/working/isibuko-dataset</code>. The importer writes the manifest and masks. It does not approve the rows.</p>
         </section>
       ) : null}
     </div>
