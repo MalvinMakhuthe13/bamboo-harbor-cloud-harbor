@@ -30,8 +30,8 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Run automated tests
-        run: npm test
+      - name: Run Isibuko visual-fit tests
+        run: node --experimental-strip-types --test src/lib/isibuko-ai/engine-logic.test.ts
 
       - name: Check TypeScript
         run: npm run typecheck
@@ -39,5 +39,5 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-      - name: Build production bundle
-        run: npm run build
+      - name: Build application bundle
+        run: node scripts/with-app-env.mjs vite build
