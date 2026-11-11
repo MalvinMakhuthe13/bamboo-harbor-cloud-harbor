@@ -102,7 +102,21 @@ export function isPlausibleClothingQuad(quad: Quad): boolean {
   if (bottomWidth < 0.035 || bottomWidth > 1.05) return false;
   if (length < 0.055 || length > 1.15) return false;
   const widthRatio = bottomWidth / topWidth;
-  return widthRatio >= 0.35 && widthRatio <= 2.2;
+  if (widthRatio < 0.35 || widthRatio > 2.2) return false;
+
+  // The shader assumes a non-folded garment surface. Reject crossed or
+  // concave corners so a bad landmark order cannot mirror/fold the texture.
+  const polygon = [quad.topL, quad.topR, quad.botR, quad.botL];
+  const crosses = polygon.map((point, index) => {
+    const next = polygon[(index + 1) % polygon.length]!;
+    const after = polygon[(index + 2) % polygon.length]!;
+    return (next.x - point.x) * (after.y - next.y) - (next.y - point.y) * (after.x - next.x);
+  });
+  const nonZero = crosses.filter((value) => Math.abs(value) > 1e-5);
+  if (nonZero.length !== 4) return false;
+  const clockwise = nonZero.every((value) => value > 0);
+  const counterClockwise = nonZero.every((value) => value < 0);
+  return clockwise || counterClockwise;
 }
 
 export function clothingQuad(opts: {
