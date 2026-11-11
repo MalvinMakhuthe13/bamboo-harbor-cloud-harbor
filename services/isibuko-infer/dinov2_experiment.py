@@ -1,6 +1,8 @@
-"""Frozen DINOv2-small experiment. It does not download or train unless every gate is open.
+"""Frozen DINOv2-small features plus a small prediction head.
 
-The synthetic drawing run in garment_intel.py is not this experiment and is not a garment model.
+This is not a generative try-on model, not a pixel segmentation model,
+not a live-video model, and not a garment deformation model.
+readyForLive stays false. The synthetic drawing run is a different experiment.
 """
 
 from __future__ import annotations
@@ -41,6 +43,12 @@ def expected_resources() -> dict:
         "diskNote": "The notebook measures free space. The weight figure is 22.1M parameters times 4 bytes, not a downloaded file size.",
         "trained": False,
         "syntheticSmokeIsThisModel": False,
+        "whatThisIs": "A frozen feature extractor plus a small prediction head.",
+        "notGenerativeTryOn": True,
+        "notPixelSegmentation": True,
+        "notLiveVideo": True,
+        "notDeformation": True,
+        "readyForLive": False,
     }
 
 
@@ -75,6 +83,11 @@ def gate(manifest_path: Path, env: dict) -> dict:
         "val": val,
         "downstream": DOWNSTREAM,
         "readyForLive": False,
+        "modelClass": "frozen-feature-extractor-plus-prediction-head",
+        "notGenerativeTryOn": True,
+        "notPixelSegmentation": True,
+        "notLiveVideo": True,
+        "notDeformation": True,
     }
 
 
@@ -104,6 +117,44 @@ def extract_patch_features(image_paths: list[Path], weight_dir: Path):
             tokens = model(**batch).last_hidden_state
         rows.append(tokens[:, 1:, :].mean(dim=1).squeeze(0).detach().cpu().numpy())
     return np.stack(rows)
+
+
+def fit_splits(features: np.ndarray, rows: list[dict], step, steps: int = 200, seed: int = 4) -> dict:
+    """Train only on train rows. Validation is not sampled. The test split is not touched."""
+    train = [index for index, row in enumerate(rows) if row.get("split") == "train"]
+    val = [index for index, row in enumerate(rows) if row.get("split") == "val"]
+    held = [index for index, row in enumerate(rows) if row.get("split") == "test"]
+    if not train:
+        raise ValueError("No train rows.")
+    sku_map: dict[str, int] = {}
+    for index in train:
+        sku_map.setdefault(rows[index]["sku"], len(sku_map))
+    from garment_intel import CATEGORIES, PARTS
+
+    def arrays(indices: list[int]):
+        category = np.array([CATEGORIES.index(rows[index]["category"]) for index in indices], np.int64)
+        parts = np.array([[1.0 if rows[index]["parts"][name]["present"] else 0.0 for name in PARTS] for index in indices], np.float32)
+        proportions = np.array([rows[index]["proportions"] for index in indices], np.float32)
+        sku = np.array([sku_map.get(rows[index]["sku"], -1) for index in indices], np.int64)
+        return category, parts, proportions, sku
+
+    rng = np.random.default_rng(seed)
+    train_index = np.array(train)
+    for _ in range(steps):
+        pick = rng.choice(train_index, size=min(16, len(train_index)), replace=False)
+        picked = [int(index) for index in pick]
+        category, parts, proportions, sku = arrays(picked)
+        step(picked, features[pick], category, parts, proportions, sku)
+    return {
+        "trainCount": len(train),
+        "valCount": len(val),
+        "testCount": len(held),
+        "trainIndex": train,
+        "valIndex": val,
+        "testIndex": held,
+        "skuMap": sku_map,
+        "valLabels": arrays(val) if val else None,
+    }
 
 
 def run_experiment(manifest_path: Path, env: dict | None = None) -> dict:
@@ -138,23 +189,34 @@ def run_experiment(manifest_path: Path, env: dict | None = None) -> dict:
     download_backbone(weights)
     rows = load_manifest(manifest_path)
     features = extract_patch_features([Path(row["imagePath"]) for row in rows], weights)
-    from garment_intel import CATEGORIES, PARTS, GarmentHead, evaluate
+    from garment_intel import GarmentHead, evaluate
 
-    category = np.array([CATEGORIES.index(row["category"]) for row in rows], np.int64)
-    parts = np.array([[1.0 if row["parts"][name]["present"] else 0.0 for name in PARTS] for row in rows], np.float32)
-    proportions = np.array([row["proportions"] for row in rows], np.float32)
-    skus = sorted({row["sku"] for row in rows})
-    sku = np.array([skus.index(row["sku"]) for row in rows], np.int64)
     head = GarmentHead(in_dim=features.shape[1], hidden=128, identity=16, seed=4)
-    rng = np.random.default_rng(4)
-    for _ in range(200):
-        pick = rng.choice(features.shape[0], size=min(16, features.shape[0]), replace=False)
-        head.step(features[pick], category[pick], parts[pick], proportions[pick], sku[pick], 0.05)
-    val_index = np.array([row["split"] == "val" for row in rows])
-    metrics = evaluate(head, features[val_index], {"category": category[val_index], "parts": parts[val_index], "proportions": proportions[val_index], "sku": sku[val_index]})
+
+    def step(indices, feats, category, parts, proportions, sku):
+        del indices
+        head.step(feats, category, parts, proportions, sku, 0.05)
+
+    summary = fit_splits(features, rows, step)
+    val = np.array(summary["valIndex"])
+    category, parts, proportions, sku = summary["valLabels"]
+    metrics = evaluate(head, features[val], {"category": category, "parts": parts, "proportions": proportions, "sku": sku})
     checkpoint = Path(env["ISIBUKO_CHECKPOINT"])
-    save_trained_checkpoint(checkpoint, head, {**metrics, "rows": len(rows)})
-    return {**decision, "started": True, "downloaded": True, "trained": True, "willDownload": True, "willTrain": True, "metrics": metrics, "checkpoint": checkpoint.name, "readyForLive": False}
+    save_trained_checkpoint(checkpoint, head, {**metrics, "rows": summary["valCount"]})
+    return {
+        **decision,
+        "started": True,
+        "downloaded": True,
+        "trained": True,
+        "willDownload": True,
+        "willTrain": True,
+        "metrics": metrics,
+        "trainCount": summary["trainCount"],
+        "valCount": summary["valCount"],
+        "testCount": summary["testCount"],
+        "checkpoint": checkpoint.name,
+        "readyForLive": False,
+    }
 
 
 def save_trained_checkpoint(path: Path, head, metrics: dict) -> None:
