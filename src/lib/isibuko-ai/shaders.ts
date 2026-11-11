@@ -156,7 +156,7 @@ vec2 hairSample(vec2 p, out float edge) {
   float nx = x / max(uHairHalf.x, 1e-4);
   float ny = y / max(uHairHalf.y, 1e-4);
   float e = nx * nx + ny * ny;
-  edge = smoothstep(1.0, 0.78, e);
+  edge = 1.0 - smoothstep(0.78, 1.0, e);
   if (e > 1.0) return vec2(-1.0);
   return vec2(nx * 0.5 + 0.5, 0.5 - ny * 0.5);
 }
