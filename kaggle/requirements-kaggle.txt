@@ -1,0 +1,4 @@
+# Dataset tools only. Do not reinstall torch here: a Kaggle GPU image already has a CUDA build,
+# and replacing it can silently leave CUDA unavailable.
+numpy==2.2.6
+pillow==12.3.0

@@ -19,5 +19,10 @@ services/isibuko-infer/weights/
 services/isibuko-infer/inputs/
 services/isibuko-infer/outputs/
 
+# Kaggle session files and checkpoints stay out of Git.
+services/isibuko-infer/runs/
+kaggle/secrets.env
+*.npz
+
 # Upstream checkouts stay outside this repository.
 third_party/
