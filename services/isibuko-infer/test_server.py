@@ -133,6 +133,37 @@ def test_http_tryon_refuses_the_nvidia_parser_without_writing_an_image():
         httpd.shutdown()
 
 
+def test_static_audit_sees_the_parser_only_on_the_stock_import():
+    import tempfile
+    from pathlib import Path
+
+    import dependency_audit
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        src = root / "src"
+        files = {
+            "fashn_vton/__init__.py": "from .pipeline import TryOnPipeline\n",
+            "fashn_vton/pipeline.py": "from fashn_human_parser import FashnHumanParser\n",
+            "fashn_vton/tryon_mmdit.py": "import torch\n",
+            "fashn_vton/utils/__init__.py": "from .tensor import normalize_uint8_to_neg1_1\n",
+            "fashn_vton/utils/tensor.py": "import numpy\n",
+            "fashn_vton/dwpose/__init__.py": "from .dwpose import DWposeDetector\n",
+            "fashn_vton/dwpose/dwpose.py": "import numpy\n",
+            "fashn_vton/preprocessing/__init__.py": "from .agnostic import create_clothing_agnostic_image\n",
+            "fashn_vton/preprocessing/agnostic.py": "from fashn_human_parser import LABELS_TO_IDS\n",
+            "fashn_vton/preprocessing/transforms.py": "import numpy\n",
+        }
+        for rel, text in files.items():
+            path = src / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        report = dependency_audit.audit_checkout(root)
+        assert report["parserReachableFromPackage"] is True
+        assert report["parserReachableFromRunner"] is False
+        assert report["executed"] is False
+
+
 if __name__ == "__main__":
     test_missing_weights_do_not_generate()
     test_http_status_is_a_refusal()
@@ -141,4 +172,5 @@ if __name__ == "__main__":
     test_nvidia_parser_is_refused_and_flat_lay_does_not_pretend_to_run()
     test_checkout_scan_rejects_a_parser_import()
     test_http_tryon_refuses_the_nvidia_parser_without_writing_an_image()
+    test_static_audit_sees_the_parser_only_on_the_stock_import()
     print("infer service tests passed")

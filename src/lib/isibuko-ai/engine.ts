@@ -19,6 +19,7 @@ import {
 } from "@/lib/isibuko-ai/placement";
 import { COMPOSITE_FRAG, FULLSCREEN_VERT, SPRITE_FRAG, SPRITE_VERT } from "@/lib/isibuko-ai/shaders";
 import { applySessionEvent, reuseLiveCamera } from "@/lib/isibuko-ai/session";
+import { noteLiveFrame } from "@/lib/isibuko-gen/live-track";
 import {
   FULL_FRAME,
   GPU_STALL_MS,
@@ -703,6 +704,19 @@ export function startEngine(opts: {
       switchStarted = 0;
     }
     times.composite = performance.now() - t0;
+    try {
+      noteLiveFrame({
+        atMs: performance.now(),
+        cameraSession,
+        productId: request.productId,
+        pose: Boolean(poseLm),
+        fps,
+        compositeMs: times.composite,
+        receipt: null,
+      });
+    } catch {
+      // A feasibility log must not stop the camera or the photographic composite.
+    }
   }
 
   function nudge(sprite: Sprite): Sprite {
