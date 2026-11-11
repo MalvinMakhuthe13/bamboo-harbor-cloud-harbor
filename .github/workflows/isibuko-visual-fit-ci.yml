@@ -4,9 +4,6 @@ on:
   pull_request:
     branches:
       - build/isibuko-decart-inspired-live-experience
-  push:
-    branches:
-      - fix/live-wig-nail-fit-2026-11-11
 
 permissions:
   contents: read
