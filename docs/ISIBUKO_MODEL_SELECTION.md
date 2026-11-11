@@ -24,12 +24,13 @@ It is the only still try-on in this set whose own try-on repository and try-on w
 
 ## Why it is not approved to run
 
-1. `model.safetensors` is not on disk. The project README describes about 2 GB via `scripts/download_weights.py`, plus a human parser of about 244 MB. This machine has about 45 GB free (measured 11 November 2026). Storage is not the blocker. Approval is.
-2. [FASHN Human Parser](https://huggingface.co/fashn-ai/fashn-human-parser) is tagged `nvidia-segformer`. The card says the model inherits the NVIDIA Source Code License for SegFormer. That is not Apache-2.0. The try-on licence does not clear the parser.
-3. No GPU is approved. FASHN’s own page says about 5 seconds on an H100 and about 8 GB. Isibuko has not measured that.
-4. There is no rights-cleared person photograph and merchant garment pair in this repository.
+1. `model.safetensors` is not on disk, and neither are the DWPose ONNX files (`yolox_l.onnx`, `dw-ll_ucoco_384.onnx`) from `fashn-ai/DWPose`, whose card is tagged Apache-2.0. The try-on file is about 2 GB. This machine had about 45 GB free on 11 November 2026. Storage is not the blocker. Approval is.
+2. The stock `TryOnPipeline` always imports FASHN Human Parser. That package's LICENSE says the weights inherit the NVIDIA Source Code License for SegFormer. Section 3.3 of that licence says the work may be used only non-commercially, meaning research or evaluation. Isibuko does not use it.
+3. Reading `pipeline.py` on 11 November 2026: the diffusion call receives the person image, garment image, two pose images, and a category id. It does not receive the label map. The map is discarded when `segmentation_free` is true and the garment photo type is `flat-lay`. A model-worn garment photo still needs the map. MediaPipe's six selfie classes and SAM 2's prompted masks do not emit the 18 class ids, so they are not substitutes. No other commercially cleared try-on checkpoint in the register is a better first still.
+4. No GPU is approved. FASHN's own page says about 5 seconds on an H100 and about 8 GB. Isibuko has not measured that.
+5. There is no rights-cleared person photograph and exact merchant garment pair in this repository.
 
-`STILL_BASELINE.blockedBy` in `src/lib/isibuko-gen/baseline.ts` lists those four blockers. `baselineCanRun()` returns false.
+`baselineCanRun()` still returns false. The first legal route is documented in `docs/ISIBUKO_PARSER_DECISION.md` and `services/isibuko-infer/GPU_RUN.md`. It has not been executed.
 
 ## Not selected for video
 
