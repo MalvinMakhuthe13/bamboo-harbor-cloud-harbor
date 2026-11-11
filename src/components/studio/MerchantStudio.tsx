@@ -2,9 +2,11 @@ import { useState, type FormEvent } from "react";
 import { Nav } from "@/components/site/Nav";
 import { CATEGORY_LABEL, CATEGORY_ORDER } from "@/lib/isibuko-ai/catalog";
 import { buildCustomProduct, canAddCustom, CUSTOM_CAP, tintToHex, type ProductDraft } from "@/lib/isibuko-ai/merchant";
+import { factText, FIELD_LABEL, type ProductFact } from "@/lib/isibuko-ai/product-facts";
 import { assertProductImage, imageMagic } from "@/lib/isibuko-ai/privacy";
 import { useWardrobe } from "@/lib/isibuko-ai/store";
 import type { Category } from "@/lib/isibuko-ai/types";
+import { acceptPending, deleteProductReview, readProductReview, rejectPending, replacePhotograph, reviewPhotograph, writeProductReview, type ReviewRecord } from "@/lib/isibuko-ai/visual-review";
 
 const empty = {
   name: "",
@@ -24,6 +26,9 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
   const [draft, setDraft] = useState(empty);
   const [editing, setEditing] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [review, setReview] = useState<ReviewRecord | null>(null);
+  const [reviewerName, setReviewerName] = useState("");
+  const [discarded, setDiscarded] = useState("");
   const custom = data.products.filter((item) => item.custom);
 
   function set<K extends keyof typeof empty>(key: K, value: (typeof empty)[K]) {
@@ -48,7 +53,8 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
       imageType: draft.imageType,
       imageBytes: draft.imageBytes,
     };
-    const built = buildCustomProduct(body, editing ?? `custom-${Date.now()}`);
+    const id = editing ?? `custom-${Date.now()}`;
+    const built = buildCustomProduct(body, id);
     if (!built.ok) {
       setNote(built.errors[0] ?? "The piece could not be saved.");
       return;
@@ -59,8 +65,11 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
         ? current.products.map((item) => (item.id === editing ? built.product : item))
         : [...current.products, built.product],
     }));
+    if (review) writeProductReview(window.localStorage, id, review);
     setDraft(empty);
     setEditing(null);
+    setReview(null);
+    setDiscarded("");
     setNote(editing ? "Updated. It is still only in this browser." : "Added. Open it in the mirror. The photograph is not a measurement.");
   }
 
@@ -127,7 +136,7 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
                 const file = event.target.files?.[0];
                 event.currentTarget.value = "";
                 if (!file) return;
-                void file.arrayBuffer().then((buffer) => {
+                void file.arrayBuffer().then(async (buffer) => {
                   const bytes = new Uint8Array(buffer);
                   const magic = imageMagic(bytes);
                   if (!magic) {
@@ -138,6 +147,15 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
                   if (!checked.ok) {
                     setNote(checked.reason);
                     return;
+                  }
+                  const outcome = await reviewPhotograph({ bytes });
+                  if (!outcome.ok && outcome.hash === null) {
+                    setNote(outcome.reason);
+                    return;
+                  }
+                  if (outcome.hash) {
+                    setReview((current) => replacePhotograph(current, outcome.hash as string, outcome.ok ? outcome.pending : []));
+                    setDiscarded("");
                   }
                   const blob = new Blob([bytes], { type: magic });
                   const reader = new FileReader();
@@ -151,6 +169,63 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
               }}
             />
           </label>
+          <section className="rounded-2xl border border-line/30 px-4 py-3" aria-live="polite">
+            <p className="text-sm">Photograph observations</p>
+            <p className="mt-1 text-sm text-ink-muted">
+              A handcrafted scan of the file you just chose. It is not a model. Accepted observations are not written into the product. The reviewer name is self-reported, not a signed-in account.
+            </p>
+            {review ? (
+              <div className="mt-3 grid gap-3">
+                <label className="text-sm">
+                  Self-reported reviewer name
+                  <input className="mt-1 min-h-11 w-full rounded-xl border border-line/40 bg-paper px-3" value={reviewerName} onChange={(event) => setReviewerName(event.target.value)} />
+                </label>
+                {review.pending.map((fact) => (
+                  <div key={fact.field} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <p>{FIELD_LABEL[fact.field] ?? fact.field}: {factText(fact)}. Detected. Not verified.</p>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        className="min-h-11"
+                        onClick={() => {
+                          const next = acceptPending(review, fact.field, reviewerName, Date.now());
+                          if (!next.ok) {
+                            setDiscarded(next.reason);
+                            return;
+                          }
+                          setReview(next.record);
+                          setDiscarded("");
+                        }}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        className="min-h-11 text-clay"
+                        onClick={() => {
+                          setReview(rejectPending(review, fact.field));
+                          setDiscarded("Discarded. It was not saved.");
+                        }}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {review.accepted.map((fact) => (
+                  <p key={fact.field} className="text-sm">
+                    {FIELD_LABEL[fact.field] ?? fact.field}: {factText(fact)}. {acceptedLabel(fact)}
+                  </p>
+                ))}
+                {review.pending.length === 0 && review.accepted.length === 0 && (
+                  <p className="text-sm text-ink-muted">No separated foreground was available, so there is nothing to review.</p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-ink-muted">Choose a new photograph to scan it. Editing a piece does not scan the saved photograph again.</p>
+            )}
+            {discarded && <p className="mt-2 text-sm text-ink-muted">{discarded}</p>}
+          </section>
           <button type="submit" className="min-h-11 rounded-full bg-ink px-4 text-paper">
             {editing ? "Update piece" : "Add to the mirror"}
           </button>
@@ -176,6 +251,8 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
                   className="min-h-11 text-sm"
                   onClick={() => {
                     setEditing(product.id);
+                    setReview(readProductReview(window.localStorage, product.id));
+                    setDiscarded("");
                     setDraft({
                       name: product.name,
                       category: product.category,
@@ -196,12 +273,13 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
                 <button
                   type="button"
                   className="min-h-11 text-sm text-clay"
-                  onClick={() =>
+                  onClick={() => {
                     commit((current) => ({
                       ...current,
                       products: current.products.filter((item) => item.id !== product.id),
-                    }))
-                  }
+                    }));
+                    deleteProductReview(window.localStorage, product.id);
+                  }}
                 >
                   Remove
                 </button>
@@ -213,4 +291,9 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
       </div>
     </main>
   );
+}
+
+function acceptedLabel(fact: ProductFact): string {
+  if (fact.source.kind !== "human") return "Self-reported acceptance. Not a signed-in account.";
+  return `Accepted by ${fact.source.acceptedBy}, self-reported. Not a signed-in account.`;
 }
