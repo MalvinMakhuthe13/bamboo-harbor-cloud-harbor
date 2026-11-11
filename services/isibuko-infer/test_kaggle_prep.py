@@ -66,11 +66,17 @@ def make_row(folder: Path, sample_id: str, color, split: str, sku: str, size=(32
         "imagePath": str(image_path),
         "imageWidth": size[0],
         "imageHeight": size[1],
-        "provenance": {"source": "isibuko-studio", "acquired": "2026-11-11", "origin": "studio"},
+        "provenance": {"source": "synthetic-fixture", "acquired": "2026-11-11", "origin": "studio", "method": "generated-for-test"},
         "category": "shirt",
         "licence": "isibuko-owned",
         "commercialUse": True,
-        "consent": {"consentId": "c1", "rights": "isibuko-owned", "allowsTraining": True, "allowsPersonImagery": False},
+        "commercialTraining": True,
+        "rightsHolder": "SYNTHETIC FIXTURE",
+        "agreementReference": "SYNTHETIC-NOT-A-LICENCE",
+        "agreementScope": "ai-training",
+        "merchantName": "synthetic-merchant",
+        "recordKind": "synthetic-fixture",
+        "consent": {"consentId": "synthetic-c1", "rights": "isibuko-owned", "allowsTraining": True, "allowsPersonImagery": False},
         "parts": spatial_parts(*size),
         "garmentMask": {
             "path": str(mask_path),
@@ -177,7 +183,8 @@ class KagglePrepTests(unittest.TestCase):
                 make_row(folder, "blue", (20, 20, 220), "train", "sku-blue"),
             ]
             distinct_report = admit(distinct)
-            self.assertEqual([row["sku"] for row in distinct_report["admitted"]], ["sku-red", "sku-blue"])
+            self.assertEqual(distinct_report["admitted"], [])
+            self.assertTrue(any("Synthetic fixture" in reason for row in distinct_report["rows"] for reason in row["reasons"]))
             self.assertEqual(distinct_report["notes"], [])
 
             with (folder / "manifest.jsonl").open("w", encoding="utf-8") as handle:

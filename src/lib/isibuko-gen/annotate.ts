@@ -1,3 +1,5 @@
+import { emptyRights, type RightsRecord } from "./rights.ts";
+
 export const TRAINING_CATEGORIES = ["shirt", "jacket", "dress", "pants"] as const;
 export const FUTURE_CATEGORIES = ["skirt", "shoes", "bag", "wig", "jewellery", "glasses", "accessory"] as const;
 export const PARTS = ["collar", "sleeve", "hem", "straps", "legs"] as const;
@@ -32,10 +34,7 @@ export type AnnotationSample = {
   annotator: string;
   reviewer: string;
   split: "train" | "val" | "test" | null;
-  licence: string | null;
-  commercialUse: boolean | null;
-  consent: { consentId: string; rights: string; allowsTraining: boolean; allowsPersonImagery: boolean | null } | null;
-  provenance: { source: string; acquired: string; origin: string } | null;
+  rights: RightsRecord;
 };
 
 export type AnnotationSession = { version: 1; samples: AnnotationSample[] };
@@ -73,10 +72,7 @@ export function importSample(session: AnnotationSession, input: { sampleId: stri
     annotator: "",
     reviewer: "",
     split: null,
-    licence: null,
-    commercialUse: null,
-    consent: null,
-    provenance: null,
+    rights: emptyRights(),
   };
   session.samples.push(sample);
   return sample;
@@ -162,5 +158,6 @@ export function sessionJson(session: AnnotationSession) {
 export function sessionFromJson(text: string): AnnotationSession {
   const session = JSON.parse(text) as AnnotationSession;
   if (session.version !== 1 || !Array.isArray(session.samples)) throw new Error("Annotation session is not readable.");
+  for (const sample of session.samples) sample.rights = { ...emptyRights(), ...(sample.rights ?? {}) };
   return session;
 }

@@ -189,14 +189,33 @@ def export_row(sample: dict, mask_path: Path) -> dict:
     if merchant.get("visuallyDetected") is not False:
         raise ValueError("Merchant fabric, colour, and pattern were not visually detected.")
     consent = sample.get("consent") if isinstance(sample.get("consent"), dict) else None
-    if isinstance(consent, dict) and consent.get("allowsPersonImagery") is True:
-        person_permitted = True
-    elif isinstance(consent, dict) and consent.get("allowsPersonImagery") is False:
-        person_permitted = False
+    rights = sample.get("rights") if isinstance(sample.get("rights"), dict) else {}
+    if isinstance(rights, dict) and "allowsPersonImagery" in rights:
+        person_value = rights.get("allowsPersonImagery")
+    elif isinstance(consent, dict) and "allowsPersonImagery" in consent:
+        person_value = consent.get("allowsPersonImagery")
     else:
-        person_permitted = None
+        person_value = None
+    person_permitted = person_value if person_value in (True, False) else None
     provenance = sample.get("provenance") if isinstance(sample.get("provenance"), dict) else None
-    commercial = sample.get("commercialUse") if isinstance(sample.get("commercialUse"), bool) else None
+    if isinstance(rights, dict) and rights:
+        provenance = {
+            "source": rights.get("source") or (provenance or {}).get("source") or "",
+            "acquired": rights.get("acquired") or (provenance or {}).get("acquired") or "",
+            "method": rights.get("method") or (provenance or {}).get("method") or "",
+            "origin": (provenance or {}).get("origin") or "",
+        }
+        if not any(provenance.values()):
+            provenance = sample.get("provenance") if isinstance(sample.get("provenance"), dict) else None
+    commercial = rights.get("commercialTraining") if "commercialTraining" in rights else sample.get("commercialUse") if isinstance(sample.get("commercialUse"), bool) else None
+    basis = rights.get("rightsBasis", sample.get("licence"))
+    if rights.get("consentId") or rights.get("allowsTraining") is not None or rights.get("allowsPersonImagery") is not None:
+        consent = {
+            "consentId": rights.get("consentId") or (consent or {}).get("consentId") or "",
+            "rights": basis,
+            "allowsTraining": rights.get("allowsTraining"),
+            "allowsPersonImagery": person_permitted,
+        }
     return {
         "sampleId": sample["sampleId"],
         "sku": sample["sku"],
@@ -206,8 +225,15 @@ def export_row(sample: dict, mask_path: Path) -> dict:
         "imageWidth": sample["imageWidth"],
         "imageHeight": sample["imageHeight"],
         "category": sample["category"],
-        "licence": sample.get("licence"),
-        "commercialUse": commercial,
+        "licence": basis,
+        "commercialUse": commercial if isinstance(commercial, bool) else None,
+        "commercialTraining": commercial if isinstance(commercial, bool) else None,
+        "rightsHolder": rights.get("rightsHolder") or sample.get("rightsHolder") or "",
+        "agreementReference": rights.get("agreementReference") or sample.get("agreementReference") or "",
+        "agreementScope": rights.get("agreementScope", sample.get("agreementScope")),
+        "merchantName": rights.get("merchant") or sample.get("merchantName") or "",
+        "recordKind": rights.get("recordKind", sample.get("recordKind")),
+        "rights": rights or None,
         "consent": consent,
         "parts": parts,
         "garmentMask": mask,

@@ -13,6 +13,7 @@ from PIL import Image
 from annotation_studio import export_row
 from dataset_gate import admit, approve, file_hash, problems
 from feature_extract import extract_spatial
+from rights_contract import admission_status
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 LIMITS = {"entries": 2000, "entry_bytes": 32 * 1024 * 1024, "total_bytes": 512 * 1024 * 1024, "ratio": 100}
@@ -269,7 +270,7 @@ def import_dataset(zip_path: Path, dest: Path) -> dict:
     seen_ids = set()
     for row in rows:
         if row.get("sampleId") in seen_ids:
-            samples.append({**_public(row), "status": "rejected", "reasons": ["Duplicate sample id."], "admitted": False})
+            samples.append(_sample_report(row, "rejected", ["Duplicate sample id."]))
             continue
         seen_ids.add(row.get("sampleId"))
         reasons = _place_row(file_root, dataset, row)
@@ -277,13 +278,13 @@ def import_dataset(zip_path: Path, dest: Path) -> dict:
         if previous and previous.get("assetHash") != row.get("assetHash"):
             reasons = reasons + ["This sample was already imported with a different image hash."]
         if previous and previous.get("assetHash") == row.get("assetHash") and previous.get("status") == "verified" and not reasons:
-            samples.append({**_public(row), "status": "reused", "reasons": [], "admitted": False})
+            samples.append(_sample_report(row, "reused", [], dataset))
             continue
         status = "rejected" if reasons else "verified"
         if status == "verified":
             ledger["samples"][row["sampleId"]] = {"assetHash": row["assetHash"], "status": "verified"}
             _save_ledger(ledger_path, ledger)
-        samples.append({**_public(row), "status": status, "reasons": reasons, "admitted": False})
+        samples.append(_sample_report(row, status, reasons, dataset if not reasons else None))
     samples.extend(failures)
     verified_rows = [_absolute_row(dataset, row) for row in rows if any(item["sampleId"] == row.get("sampleId") and item["status"] in {"verified", "reused"} and not item["reasons"] for item in samples)]
     admission_notes = []
@@ -335,6 +336,27 @@ def _place_row(source_root: Path, dataset: Path, row: dict) -> list[str]:
 
 
 def _public(row: dict) -> dict:
+    return {
+        "sampleId": row.get("sampleId"),
+        "sku": row.get("sku"),
+        "assetHash": row.get("assetHash"),
+        "split": row.get("split"),
+        "review": row.get("review"),
+    }
+
+
+def _sample_report(row: dict, status: str, reasons: list[str], dataset: Path | None = None) -> dict:
+    checked = _absolute_row(dataset, row) if dataset is not None and not reasons else row
+    verdict = admission_status(checked)
+    return {
+        **_public(row),
+        "status": status,
+        "reasons": reasons,
+        "admitted": False,
+        "admissionStatus": verdict["status"],
+        "admissionLabel": verdict["label"],
+        "admissionReasons": verdict["reasons"],
+    }
     return {
         "sampleId": row.get("sampleId"),
         "sku": row.get("sku"),

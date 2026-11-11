@@ -12,7 +12,8 @@ from pathlib import Path
 
 from PIL import Image
 
-from garment_intel import CATEGORIES, CONFIDENCE_MIN, MIN_TRAIN, MIN_VAL, PARTS, RIGHTS_OK
+from garment_intel import CATEGORIES, CONFIDENCE_MIN, MIN_TRAIN, MIN_VAL, PARTS
+from rights_contract import record_kind, rights_problems
 
 CATALOG = (
     "shirt-linen.png",
@@ -222,18 +223,7 @@ def problems(row: dict) -> list[str]:
             if decoded_width != width or decoded_height != height:
                 reasons.append("Manifest image dimensions do not match the decoded image.")
             width, height = decoded_width, decoded_height
-    provenance = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
-    if not str(provenance.get("source", "")).strip() or not str(provenance.get("acquired", "")).strip():
-        reasons.append("Provenance needs a source and an acquired date.")
-    if row.get("licence") not in RIGHTS_OK:
-        reasons.append("Licence is not isibuko-owned or commercially-licensed.")
-    if row.get("commercialUse") is not True:
-        reasons.append("Commercial use is not granted.")
-    consent = row.get("consent") if isinstance(row.get("consent"), dict) else None
-    if consent is None or consent.get("allowsTraining") is not True:
-        reasons.append("A consent record that allows training is missing.")
-    elif consent.get("rights") != row.get("licence"):
-        reasons.append("Consent rights do not match the licence.")
+    reasons.extend(rights_problems(row))
     if row.get("category") not in CATEGORIES:
         reasons.append("Category is not a training label.")
     if not str(row.get("fabric", "")).strip() or not row.get("colours"):
@@ -257,8 +247,16 @@ def problems(row: dict) -> list[str]:
     if width > 0 and height > 0:
         reasons.extend(_mask_errors(garment, width, height, "Garment"))
     body = row.get("bodyMask")
+    consent = row.get("consent") if isinstance(row.get("consent"), dict) else {}
+    rights = row.get("rights") if isinstance(row.get("rights"), dict) else {}
+    if "allowsPersonImagery" in rights:
+        person_allowed = rights.get("allowsPersonImagery") is True
+    elif "allowsPersonImagery" in consent:
+        person_allowed = consent.get("allowsPersonImagery") is True
+    else:
+        person_allowed = False
     if body is not None:
-        if row.get("personCapturePermitted") is not True or consent is None or consent.get("allowsPersonImagery") is not True:
+        if person_allowed is not True or row.get("personCapturePermitted") is not True:
             reasons.append("A person or body mask is present without permission to use person imagery.")
         elif width > 0 and height > 0:
             reasons.extend(_mask_errors(body, width, height, "Body"))
@@ -360,6 +358,8 @@ def admit(rows: list[dict]) -> dict:
     candidate_report = {}
     for position, index in enumerate(candidates):
         reasons = list(dict.fromkeys(extra.get(position, [])))
+        if record_kind(rows[index]) == "synthetic-fixture":
+            reasons.append("Synthetic fixture cannot enter a training run.")
         if reasons:
             candidate_report[index] = {"sampleId": rows[index].get("sampleId"), "sku": rows[index].get("sku"), "admitted": False, "reasons": reasons}
             continue

@@ -61,6 +61,8 @@ def gate(manifest_path: Path, env: dict) -> dict:
     if train < MIN_TRAIN or val < MIN_VAL:
         reasons.append(f"Admitted set has {train} train and {val} val rows. Need {MIN_TRAIN} and {MIN_VAL}. The catalog is not admitted.")
     for row in rows:
+        if row.get("recordKind") == "synthetic-fixture":
+            reasons.append(f"{row.get('sampleId', '?')} is a synthetic fixture and cannot enter a training run.")
         image = row.get("imagePath")
         if not image or not Path(str(image)).is_file():
             reasons.append(f"{row.get('sampleId', '?')} has no image file on this machine.")

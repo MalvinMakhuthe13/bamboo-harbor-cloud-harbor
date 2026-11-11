@@ -21,6 +21,7 @@ import {
   type Point,
 } from "@/lib/isibuko-gen/annotate";
 import { packageImageName, storeZip } from "@/lib/isibuko-gen/dataset-zip";
+import { sampleStatus } from "@/lib/isibuko-gen/rights";
 
 const STORAGE_KEY = "isibuko-annotation-session";
 
@@ -249,6 +250,16 @@ export function AnnotationStudio() {
       </section>
       {active ? (
         <section className="space-y-3 text-sm">
+          {(() => {
+            const verdict = sampleStatus({ sku: active.sku, category: active.category, annotator: active.annotator, reviewer: active.reviewer, geometryOpen: missingParts(active).length > 0 || !active.garmentPolygon, rights: active.rights });
+            return (
+              <div className="rounded border border-black/10 p-2">
+                <p className="font-semibold">{verdict.label}</p>
+                <ul className="list-disc pl-4 text-ink-muted">{verdict.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+                <p className="text-ink-muted">A complete form is not admission. A product-use licence is not an AI-training licence.</p>
+              </div>
+            );
+          })()}
           <label className="block">SKU <input className="w-full border px-2 py-1" value={active.sku} onChange={(event) => update(active.sampleId, (sample) => { sample.sku = event.target.value; })} /></label>
           <label className="block">Training category
             <select className="w-full border px-2 py-1" value={active.category ?? ""} onChange={(event) => update(active.sampleId, (sample) => setCategory(sample, event.target.value))}>
@@ -287,6 +298,55 @@ export function AnnotationStudio() {
           <label className="block">Pattern, merchant record
             <input className="w-full border px-2 py-1" value={active.merchant.pattern ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.merchant.pattern = event.target.value || null; })} />
           </label>
+          <label className="block">Record
+            <select className="w-full border px-2 py-1" value={active.rights.recordKind ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.recordKind = event.target.value === "real" || event.target.value === "synthetic-fixture" ? event.target.value : null; })}>
+              <option value="">Unset</option>
+              <option value="real">Real sample</option>
+              <option value="synthetic-fixture">Synthetic fixture</option>
+            </select>
+          </label>
+          <label className="block">Rights basis
+            <select className="w-full border px-2 py-1" value={active.rights.rightsBasis ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.rightsBasis = event.target.value === "isibuko-owned" || event.target.value === "commercially-licensed" ? event.target.value : null; })}>
+              <option value="">Unset</option>
+              <option value="isibuko-owned">isibuko-owned</option>
+              <option value="commercially-licensed">commercially-licensed</option>
+            </select>
+          </label>
+          <label className="block">Rights holder <input className="w-full border px-2 py-1" value={active.rights.rightsHolder} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.rightsHolder = event.target.value; })} /></label>
+          <label className="block">Agreement reference <input className="w-full border px-2 py-1" value={active.rights.agreementReference} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.agreementReference = event.target.value; })} /></label>
+          <label className="block">Agreement scope
+            <select className="w-full border px-2 py-1" value={active.rights.agreementScope ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.agreementScope = event.target.value === "ai-training" || event.target.value === "product-use" ? event.target.value : null; })}>
+              <option value="">Unset</option>
+              <option value="ai-training">AI training</option>
+              <option value="product-use">Product use only</option>
+            </select>
+          </label>
+          <label className="block">Commercial training
+            <select className="w-full border px-2 py-1" value={active.rights.commercialTraining === null ? "" : String(active.rights.commercialTraining)} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.commercialTraining = event.target.value === "" ? null : event.target.value === "true"; })}>
+              <option value="">Unset</option>
+              <option value="true">Granted</option>
+              <option value="false">Not granted</option>
+            </select>
+          </label>
+          <label className="block">Consent record id <input className="w-full border px-2 py-1" value={active.rights.consentId} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.consentId = event.target.value; })} /></label>
+          <label className="block">Training permission
+            <select className="w-full border px-2 py-1" value={active.rights.allowsTraining === null ? "" : String(active.rights.allowsTraining)} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.allowsTraining = event.target.value === "" ? null : event.target.value === "true"; })}>
+              <option value="">Unset</option>
+              <option value="true">Allows training</option>
+              <option value="false">Does not allow training</option>
+            </select>
+          </label>
+          <label className="block">Person imagery
+            <select className="w-full border px-2 py-1" value={active.rights.allowsPersonImagery === null ? "" : String(active.rights.allowsPersonImagery)} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.allowsPersonImagery = event.target.value === "" ? null : event.target.value === "true"; })}>
+              <option value="">Unset</option>
+              <option value="false">Not permitted</option>
+              <option value="true">Permitted</option>
+            </select>
+          </label>
+          <label className="block">Merchant <input className="w-full border px-2 py-1" value={active.rights.merchant} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.merchant = event.target.value; })} /></label>
+          <label className="block">Provenance source <input className="w-full border px-2 py-1" value={active.rights.source} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.source = event.target.value; })} /></label>
+          <label className="block">Acquired date <input className="w-full border px-2 py-1" value={active.rights.acquired} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.acquired = event.target.value; })} /></label>
+          <label className="block">Acquisition method <input className="w-full border px-2 py-1" value={active.rights.method} onChange={(event) => update(active.sampleId, (sample) => { sample.rights.method = event.target.value; })} /></label>
           <label className="block">Annotator <input className="w-full border px-2 py-1" value={active.annotator} onChange={(event) => update(active.sampleId, (sample) => { sample.annotator = event.target.value; })} /></label>
           <label className="block">Independent reviewer <input className="w-full border px-2 py-1" value={active.reviewer} onChange={(event) => update(active.sampleId, (sample) => { sample.reviewer = event.target.value; })} /></label>
           <label className="block">Split
@@ -297,36 +357,6 @@ export function AnnotationStudio() {
               <option value="test">test</option>
             </select>
           </label>
-          <label className="block">Licence
-            <select className="w-full border px-2 py-1" value={active.licence ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.licence = event.target.value || null; if (sample.consent) sample.consent.rights = event.target.value; })}>
-              <option value="">Unset</option>
-              <option value="isibuko-owned">isibuko-owned</option>
-              <option value="commercially-licensed">commercially-licensed</option>
-            </select>
-          </label>
-          <label className="block">Commercial use
-            <select className="w-full border px-2 py-1" value={active.commercialUse === null ? "" : String(active.commercialUse)} onChange={(event) => update(active.sampleId, (sample) => { sample.commercialUse = event.target.value === "" ? null : event.target.value === "true"; })}>
-              <option value="">Unset</option>
-              <option value="true">Granted</option>
-              <option value="false">Not granted</option>
-            </select>
-          </label>
-          <label className="block">Training consent
-            <select className="w-full border px-2 py-1" value={active.consent ? String(active.consent.allowsTraining) : ""} onChange={(event) => update(active.sampleId, (sample) => { if (!event.target.value) { sample.consent = null; return; } sample.consent = { consentId: sample.consent?.consentId || `${sample.sampleId}-consent`, rights: sample.licence ?? "", allowsTraining: event.target.value === "true", allowsPersonImagery: sample.consent?.allowsPersonImagery ?? null }; })}>
-              <option value="">Unset</option>
-              <option value="true">Allows training</option>
-              <option value="false">Does not allow training</option>
-            </select>
-          </label>
-          <label className="block">Person imagery
-            <select className="w-full border px-2 py-1" value={active.consent && active.consent.allowsPersonImagery !== null ? String(active.consent.allowsPersonImagery) : ""} onChange={(event) => update(active.sampleId, (sample) => { if (!sample.consent) return; sample.consent.allowsPersonImagery = event.target.value === "" ? null : event.target.value === "true"; })}>
-              <option value="">Unset</option>
-              <option value="false">Not permitted</option>
-              <option value="true">Permitted</option>
-            </select>
-          </label>
-          <label className="block">Provenance source <input className="w-full border px-2 py-1" value={active.provenance?.source ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.provenance = { source: event.target.value, acquired: sample.provenance?.acquired ?? "", origin: sample.provenance?.origin || sample.imageName }; })} /></label>
-          <label className="block">Acquired <input className="w-full border px-2 py-1" value={active.provenance?.acquired ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.provenance = { source: sample.provenance?.source ?? "", acquired: event.target.value, origin: sample.provenance?.origin || sample.imageName }; })} /></label>
           <p className="text-ink-muted">Logos, material, and pattern are not inferred from this form. SHA-256 {active.assetHash.slice(0, 16)} stays the image identity.</p>
           <div className="flex gap-2">
             <button type="button" className="rounded bg-ink px-3 py-2 text-paper" onClick={save}>Save</button>

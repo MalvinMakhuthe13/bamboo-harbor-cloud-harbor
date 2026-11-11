@@ -40,7 +40,13 @@ def owned(folder: Path, name: str, sku: str) -> dict:
     sample["reviewer"] = "lin"
     sample["confidence"] = 0.95
     sample["split"] = "train"
-    sample["provenance"] = {"source": "merchant-file", "acquired": "2026-11-11", "origin": name}
+    sample["provenance"] = {"source": "synthetic-fixture", "acquired": "2026-11-11", "origin": name, "method": "generated-for-test"}
+    sample["rightsHolder"] = "SYNTHETIC FIXTURE"
+    sample["agreementReference"] = "SYNTHETIC-NOT-A-LICENCE"
+    sample["agreementScope"] = "ai-training"
+    sample["commercialTraining"] = True
+    sample["merchantName"] = "synthetic-merchant"
+    sample["recordKind"] = "synthetic-fixture"
     sample["garmentPolygon"] = POLYGON
     set_merchant(sample, "linen", ["sand"], None)
     for part in PARTS:

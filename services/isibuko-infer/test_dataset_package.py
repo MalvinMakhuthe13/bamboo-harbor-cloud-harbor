@@ -37,7 +37,13 @@ def annotated(folder: Path, name: str = "shirt.png", sku: str = "sku-1") -> dict
     sample["reviewer"] = "lin"
     sample["confidence"] = 0.95
     sample["split"] = "train"
-    sample["provenance"] = {"source": "merchant-file", "acquired": "2026-11-11", "origin": name}
+    sample["provenance"] = {"source": "synthetic-fixture", "acquired": "2026-11-11", "origin": name, "method": "generated-for-test"}
+    sample["rightsHolder"] = "SYNTHETIC FIXTURE"
+    sample["agreementReference"] = "SYNTHETIC-NOT-A-LICENCE"
+    sample["agreementScope"] = "ai-training"
+    sample["commercialTraining"] = True
+    sample["merchantName"] = "synthetic-merchant"
+    sample["recordKind"] = "synthetic-fixture"
     sample["garmentPolygon"] = POLYGON
     set_merchant(sample, "linen", ["sand"], None)
     for part in PARTS:
@@ -87,7 +93,13 @@ class DatasetPackageTests(unittest.TestCase):
             self.assertEqual(saved["assetHash"], original["assetHash"])
             self.assertEqual(saved["sku"], "sku-1")
             self.assertEqual(saved["garmentMask"]["foregroundPixels"], row["garmentMask"]["foregroundPixels"])
-            self.assertEqual(saved["provenance"], {"source": "merchant-file", "acquired": "2026-11-11", "origin": "shirt.png"})
+            self.assertEqual(saved["provenance"]["source"], "synthetic-fixture")
+            self.assertEqual(saved["provenance"]["acquired"], "2026-11-11")
+            self.assertEqual(saved["provenance"]["method"], "generated-for-test")
+            self.assertEqual(saved["recordKind"], "synthetic-fixture")
+            self.assertEqual(saved["rightsHolder"], "SYNTHETIC FIXTURE")
+            self.assertEqual(saved["agreementReference"], "SYNTHETIC-NOT-A-LICENCE")
+            self.assertEqual(imported["samples"][0]["admissionLabel"], "Rejected")
             self.assertEqual(saved["licence"], "isibuko-owned")
             self.assertTrue(saved["commercialUse"])
             self.assertEqual(saved["consent"]["allowsTraining"], True)
