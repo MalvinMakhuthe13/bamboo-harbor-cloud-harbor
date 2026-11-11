@@ -19,4 +19,10 @@ python3 services/isibuko-infer/dinov2_experiment.py
 
 Do not install `huggingface_hub` or `transformers` from this notebook. That remains a separate approval.
 
+The separate download command is not run by the notebook. It fetches only `config.json`, `preprocessor_config.json`, and `model.safetensors` from `facebook/dinov2-small` at revision `ed25f3a31f01632728cabb09d1542f84ab7b0056`, using the existing Python and no extra packages. It does not train.
+
+```bash
+python3 services/isibuko-infer/download_dinov2.py --download-only --dest /kaggle/working/isibuko-weights/dinov2-small
+```
+
 Checkpoints in `/kaggle/working` disappear when the session ends. Download one you care about. Do not commit it. An untrained checkpoint is not a garment model. The synthetic drawing run is not this experiment.
