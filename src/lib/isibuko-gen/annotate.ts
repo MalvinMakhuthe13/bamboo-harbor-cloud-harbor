@@ -31,7 +31,11 @@ export type AnnotationSample = {
   confidence: number;
   annotator: string;
   reviewer: string;
-  split: "train" | "val" | "test";
+  split: "train" | "val" | "test" | null;
+  licence: string | null;
+  commercialUse: boolean | null;
+  consent: { consentId: string; rights: string; allowsTraining: boolean; allowsPersonImagery: boolean | null } | null;
+  provenance: { source: string; acquired: string; origin: string } | null;
 };
 
 export type AnnotationSession = { version: 1; samples: AnnotationSample[] };
@@ -68,7 +72,11 @@ export function importSample(session: AnnotationSession, input: { sampleId: stri
     confidence: 0,
     annotator: "",
     reviewer: "",
-    split: "train",
+    split: null,
+    licence: null,
+    commercialUse: null,
+    consent: null,
+    provenance: null,
   };
   session.samples.push(sample);
   return sample;

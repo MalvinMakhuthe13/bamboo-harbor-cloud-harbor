@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import stat
 import zipfile
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from dataset_gate import admit, approve, file_hash, problems
 from feature_extract import extract_spatial
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+LIMITS = {"entries": 2000, "entry_bytes": 32 * 1024 * 1024, "total_bytes": 512 * 1024 * 1024, "ratio": 100}
 
 
 def safe_id(value: str) -> str:
@@ -30,9 +32,9 @@ def package_image_name(sample_id: str, image_name: str) -> str:
 
 
 def safe_member(name: str) -> Path:
-    if not name or name.endswith("/"):
+    if not isinstance(name, str) or not name or name.endswith("/") or name.endswith("\\"):
         raise RuntimeError(f"Path traversal rejected: {name}")
-    if "\\" in name or name.startswith("/"):
+    if "\x00" in name or "\\" in name or name.startswith("/") or ":" in name:
         raise RuntimeError(f"Path traversal rejected: {name}")
     parts = Path(name).parts
     if any(part in {"", ".", ".."} for part in parts):
@@ -66,8 +68,13 @@ def build_package(session: dict, dest: Path) -> tuple[list[dict], list[dict]]:
     dest.mkdir(parents=True, exist_ok=True)
     rows = []
     failures = []
+    seen_ids = set()
     for sample in session.get("samples", []):
         sample_id = sample.get("sampleId")
+        if sample_id in seen_ids:
+            failures.append({"sampleId": sample_id, "sku": sample.get("sku"), "status": "rejected", "reasons": ["Duplicate sample id."], "admitted": False})
+            continue
+        seen_ids.add(sample_id)
         try:
             if sample.get("trainingLabel") is not True:
                 raise ValueError("This category is not a current training label and was not exported as one.")
@@ -79,9 +86,11 @@ def build_package(session: dict, dest: Path) -> tuple[list[dict], list[dict]]:
             image_target = locate(dest, relative_image)
             image_target.parent.mkdir(parents=True, exist_ok=True)
             source_bytes = source.read_bytes()
-            if not image_target.exists() or image_target.read_bytes() != source_bytes:
+            digest = file_hash(source)
+            if image_target.exists() and file_hash(image_target) != digest:
+                raise ValueError(f"Existing image for {sample_id} has a different hash and was not replaced.")
+            if not image_target.exists() or file_hash(image_target) != digest:
                 image_target.write_bytes(source_bytes)
-            digest = file_hash(image_target)
             declared = sample.get("assetHash")
             if declared and declared != digest:
                 raise ValueError(f"Image SHA-256 does not match the annotation for {sample_id}.")
@@ -101,7 +110,8 @@ def build_package(session: dict, dest: Path) -> tuple[list[dict], list[dict]]:
             row["byteSize"] = image_target.stat().st_size
             row["assetHash"] = digest
             row["garmentMask"]["path"] = relative_mask
-            row["provenance"] = {"source": "annotation-studio", "acquired": "annotator", "origin": relative_image}
+            if isinstance(row.get("provenance"), dict) and row["provenance"].get("origin"):
+                row["provenance"] = dict(row["provenance"])
             row["review"] = "corrected"
             row["admitted"] = False
             rows.append(row)
@@ -123,16 +133,49 @@ def write_zip(source: Path, zip_path: Path) -> None:
                 archive.write(path, relative)
 
 
-def extract_zip(zip_path: Path, dest: Path) -> None:
+def _entry_allowed(info: zipfile.ZipInfo, limits: dict) -> None:
+    mode = info.external_attr >> 16
+    if stat.S_ISLNK(mode):
+        raise RuntimeError(f"Symlink entries are rejected: {info.filename}")
+    if info.file_size < 0 or info.file_size > limits["entry_bytes"]:
+        raise RuntimeError(f"ZIP entry exceeds the {limits['entry_bytes']} byte limit: {info.filename}")
+    if info.compress_size and info.file_size / info.compress_size > limits["ratio"] and info.file_size > 1_000_000:
+        raise RuntimeError(f"ZIP compression ratio is not allowed: {info.filename}")
+
+
+def extract_zip(zip_path: Path, dest: Path, limits: dict | None = None) -> None:
+    bounds = dict(LIMITS if limits is None else {**LIMITS, **limits})
     dest.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path) as archive:
-        for info in archive.infolist():
-            if info.is_dir():
-                continue
+        files = [info for info in archive.infolist() if not info.is_dir()]
+        if len(files) > bounds["entries"]:
+            raise RuntimeError(f"ZIP has more than {bounds['entries']} files.")
+        seen = set()
+        for info in files:
+            if info.filename in seen:
+                raise RuntimeError(f"Duplicate ZIP filename: {info.filename}")
+            seen.add(info.filename)
+            safe_member(info.filename)
+            _entry_allowed(info, bounds)
+        total = 0
+        for info in files:
             target = locate(dest, info.filename)
+            if target.is_symlink():
+                raise RuntimeError(f"Refusing to write through a link: {info.filename}")
             target.parent.mkdir(parents=True, exist_ok=True)
+            written = 0
             with archive.open(info) as source, target.open("wb") as handle:
-                shutil.copyfileobj(source, handle)
+                while True:
+                    chunk = source.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    written += len(chunk)
+                    total += len(chunk)
+                    if written > bounds["entry_bytes"] or total > bounds["total_bytes"]:
+                        handle.close()
+                        target.unlink(missing_ok=True)
+                        raise RuntimeError(f"ZIP entry exceeds the size limit: {info.filename}")
+                    handle.write(chunk)
 
 
 def _load_ledger(path: Path) -> dict:
@@ -195,51 +238,54 @@ def verify_row(root: Path, row: dict) -> list[str]:
     return reasons
 
 
-def _prepare_package(extracted: Path, dataset: Path) -> list[dict]:
-    if (extracted / "manifest.jsonl").is_file() and not dataset.exists():
-        shutil.copytree(extracted, dataset)
-        return []
-    if dataset.exists():
-        errors = dataset / "package-errors.json"
-        return json.loads(errors.read_text(encoding="utf-8")) if errors.is_file() else []
-    session_path = extracted / "session.json"
-    if not session_path.is_file():
-        raise FileNotFoundError("The ZIP has neither manifest.jsonl nor session.json.")
-    session = json.loads(session_path.read_text(encoding="utf-8"))
-    for sample in session.get("samples", []):
-        relative = sample.get("imageFile") or package_image_name(sample.get("sampleId", ""), sample.get("imageName", ""))
-        sample["imagePath"] = str(locate(extracted, relative))
-        sample["imageName"] = Path(relative).name
-    _rows, failures = build_package(session, dataset)
-    return failures
-
-
 def import_dataset(zip_path: Path, dest: Path) -> dict:
     """Extract safely, verify files, and report the existing gate. This does not approve rows."""
     incoming = dest / "incoming"
     dataset = dest / "dataset"
+    if incoming.exists():
+        shutil.rmtree(incoming)
     extract_zip(zip_path, incoming)
-    failures = _prepare_package(incoming, dataset)
-    manifest_path = dataset / "manifest.jsonl"
-    rows = [json.loads(line) for line in manifest_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    dataset.mkdir(parents=True, exist_ok=True)
+    failures = []
+    if (incoming / "manifest.jsonl").is_file():
+        file_root = incoming
+    elif (incoming / "session.json").is_file():
+        staging = dest / "staging"
+        if staging.exists():
+            shutil.rmtree(staging)
+        session = json.loads((incoming / "session.json").read_text(encoding="utf-8"))
+        for sample in session.get("samples", []):
+            relative = sample.get("imageFile") or package_image_name(sample.get("sampleId", ""), sample.get("imageName", ""))
+            sample["imagePath"] = str(locate(incoming, relative))
+            sample["imageName"] = Path(relative).name
+        _rows, failures = build_package(session, staging)
+        file_root = staging
+    else:
+        raise FileNotFoundError("The ZIP has neither manifest.jsonl nor session.json.")
+    rows = [json.loads(line) for line in (file_root / "manifest.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     ledger_path = dest / "import-ledger.json"
     ledger = _load_ledger(ledger_path)
     samples = []
+    seen_ids = set()
     for row in rows:
-        reasons = verify_row(dataset, row)
+        if row.get("sampleId") in seen_ids:
+            samples.append({**_public(row), "status": "rejected", "reasons": ["Duplicate sample id."], "admitted": False})
+            continue
+        seen_ids.add(row.get("sampleId"))
+        reasons = _place_row(file_root, dataset, row)
         previous = ledger["samples"].get(row["sampleId"])
+        if previous and previous.get("assetHash") != row.get("assetHash"):
+            reasons = reasons + ["This sample was already imported with a different image hash."]
         if previous and previous.get("assetHash") == row.get("assetHash") and previous.get("status") == "verified" and not reasons:
             samples.append({**_public(row), "status": "reused", "reasons": [], "admitted": False})
             continue
-        if previous and previous.get("assetHash") != row.get("assetHash"):
-            reasons = reasons + ["This sample was already imported with a different image hash."]
         status = "rejected" if reasons else "verified"
         if status == "verified":
             ledger["samples"][row["sampleId"]] = {"assetHash": row["assetHash"], "status": "verified"}
             _save_ledger(ledger_path, ledger)
         samples.append({**_public(row), "status": status, "reasons": reasons, "admitted": False})
     samples.extend(failures)
-    verified_rows = [_absolute_row(dataset, row) for row, item in zip(rows, samples) if item["status"] in {"verified", "reused"} and not item["reasons"]]
+    verified_rows = [_absolute_row(dataset, row) for row in rows if any(item["sampleId"] == row.get("sampleId") and item["status"] in {"verified", "reused"} and not item["reasons"] for item in samples)]
     admission_notes = []
     for row in verified_rows:
         _approved, errors = approve(row, str(row.get("reviewer") or ""))
@@ -247,11 +293,10 @@ def import_dataset(zip_path: Path, dest: Path) -> dict:
             admission_notes.append({"sampleId": row["sampleId"], "reasons": errors, "admitted": False})
         elif row.get("review") != "approved":
             admission_notes.append({"sampleId": row["sampleId"], "reasons": ["Not approved. The importer does not auto-approve."], "admitted": False})
-    approved_rows = []
-    for row in verified_rows:
-        if row.get("review") == "approved" and str(row.get("reviewer") or "") not in {"", str(row.get("annotator") or "")}:
-            approved_rows.append(row)
+    approved_rows = [row for row in verified_rows if row.get("review") == "approved" and str(row.get("reviewer") or "") not in {"", str(row.get("annotator") or "")}]
     admission = admit(approved_rows) if approved_rows else {"admitted": [], "rows": []}
+    kept = [row for row in rows if any(item["sampleId"] == row.get("sampleId") and item["status"] in {"verified", "reused"} for item in samples)]
+    (dataset / "manifest.jsonl").write_text("".join(json.dumps(row) + "\n" for row in kept), encoding="utf-8")
     report = {
         "samples": samples,
         "accepted": [item for item in samples if item["status"] in {"verified", "reused"}],
@@ -266,6 +311,27 @@ def import_dataset(zip_path: Path, dest: Path) -> dict:
     }
     (dest / "import-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
+
+
+def _place_row(source_root: Path, dataset: Path, row: dict) -> list[str]:
+    try:
+        source_image = locate(source_root, row["imagePath"])
+        source_mask = locate(source_root, row["garmentMask"]["path"])
+        target_image = locate(dataset, row["imagePath"])
+        target_mask = locate(dataset, row["garmentMask"]["path"])
+    except (RuntimeError, KeyError, TypeError) as exc:
+        return [str(exc)]
+    if target_image.exists() and file_hash(target_image) != row.get("assetHash"):
+        return ["Existing image has a different hash and was not replaced."]
+    if target_mask.exists() and file_hash(target_mask) != row.get("garmentMask", {}).get("sha256"):
+        return ["Existing mask has a different hash and was not replaced."]
+    if source_image.is_file() and (not target_image.exists()):
+        target_image.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_image, target_image)
+    if source_mask.is_file() and not target_mask.exists():
+        target_mask.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_mask, target_mask)
+    return verify_row(dataset, row)
 
 
 def _public(row: dict) -> dict:

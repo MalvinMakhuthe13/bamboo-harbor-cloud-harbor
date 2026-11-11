@@ -38,10 +38,18 @@ export function AnnotationStudio() {
   const [showMask, setShowMask] = useState(true);
   const [preview, setPreview] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [drag, setDrag] = useState<Point | null>(null);
   const filesRef = useRef<Map<string, Uint8Array>>(new Map());
+  const urlsRef = useRef<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const active = session.samples.find((sample) => sample.sampleId === activeId) ?? null;
 
+  useEffect(() => {
+    const urls = urlsRef.current;
+    return () => {
+      for (const url of urls) URL.revokeObjectURL(url);
+    };
+  }, []);
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
@@ -124,6 +132,7 @@ export function AnnotationStudio() {
     if (!files) return;
     for (const file of files) {
       const url = URL.createObjectURL(file);
+      try {
       const image = await new Promise<HTMLImageElement>((resolve, reject) => {
         const element = new Image();
         element.onload = () => resolve(element);
@@ -131,17 +140,27 @@ export function AnnotationStudio() {
         element.src = url;
       });
       const digest = await sha256(file);
-      const sampleId = `${file.name}-${digest.slice(0, 8)}`;
-      filesRef.current.set(sampleId, new Uint8Array(await file.arrayBuffer()));
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let sampleId = `${file.name}-${digest.slice(0, 8)}`;
       setSession((current) => {
         const next = structuredClone(current);
-        if (!next.samples.some((sample) => sample.assetHash === digest)) {
-          importSample(next, { sampleId, sku: "", imageName: file.name, assetHash: digest, width: image.width, height: image.height });
-        }
+        const existing = next.samples.find((sample) => sample.assetHash === digest);
+        if (existing) sampleId = existing.sampleId;
+        else importSample(next, { sampleId, sku: "", imageName: file.name, assetHash: digest, width: image.width, height: image.height });
         return next;
       });
-      setPreview((current) => ({ ...current, [sampleId]: url }));
+      filesRef.current.set(sampleId, bytes);
+      setPreview((current) => {
+        const previous = current[sampleId];
+        if (previous) URL.revokeObjectURL(previous);
+        return { ...current, [sampleId]: url };
+      });
+      urlsRef.current.push(url);
       setActiveId(sampleId);
+      } catch (caught) {
+        URL.revokeObjectURL(url);
+        setError(caught instanceof Error ? caught.message : "The photograph could not be imported.");
+      }
     }
   }
 
@@ -193,6 +212,7 @@ export function AnnotationStudio() {
         {active ? (
           <>
             {error ? <p className="mb-2 text-sm text-red-800">{error}</p> : null}
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
               <label>Zoom <input aria-label="Zoom" type="range" min={1} max={8} value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>
               <label><input type="checkbox" checked={showMask} onChange={(event) => setShowMask(event.target.checked)} /> Compare mask</label>
               {(["polygon", "box", "outline"] as const).map((name) => (
@@ -267,6 +287,46 @@ export function AnnotationStudio() {
           <label className="block">Pattern, merchant record
             <input className="w-full border px-2 py-1" value={active.merchant.pattern ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.merchant.pattern = event.target.value || null; })} />
           </label>
+          <label className="block">Annotator <input className="w-full border px-2 py-1" value={active.annotator} onChange={(event) => update(active.sampleId, (sample) => { sample.annotator = event.target.value; })} /></label>
+          <label className="block">Independent reviewer <input className="w-full border px-2 py-1" value={active.reviewer} onChange={(event) => update(active.sampleId, (sample) => { sample.reviewer = event.target.value; })} /></label>
+          <label className="block">Split
+            <select className="w-full border px-2 py-1" value={active.split ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.split = event.target.value === "train" || event.target.value === "val" || event.target.value === "test" ? event.target.value : null; })}>
+              <option value="">Unset</option>
+              <option value="train">train</option>
+              <option value="val">val</option>
+              <option value="test">test</option>
+            </select>
+          </label>
+          <label className="block">Licence
+            <select className="w-full border px-2 py-1" value={active.licence ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.licence = event.target.value || null; if (sample.consent) sample.consent.rights = event.target.value; })}>
+              <option value="">Unset</option>
+              <option value="isibuko-owned">isibuko-owned</option>
+              <option value="commercially-licensed">commercially-licensed</option>
+            </select>
+          </label>
+          <label className="block">Commercial use
+            <select className="w-full border px-2 py-1" value={active.commercialUse === null ? "" : String(active.commercialUse)} onChange={(event) => update(active.sampleId, (sample) => { sample.commercialUse = event.target.value === "" ? null : event.target.value === "true"; })}>
+              <option value="">Unset</option>
+              <option value="true">Granted</option>
+              <option value="false">Not granted</option>
+            </select>
+          </label>
+          <label className="block">Training consent
+            <select className="w-full border px-2 py-1" value={active.consent ? String(active.consent.allowsTraining) : ""} onChange={(event) => update(active.sampleId, (sample) => { if (!event.target.value) { sample.consent = null; return; } sample.consent = { consentId: sample.consent?.consentId || `${sample.sampleId}-consent`, rights: sample.licence ?? "", allowsTraining: event.target.value === "true", allowsPersonImagery: sample.consent?.allowsPersonImagery ?? null }; })}>
+              <option value="">Unset</option>
+              <option value="true">Allows training</option>
+              <option value="false">Does not allow training</option>
+            </select>
+          </label>
+          <label className="block">Person imagery
+            <select className="w-full border px-2 py-1" value={active.consent && active.consent.allowsPersonImagery !== null ? String(active.consent.allowsPersonImagery) : ""} onChange={(event) => update(active.sampleId, (sample) => { if (!sample.consent) return; sample.consent.allowsPersonImagery = event.target.value === "" ? null : event.target.value === "true"; })}>
+              <option value="">Unset</option>
+              <option value="false">Not permitted</option>
+              <option value="true">Permitted</option>
+            </select>
+          </label>
+          <label className="block">Provenance source <input className="w-full border px-2 py-1" value={active.provenance?.source ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.provenance = { source: event.target.value, acquired: sample.provenance?.acquired ?? "", origin: sample.provenance?.origin || sample.imageName }; })} /></label>
+          <label className="block">Acquired <input className="w-full border px-2 py-1" value={active.provenance?.acquired ?? ""} onChange={(event) => update(active.sampleId, (sample) => { sample.provenance = { source: sample.provenance?.source ?? "", acquired: event.target.value, origin: sample.provenance?.origin || sample.imageName }; })} /></label>
           <p className="text-ink-muted">Logos, material, and pattern are not inferred from this form. SHA-256 {active.assetHash.slice(0, 16)} stays the image identity.</p>
           <div className="flex gap-2">
             <button type="button" className="rounded bg-ink px-3 py-2 text-paper" onClick={save}>Save</button>

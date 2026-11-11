@@ -188,6 +188,15 @@ def export_row(sample: dict, mask_path: Path) -> dict:
     merchant = sample["merchant"]
     if merchant.get("visuallyDetected") is not False:
         raise ValueError("Merchant fabric, colour, and pattern were not visually detected.")
+    consent = sample.get("consent") if isinstance(sample.get("consent"), dict) else None
+    if isinstance(consent, dict) and consent.get("allowsPersonImagery") is True:
+        person_permitted = True
+    elif isinstance(consent, dict) and consent.get("allowsPersonImagery") is False:
+        person_permitted = False
+    else:
+        person_permitted = None
+    provenance = sample.get("provenance") if isinstance(sample.get("provenance"), dict) else None
+    commercial = sample.get("commercialUse") if isinstance(sample.get("commercialUse"), bool) else None
     return {
         "sampleId": sample["sampleId"],
         "sku": sample["sku"],
@@ -196,15 +205,14 @@ def export_row(sample: dict, mask_path: Path) -> dict:
         "imagePath": sample["imagePath"],
         "imageWidth": sample["imageWidth"],
         "imageHeight": sample["imageHeight"],
-        "provenance": {"source": "annotation-studio", "acquired": "annotator", "origin": sample["imagePath"]},
         "category": sample["category"],
         "licence": sample.get("licence"),
-        "commercialUse": sample.get("commercialUse") is True,
-        "consent": sample.get("consent"),
+        "commercialUse": commercial,
+        "consent": consent,
         "parts": parts,
         "garmentMask": mask,
         "bodyMask": None,
-        "personCapturePermitted": False,
+        "personCapturePermitted": person_permitted,
         "confidence": sample.get("confidence"),
         "review": "corrected",
         "annotator": sample.get("annotator") or "",
@@ -214,6 +222,7 @@ def export_row(sample: dict, mask_path: Path) -> dict:
         "fabric": merchant.get("fabric") or "",
         "colours": merchant.get("colours") or [],
         "captureId": sample.get("captureId"),
+        "provenance": provenance,
         "admitted": False,
         "trainingLabel": True,
         "merchantVisuallyDetected": False,
