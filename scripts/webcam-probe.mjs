@@ -1,7 +1,41 @@
 /**
- * Opens the running mirror and asks for a real camera.
- * Does not enable a fake media device. Does not write a generated image.
+ * Camera probe for a physical machine.
+ * If no video device is present, this exits before launching a browser.
+ * A headless run is not a measurement of camera fps, tracking, or product switching.
  */
+import { readdirSync } from "node:fs";
+
+function physicalCameras() {
+  try {
+    return readdirSync("/dev").filter((name) => /^video\d+$/.test(name));
+  } catch {
+    return [];
+  }
+}
+
+const cameras = physicalCameras();
+if (cameras.length === 0 || process.env.ISIBUKO_PHYSICAL_CAMERA !== "1") {
+  process.stdout.write(
+    `${JSON.stringify(
+      {
+        kind: "not-run",
+        physicalCameras: cameras,
+        headlessUsed: false,
+        fakeDevice: false,
+        measurements: null,
+        personTested: false,
+        reason:
+          cameras.length === 0
+            ? "No physical camera device. Headless Chromium is not a performance measurement."
+            : "A video device exists, but ISIBUKO_PHYSICAL_CAMERA=1 was not set, so no rates were recorded.",
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  process.exit(0);
+}
+
 import { createRequire } from "node:module";
 
 const require = createRequire("/workspace/package.json");
@@ -14,7 +48,7 @@ const executablePath =
 
 const browser = await chromium.launch({
   executablePath,
-  headless: true,
+  headless: false,
   args: ["--use-fake-ui-for-media-stream"],
 });
 const page = await browser.newPage();

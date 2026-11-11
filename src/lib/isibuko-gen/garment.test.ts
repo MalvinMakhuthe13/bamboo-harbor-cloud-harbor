@@ -128,7 +128,7 @@ describe("body-conditioned placement", () => {
 describe("encoders and webcam separation", () => {
   it("does not execute a downloaded encoder and refuses the NVIDIA parser", () => {
     assert.equal(neuralEncoderReady(), false);
-    assert.equal(ENCODER_CANDIDATES.every((item) => item.executed === false && item.downloaded === false), true);
+    assert.equal(ENCODER_CANDIDATES.every((item) => item.executed === false && item.downloaded === false && item.emitsPartGeometry === false), true);
     const parser = ENCODER_CANDIDATES.find((item) => item.id === "fashn-human-parser");
     assert.equal(parser?.commercial, "not-cleared");
     assert.equal(ENCODER_CANDIDATES.some((item) => item.garmentSpecific), false);
