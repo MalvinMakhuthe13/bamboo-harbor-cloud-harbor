@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +12,7 @@ from PIL import Image
 
 from dataset_gate import admit, approve, catalog_drafts, content_id, correct, file_hash, problems, set_rights, write_manifest
 from dinov2_experiment import extract_patch_features, fit_splits, load_checkpoint, load_feature_images, run_experiment, save_checkpoint
-from install_isolated import install
+from install_isolated import ensure_venv_pip, install
 from garment_intel import PARTS
 from gpu_probe import probe_gpu
 from kaggle_setup import BRANCH, REPO, build_report, clone_plan, main, prepare_checkout, read_git_token
@@ -247,8 +248,11 @@ class KagglePrepTests(unittest.TestCase):
         missing = install(venv, run=fake, probe=lambda: {"numpy": True, "pillow": False})
         pip = [command for command in calls if "install" in command and "--no-deps" in command]
         self.assertEqual(len(pip), 1)
+        self.assertEqual(pip[0][1:4], ["-m", "pip", "install"])
         self.assertIn("pillow==12.3.0", pip[0])
         self.assertIn(str(venv), pip[0][0])
+        self.assertNotIn("bin/pip", " ".join(pip[0]))
+        self.assertNotEqual(pip[0][0], sys.executable)
         self.assertNotIn("torch", " ".join(pip[0]))
         self.assertTrue(missing["pipCalled"])
 
@@ -259,6 +263,59 @@ class KagglePrepTests(unittest.TestCase):
         self.assertNotIn("SystemExit", code[-1])
         self.assertIn("--require-gpu", code[-1])
         self.assertIn("RuntimeError", code[-1])
+
+    def test_venv_pip_is_bootstrapped_without_the_system_pip(self):
+        def recording(ready_at):
+            calls = []
+            state = {"checks": 0}
+
+            def pip_ready():
+                state["checks"] += 1
+                return state["checks"] >= ready_at
+
+            def fake(argv, check, capture_output, text):
+                del check, capture_output, text
+                calls.append(list(argv))
+                if "ensurepip" in argv:
+                    return subprocess.CompletedProcess(argv, 0 if ready_at < 99 else 1, "", "ensurepip failed")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+
+            return calls, pip_ready, fake
+
+        venv = Path(tempfile.mkdtemp()) / "venv"
+        calls, ready, fake = recording(1)
+        present = install(venv, run=fake, probe=lambda: {"numpy": False, "pillow": True}, pip_ready=ready)
+        install_commands = [command for command in calls if command[1:4] == ["-m", "pip", "install"]]
+        self.assertEqual(len(install_commands), 1)
+        self.assertEqual(install_commands[0][0], str(venv / "bin" / "python"))
+        self.assertNotIn("ensurepip", [part for command in calls for part in command])
+        self.assertFalse(present["bootstrapped"])
+        self.assertTrue(all(command[0] == sys.executable or command[0] == str(venv / "bin" / "python") for command in calls))
+        self.assertFalse(any(command[0] == sys.executable and "pip" in command for command in calls))
+
+        calls, ready, fake = recording(2)
+        boot = install(venv, run=fake, probe=lambda: {"numpy": False, "pillow": True}, pip_ready=ready)
+        self.assertTrue(boot["bootstrapped"])
+        self.assertTrue(any(command[1:4] == ["-m", "ensurepip", "--upgrade"] and command[0] == str(venv / "bin" / "python") for command in calls))
+        self.assertTrue(any(command[1:4] == ["-m", "pip", "install"] and command[0] == str(venv / "bin" / "python") for command in calls))
+        self.assertFalse(any(command[0] == sys.executable and ("pip" in command or "ensurepip" in command) for command in calls))
+
+        calls = []
+
+        def fail(argv, check, capture_output, text):
+            del check, capture_output, text
+            calls.append(list(argv))
+            if "ensurepip" in argv:
+                return subprocess.CompletedProcess(argv, 1, "", "No module named ensurepip")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with self.assertRaises(RuntimeError) as caught:
+            install(venv, run=fail, probe=lambda: {"numpy": False, "pillow": False}, pip_ready=lambda: False)
+        self.assertIn("system pip was not used", str(caught.exception))
+        self.assertFalse(any(command[1:3] == ["-m", "pip"] for command in calls))
+        self.assertFalse(any(command[0] == sys.executable and "pip" in command for command in calls))
+        with self.assertRaises(RuntimeError):
+            ensure_venv_pip(venv, fail, ready=lambda: False)
 
     def test_train_step_never_sees_validation_or_test(self):
         rows = []
