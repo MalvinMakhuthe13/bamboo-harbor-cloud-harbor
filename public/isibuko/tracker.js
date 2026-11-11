@@ -1,3 +1,5 @@
+/* global importScripts, Vision */
+
 /* Classic worker.
    MediaPipe's FilesetResolver points at /mediapipe/vision_wasm_internal.js and then
    calls importScripts. A module worker has no importScripts, so the library falls
@@ -65,10 +67,10 @@ function pack(lms) {
 }
 
 function closeAll() {
-  try { if (face) face.close(); } catch (e) {}
-  try { if (pose) pose.close(); } catch (e) {}
-  try { if (hands) hands.close(); } catch (e) {}
-  try { if (segmenter) segmenter.close(); } catch (e) {}
+  try { if (face) face.close(); } catch { /* A partially initialized tracker may not close cleanly. */ }
+  try { if (pose) pose.close(); } catch { /* A partially initialized tracker may not close cleanly. */ }
+  try { if (hands) hands.close(); } catch { /* A partially initialized tracker may not close cleanly. */ }
+  try { if (segmenter) segmenter.close(); } catch { /* A partially initialized tracker may not close cleanly. */ }
   face = pose = hands = segmenter = null;
 }
 
