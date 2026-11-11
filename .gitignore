@@ -12,7 +12,8 @@ dist
 __pycache__/
 *.pyc
 
-# Model weights and training sets stay out of Git.
+# Benchmark photographs stay out of Git.
+benchmark-data/
 weights/
 datasets/
 services/isibuko-infer/weights/

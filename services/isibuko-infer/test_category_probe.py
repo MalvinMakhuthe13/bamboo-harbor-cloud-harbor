@@ -50,7 +50,37 @@ class ProbeContractTests(unittest.TestCase):
         self.assertNotIn("isibuko.visual-review.v1", source)
         self.assertNotIn("ProductFact", source)
 
-    def test_missing_weights_do_not_trigger_a_download(self):
+    def test_three_templates_are_frozen_and_consistent(self):
+        self.assertEqual(len(category_probe.FROZEN_TEMPLATES), 3)
+        self.assertEqual(category_probe.FROZEN_TEMPLATES[0], "{label}")
+        self.assertEqual(category_probe.templates_to_run(), category_probe.FROZEN_TEMPLATES[1:])
+        for template in category_probe.FROZEN_TEMPLATES:
+            prompts = category_probe.prompts_for(template)
+            self.assertEqual(tuple(label for label, _text in prompts), category_probe.VISUAL_LABELS)
+            for label, text in prompts:
+                self.assertEqual(text, template.replace("{label}", label))
+        before = category_probe.FROZEN_TEMPLATES
+        category_probe.rank_similarities({"wig": 0.9, "shirt": 0.1})
+        self.assertIs(category_probe.FROZEN_TEMPLATES, before)
+        self.assertNotIn("threshold", Path(category_probe.__file__).read_text())
+
+    def test_historical_baseline_is_not_a_fourteen_way_result(self):
+        baseline = category_probe.HISTORICAL_BASELINE
+        self.assertEqual(baseline["closedSet"], ("shirt", "jacket", "dress", "trousers", "none of these"))
+        silk = next(row for row in baseline["rows"] if row["catalogueId"] == "shirt-silk")
+        self.assertEqual(silk["top"], "jacket")
+        self.assertEqual(silk["catalogueCategory"], "shirt")
+
+    def test_a_bad_checksum_fails_before_inference(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for relative in category_probe.ASSET_SHA256:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"not a model")
+            with self.assertRaises(RuntimeError):
+                category_probe.verify_assets(root)
         probe = category_probe.ClipProbe(Path("/tmp/isibuko-clip-missing"))
         with self.assertRaises(FileNotFoundError):
             probe.load()

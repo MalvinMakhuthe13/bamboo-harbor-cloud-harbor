@@ -22,7 +22,7 @@ REVISION = "6b7c523703ae26e39be4b03774966f8571c7f523"
 REPOSITORY = "Xenova/clip-vit-base-patch32"
 DEFAULT_MODEL_DIR = Path(f"/tmp/isibuko-clip-weights/xenova-clip-vit-base-patch32/{REVISION}")
 
-# The prompt is the category text itself. No template was added.
+# The historical five-way prompts. They are not a 14-way category test.
 PROMPTS: tuple[tuple[str, str], ...] = (
     ("shirt", "shirt"),
     ("jacket", "jacket"),
@@ -30,6 +30,70 @@ PROMPTS: tuple[tuple[str, str], ...] = (
     ("trousers", "trousers"),
     ("none of these", "none of these"),
 )
+
+# Frozen before this run. A score must not add, remove, or rewrite one.
+FROZEN_TEMPLATES: tuple[str, ...] = (
+    "{label}",
+    "a photograph of a {label}",
+    "an isolated {label} product photograph",
+)
+
+VISUAL_LABELS: tuple[str, ...] = (
+    "wig",
+    "shirt",
+    "jacket",
+    "dress",
+    "trousers",
+    "skirt",
+    "hat",
+    "glasses",
+    "nails",
+    "earrings",
+    "necklace",
+    "bracelet",
+    "ring",
+    "watch",
+)
+
+# The catalogue field for pants-charcoal is "pants". Prompts use "trousers". The catalogue is not edited.
+CATALOGUE_LABEL_NOTE = "Catalogue category pants is prompted as trousers. No catalogue category is changed."
+
+# Phase 4D.2, commit 83d6450579a84b5ae73ae7e0e49832ecea119c18.
+# Five bare labels, including "none of these". Not rerun. Not the 14-label template.
+HISTORICAL_BASELINE: dict[str, object] = {
+    "run": "phase-4d2",
+    "commit": "83d6450579a84b5ae73ae7e0e49832ecea119c18",
+    "template": "{label}",
+    "closedSet": ("shirt", "jacket", "dress", "trousers", "none of these"),
+    "scoreKind": "cosine-similarity",
+    "rows": (
+        {"catalogueId": "shirt-linen", "catalogueCategory": "shirt", "filename": "shirt-linen.png", "top": "shirt", "topScore": 0.2707, "runnerUp": "jacket", "runnerUpScore": 0.2603, "margin": 0.0104},
+        {"catalogueId": "shirt-silk", "catalogueCategory": "shirt", "filename": "shirt-silk.png", "top": "jacket", "topScore": 0.2703, "runnerUp": "shirt", "runnerUpScore": 0.2560, "margin": 0.0143},
+        {"catalogueId": "jacket-camel", "catalogueCategory": "jacket", "filename": "jacket-camel.png", "top": "jacket", "topScore": 0.2848, "runnerUp": "dress", "runnerUpScore": 0.2607, "margin": 0.0241},
+        {"catalogueId": "dress-slip", "catalogueCategory": "dress", "filename": "dress-slip.png", "top": "dress", "topScore": 0.2792, "runnerUp": "trousers", "runnerUpScore": 0.2590, "margin": 0.0202},
+        {"catalogueId": "pants-charcoal", "catalogueCategory": "pants", "filename": "pants-charcoal.png", "top": "trousers", "topScore": 0.2885, "runnerUp": "jacket", "runnerUpScore": 0.2549, "margin": 0.0336},
+        {"catalogueId": "wig-wave", "catalogueCategory": "wig", "filename": "wig-wave.png", "top": "dress", "topScore": 0.2259, "runnerUp": "trousers", "runnerUpScore": 0.2184, "margin": 0.0074},
+        {"catalogueId": "wig-bob", "catalogueCategory": "wig", "filename": "wig-bob.png", "top": "jacket", "topScore": 0.2149, "runnerUp": "none of these", "runnerUpScore": 0.2148, "margin": 0.0000},
+        {"catalogueId": "wig-braids", "catalogueCategory": "wig", "filename": "wig-braids.png", "top": "trousers", "topScore": 0.2552, "runnerUp": "shirt", "runnerUpScore": 0.2420, "margin": 0.0133},
+        {"catalogueId": "hat-fedora", "catalogueCategory": "hat", "filename": "hat-fedora.png", "top": "trousers", "topScore": 0.2476, "runnerUp": "jacket", "runnerUpScore": 0.2329, "margin": 0.0147},
+        {"catalogueId": "hat-cap", "catalogueCategory": "hat", "filename": "hat-cap.png", "top": "trousers", "topScore": 0.2345, "runnerUp": "shirt", "runnerUpScore": 0.2245, "margin": 0.0101},
+        {"catalogueId": "glasses-cateye", "catalogueCategory": "glasses", "filename": "glasses-cateye.png", "top": "trousers", "topScore": 0.2207, "runnerUp": "shirt", "runnerUpScore": 0.2081, "margin": 0.0125},
+        {"catalogueId": "glasses-gold", "catalogueCategory": "glasses", "filename": "glasses-gold.png", "top": "trousers", "topScore": 0.2237, "runnerUp": "none of these", "runnerUpScore": 0.2202, "margin": 0.0035},
+        {"catalogueId": "earring-hoop", "catalogueCategory": "earrings", "filename": "earring-hoop.png", "top": "none of these", "topScore": 0.2153, "runnerUp": "dress", "runnerUpScore": 0.2124, "margin": 0.0029},
+        {"catalogueId": "necklace-pendant", "catalogueCategory": "necklace", "filename": "necklace-pendant.png", "top": "dress", "topScore": 0.2255, "runnerUp": "jacket", "runnerUpScore": 0.2110, "margin": 0.0145},
+        {"catalogueId": "watch-gold", "catalogueCategory": "watch", "filename": "watch-gold.png", "top": "none of these", "topScore": 0.2142, "runnerUp": "dress", "runnerUpScore": 0.2132, "margin": 0.0010},
+        {"catalogueId": "ring-signet", "catalogueCategory": "ring", "filename": "ring-signet.png", "top": "none of these", "topScore": 0.2243, "runnerUp": "jacket", "runnerUpScore": 0.2107, "margin": 0.0136},
+    ),
+}
+
+CUTOUTS: tuple[tuple[str, str, str], ...] = tuple(
+    (str(row["catalogueId"]), str(row["catalogueCategory"]), str(row["filename"])) for row in HISTORICAL_BASELINE["rows"]  # type: ignore[index]
+)
+
+ASSET_SHA256 = {
+    "onnx/vision_model_quantized.onnx": "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299",
+    "onnx/text_model_quantized.onnx": "73baab855d406190da9faa498cfedf65f15cf309f4cc7385b7b032e6d08e5c3a",
+}
 
 CATALOGUE: tuple[tuple[str, str], ...] = (
     ("shirt-linen.png", "shirt"),
@@ -221,6 +285,26 @@ class ClipProbe:
         ranked["scores"] = scores
         return ranked
 
+    def score_image_prompts(self, image: Image.Image, prompts: tuple[tuple[str, str], ...]) -> dict:
+        if self._vision is None or self.tokenizer is None or self.processor is None or self._text is None:
+            self.load()
+        assert self._vision is not None and self.tokenizer is not None and self.processor is not None and self._text is not None
+        rows = []
+        for _label, text in prompts:
+            embedding = self._text.run(None, {"input_ids": self.tokenizer.input_ids(text)})[0][0]
+            rows.append(embedding)
+        matrix = np.stack(rows).astype(np.float32)
+        matrix = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
+        embedding = self._vision.run(None, {"pixel_values": preprocess(image, self.processor)})[0][0]
+        norm = float(np.linalg.norm(embedding))
+        if norm == 0:
+            raise RuntimeError("The image embedding has no magnitude.")
+        cosine = (embedding / norm) @ matrix.T
+        scores = {label: float(cosine[index]) for index, (label, _text) in enumerate(prompts)}
+        ranked = rank_similarities(scores)
+        ranked["scores"] = scores
+        return ranked
+
 
 def refuse_non_image(value: object) -> str | None:
     if isinstance(value, (bytes, bytearray)):
@@ -237,6 +321,58 @@ def refuse_non_image(value: object) -> str | None:
 
 
 def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def prompts_for(template: str) -> tuple[tuple[str, str], ...]:
+    if template not in FROZEN_TEMPLATES:
+        raise ValueError("That template is not in the frozen set.")
+    return tuple((label, template.replace("{label}", label)) for label in VISUAL_LABELS)
+
+
+def templates_to_run() -> tuple[str, ...]:
+    """The two templates that were not part of the historical five-way run."""
+    return FROZEN_TEMPLATES[1:]
+
+
+def verify_assets(model_dir: Path) -> None:
+    root = Path(model_dir)
+    for relative, expected in ASSET_SHA256.items():
+        path = root / relative
+        if not path.is_file():
+            raise FileNotFoundError(f"Missing {relative}. This probe does not download it.")
+        actual = file_sha256(path)
+        if actual != expected:
+            raise RuntimeError(f"Checksum mismatch for {relative}.")
+
+
+def run_frozen_smoke(catalog_dir: Path, model_dir: Path = DEFAULT_MODEL_DIR) -> list[dict[str, object]]:
+    verify_assets(model_dir)
+    probe = ClipProbe(model_dir)
+    probe.load()
+    rows: list[dict[str, object]] = []
+    for template in templates_to_run():
+        prompts = prompts_for(template)
+        for product_id, catalogue_category, filename in CUTOUTS:
+            with Image.open(catalog_dir / filename) as image:
+                ranked = probe.score_image_prompts(image, prompts)
+            rows.append({
+                "catalogueId": product_id,
+                "catalogueCategory": catalogue_category,
+                "filename": filename,
+                "template": template,
+                "top": ranked["top"],
+                "topScore": ranked["topScore"],
+                "runnerUp": ranked["runnerUp"],
+                "runnerUpScore": ranked["runnerUpScore"],
+                "margin": ranked["gap"],
+                "calibrated": False,
+            })
+    return rows
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
