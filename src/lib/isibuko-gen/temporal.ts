@@ -53,6 +53,7 @@ export class TemporalEngine {
   private phase: TemporalStep["phase"] = "tracking";
   private generatedFrames = 0;
   private framesSinceKeyframe = 0;
+  private occlusions: PerceptionState["occlusion"][] = [];
 
   step(input: { atMs: number; perception: PerceptionState; productLockId: string | null }): TemporalStep {
     const productChanged = input.productLockId !== this.lockId;
@@ -74,6 +75,8 @@ export class TemporalEngine {
     } else {
       this.phase = "tracking";
     }
+    this.occlusions.push(input.perception.occlusion);
+    if (this.occlusions.length > HISTORY) this.occlusions.shift();
     if (input.perception.shoulders === 2) {
       this.poses.push({
         atMs: input.atMs,
@@ -149,5 +152,30 @@ export class TemporalEngine {
 
   poseHistoryLength(): number {
     return this.poses.length;
+  }
+
+  occlusionHistory(): PerceptionState["occlusion"][] {
+    return [...this.occlusions];
+  }
+
+  /** Streaming slots a future generator would fill. Every learned slot stays empty. */
+  featureState(): {
+    previousGeneratedFeature: null;
+    latent: null;
+    garmentAppearance: null;
+    temporalAttention: "not-attached";
+    motionRefinement: "not-attached";
+    occlusionHistory: PerceptionState["occlusion"][];
+    phase: TemporalStep["phase"];
+  } {
+    return {
+      previousGeneratedFeature: null,
+      latent: null,
+      garmentAppearance: null,
+      temporalAttention: "not-attached",
+      motionRefinement: "not-attached",
+      occlusionHistory: this.occlusionHistory(),
+      phase: this.phase,
+    };
   }
 }
