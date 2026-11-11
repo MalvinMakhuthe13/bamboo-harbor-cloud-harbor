@@ -16,6 +16,14 @@ import {
   torsoUv,
 } from "./placement.ts";
 import { MODEL_REGISTRY, WEIGHT_BYTES } from "./registry.ts";
+import { COMPOSITE_FRAG } from "./shaders.ts";
+
+describe("shader edge definitions", () => {
+  it("uses defined ascending smoothstep edges for wig feathering", () => {
+    assert.ok(COMPOSITE_FRAG.includes("1.0 - smoothstep(0.78, 1.0, e)"));
+    assert.ok(!COMPOSITE_FRAG.includes("smoothstep(1.0, 0.78, e)"));
+  });
+});
 
 describe("appearance replacement policy", () => {
   it("never paints the protected face", () => {
