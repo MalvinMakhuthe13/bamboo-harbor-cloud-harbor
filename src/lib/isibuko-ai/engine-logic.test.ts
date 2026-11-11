@@ -10,6 +10,7 @@ import {
   glassesSprite,
   nailSegments,
   hidesOriginalHair,
+  isPlausibleClothingQuad,
   regionMode,
   torsoUv,
 } from "./placement.ts";
@@ -121,6 +122,51 @@ describe("product conditioning", () => {
     assert.equal(regionMode("bracelet"), "none");
     assert.equal(regionMode("glasses"), "none");
     assert.equal(regionMode("nails"), "none");
+  });
+
+  it("rejects garment geometry that could create a frame-sized overlay", () => {
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: -0.4, y: 0.2 },
+        topR: { x: 1.4, y: 0.2 },
+        botL: { x: -0.5, y: 0.9 },
+        botR: { x: 1.5, y: 0.9 },
+      }),
+      false,
+    );
+  });
+
+  it("rejects collapsed and non-finite pose geometry", () => {
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: 0.5, y: 0.3 },
+        topR: { x: 0.5, y: 0.3 },
+        botL: { x: 0.5, y: 0.7 },
+        botR: { x: 0.5, y: 0.7 },
+      }),
+      false,
+    );
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: Number.NaN, y: 0.3 },
+        topR: { x: 0.6, y: 0.3 },
+        botL: { x: 0.4, y: 0.7 },
+        botR: { x: 0.6, y: 0.7 },
+      }),
+      false,
+    );
+  });
+
+  it("accepts a normal upper-body garment quad", () => {
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: 0.3, y: 0.3 },
+        topR: { x: 0.7, y: 0.3 },
+        botL: { x: 0.34, y: 0.72 },
+        botR: { x: 0.66, y: 0.72 },
+      }),
+      true,
+    );
   });
 
   it("keeps the centre of a torso inside the garment", () => {
