@@ -10,10 +10,13 @@ export const STILL_BASELINE = {
   ownedByIsibuko: false,
   liveVideo: false,
   codeLicense: "Apache-2.0 (repository LICENSE and Hugging Face model card, reviewed 11 Nov 2026)",
-  parserLicense: "FASHN Human Parser inherits the NVIDIA Source Code License for SegFormer. Not cleared.",
+  parserLicense:
+    "FASHN Human Parser inherits the NVIDIA Source Code License for SegFormer. Section 3.3 limits it to research or evaluation. Not used.",
+  firstRoute: "segmentation-free flat-lay, parser id none. Not executed.",
   blockedBy: [
     "weights-not-downloaded",
-    "parser-licence-not-cleared",
+    "dwpose-onnx-not-downloaded",
+    "fashn-checkout-not-present",
     "no-approved-gpu",
     "no-rights-cleared-benchmark-pair",
   ],

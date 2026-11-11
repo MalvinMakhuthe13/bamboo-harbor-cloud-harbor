@@ -13,9 +13,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from isolated_runner import inspect_checkout, run_flatlay
+from parser_adapter import plan_parser
+
 MODEL_ID = "fashn-vton-1.5"
 MODEL_VERSION = "1.5"
 REQUIRED_WEIGHT = "model.safetensors"
+POSE_FILES = ("dwpose/yolox_l.onnx", "dwpose/dw-ll_ucoco_384.onnx")
 
 
 def weights_dir() -> Path:
@@ -26,6 +30,11 @@ def weights_dir() -> Path:
 def inputs_root() -> Path:
     raw = os.environ.get("ISIBUKO_INPUTS", "").strip() or "inputs"
     return Path(raw).resolve()
+
+
+def checkout_dir() -> Path:
+    raw = os.environ.get("ISIBUKO_FASHN_SRC", "").strip()
+    return Path(raw) if raw else Path("third_party/fashn-vton-1.5")
 
 
 def assess() -> dict[str, Any]:
@@ -40,23 +49,28 @@ def assess() -> dict[str, Any]:
         "modelVersion": MODEL_VERSION,
         "weightsPresent": present,
         "runtimeVerified": False,
+        "recommendedRoute": plan_parser("none", True, "flat-lay"),
     }
     if not present:
         base["code"] = "WEIGHTS_MISSING"
         base["message"] = "FASHN VTON v1.5 weights are not installed. No image was generated."
         return base
+    missing_pose = [rel for rel in POSE_FILES if not (root / rel).is_file() or (root / rel).stat().st_size <= 0]
+    if missing_pose:
+        base["code"] = "POSE_WEIGHTS_MISSING"
+        base["message"] = "DWPose ONNX files are not installed. The human parser was not downloaded. No image was generated."
+        return base
     if os.environ.get("ISIBUKO_ALLOW_FASHN") != "1":
         base["code"] = "RUNTIME_MISSING"
         base["message"] = "Weights are on disk, but the third-party pipeline is not approved to run. No image was generated."
         return base
-    try:
-        import fashn_vton  # type: ignore  # noqa: F401
-    except Exception as exc:  # noqa: BLE001 — report the missing runtime, do not invent an image
-        base["code"] = "RUNTIME_MISSING"
-        base["message"] = f"fashn_vton is not importable ({type(exc).__name__}). No image was generated."
+    inspection = inspect_checkout(checkout_dir())
+    if not inspection["ok"]:
+        base["code"] = inspection["code"]
+        base["message"] = inspection["message"]
         return base
-    base["code"] = "BENCHMARK_PAIR_MISSING"
-    base["message"] = "The package imports, but no rights-cleared person and garment pair is mounted. Refusing to emit an image."
+    base["code"] = "INFRA_READY"
+    base["message"] = "Weights and a parser-free checkout are present. No image has been generated."
     return base
 
 
@@ -69,40 +83,62 @@ def contained(root: Path, relative: str) -> Path:
     return candidate
 
 
-def generate(person_rel: str, garment_rel: str, category: str) -> dict[str, Any]:
-    status = assess()
-    if status["code"] != "BENCHMARK_PAIR_MISSING":
-        return status
+def generate(
+    person_rel: str,
+    garment_rel: str,
+    category: str,
+    garment_photo_type: str,
+    segmentation_free: bool,
+    parser_id: str,
+) -> dict[str, Any]:
     if category not in {"tops", "bottoms", "one-pieces"}:
-        status["code"] = "UNSUPPORTED_CATEGORY"
-        status["message"] = "FASHN v1.5 categories are tops, bottoms, and one-pieces. No image was generated."
+        return _refused("UNSUPPORTED_CATEGORY", "FASHN v1.5 categories are tops, bottoms, and one-pieces. No image was generated.")
+    if garment_photo_type not in {"flat-lay", "model"} or parser_id.strip() == "":
+        return _refused("INVALID_INPUT", "garmentPhotoType (flat-lay or model) and parserId are required. No image was generated.")
+    plan = plan_parser(parser_id, segmentation_free, garment_photo_type)
+    if not plan["run"]:
+        body = _refused(plan["code"], plan["message"])
+        body["parserPlan"] = plan
+        return body
+    status = assess()
+    if status["code"] != "INFRA_READY":
+        status["parserPlan"] = plan
         return status
     root = inputs_root()
     person = contained(root, person_rel)
     garment = contained(root, garment_rel)
     if not person.is_file() or not garment.is_file():
-        status["code"] = "INVALID_INPUT"
-        status["message"] = "The person or garment file is not in the approved inputs directory. No image was generated."
-        return status
-    # Reached only when weights, approval, and the package are all present.
-    from fashn_vton import TryOnPipeline  # type: ignore
+        return _refused("INVALID_INPUT", "The person or garment file is not in the approved inputs directory. No image was generated.")
+    if plan["code"] != "PARSER_SKIPPED":
+        return _refused("PARSER_NOT_WIRED", "A cleared masked parser is registered, but only the flat-lay runner is implemented. No image was generated.")
+    out = Path(os.environ.get("ISIBUKO_OUTPUTS", "outputs")) / "tryon.png"
+    result = run_flatlay(
+        checkout=checkout_dir(),
+        weights=weights_dir(),
+        person=person,
+        garment=garment,
+        category=category,
+        output=out,
+    )
+    result.setdefault("modelId", MODEL_ID)
+    result.setdefault("modelVersion", MODEL_VERSION)
+    result.setdefault("weightsPresent", True)
+    result["parserPlan"] = plan
+    return result
 
-    pipeline = TryOnPipeline(weights_dir=str(weights_dir()))
-    result = pipeline(str(person), str(garment), category=category)
-    out_dir = Path(os.environ.get("ISIBUKO_OUTPUTS", "outputs"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / "tryon.png"
-    result.images[0].save(out)
+
+def _refused(code: str, message: str) -> dict[str, Any]:
+    present = (weights_dir() / REQUIRED_WEIGHT).is_file()
     return {
-        "ok": True,
-        "generated": True,
-        "code": "GENERATED",
-        "image": str(out),
+        "ok": False,
+        "generated": False,
+        "image": None,
+        "code": code,
+        "message": message,
         "modelId": MODEL_ID,
         "modelVersion": MODEL_VERSION,
-        "weightsPresent": True,
-        "runtimeVerified": True,
-        "message": "A still image was written by fashn_vton. This is not a live video frame.",
+        "weightsPresent": present,
+        "runtimeVerified": False,
     }
 
 
@@ -130,7 +166,14 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b"{}"
         try:
             payload = json.loads(raw.decode() or "{}")
-            body = generate(str(payload.get("person", "")), str(payload.get("garment", "")), str(payload.get("category", "tops")))
+            body = generate(
+                str(payload.get("person", "")),
+                str(payload.get("garment", "")),
+                str(payload.get("category", "tops")),
+                str(payload.get("garmentPhotoType", "")),
+                payload.get("segmentationFree") is True,
+                str(payload.get("parserId", "")),
+            )
         except ValueError as exc:
             body = assess()
             body["code"] = "INVALID_INPUT"

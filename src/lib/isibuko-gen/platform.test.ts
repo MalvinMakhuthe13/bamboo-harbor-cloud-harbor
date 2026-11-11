@@ -6,6 +6,7 @@ import { BrandDirectory } from "./brands.ts";
 import { CATEGORY_CAPABILITIES, generativeAdvertised } from "./categories.ts";
 import { acceptExperiment } from "./experiment.ts";
 import { interpretInferResponse, routeRender } from "./infer-client.ts";
+import { routeParser } from "./parser-route.ts";
 import { acceptScorecard } from "./scorecard.ts";
 import { acceptCameraReport } from "./camera-suite.ts";
 
@@ -85,6 +86,19 @@ describe("inference routing", () => {
     assert.equal(route.mode, "refused");
     assert.equal(route.generated, false);
     assert.notEqual(route.code, "COMPOSITE");
+  });
+});
+
+describe("parser route", () => {
+  it("skips the parser only for a flat-lay segmentation-free still", () => {
+    const skipped = routeParser({ parserId: "none", segmentationFree: true, garmentPhotoType: "flat-lay" });
+    assert.equal(skipped.code, "PARSER_SKIPPED");
+    assert.equal(skipped.usesNvidiaParser, false);
+    const nvidia = routeParser({ parserId: "fashn-human-parser", segmentationFree: true, garmentPhotoType: "flat-lay" });
+    assert.equal(nvidia.code, "PARSER_NON_COMMERCIAL");
+    assert.equal(nvidia.run, false);
+    assert.equal(routeParser({ parserId: "mediapipe-selfie", segmentationFree: true, garmentPhotoType: "flat-lay" }).code, "INSUFFICIENT_LABELS");
+    assert.equal(routeParser({ parserId: "none", segmentationFree: true, garmentPhotoType: "model" }).code, "PARSER_REQUIRED");
   });
 });
 

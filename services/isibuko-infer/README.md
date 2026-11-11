@@ -3,22 +3,15 @@
 This process is the isolated place a real try-on model can run later.
 It is not the live camera composite.
 
-Today, with no weights installed, `GET /v1/status` and `POST /v1/tryon` return HTTP 409 and `generated: false`. They do not write an image.
+The stock FASHN pipeline imports a non-commercial human parser. This service does not.
+A flat-lay garment with `segmentationFree: true` and `parserId: "none"` is the only route that may later call the try-on weights.
+Until those weights, a CUDA GPU, and a rights-cleared pair exist, every response has `generated: false`.
 
-## Run the refusal test
+## Run the refusal tests
 
 ```bash
 cd services/isibuko-infer
 python3 test_server.py
 ```
 
-## Run the service
-
-```bash
-cd services/isibuko-infer
-ISIBUKO_WEIGHTS=/abs/path/to/weights python3 server.py
-```
-
-Weights are not in Git. Downloading the FASHN checkpoint (about 2 GB, plus the parser cache) is not approved. Do not set `ISIBUKO_ALLOW_FASHN=1` until that approval, a GPU decision, and a rights-cleared person/garment pair exist.
-
-The live mirror must keep calling the on-device composite. This service is a separate path.
+GPU commands, not yet approved and not run, are in `GPU_RUN.md`.
