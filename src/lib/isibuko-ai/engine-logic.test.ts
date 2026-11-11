@@ -9,6 +9,7 @@ import {
   containPoint,
   glassesSprite,
   nailSegments,
+  wigSprite,
   nailShapeFactors,
   hidesOriginalHair,
   regionMode,
@@ -191,6 +192,18 @@ describe("product conditioning", () => {
       assert.ok(factors.tip <= 1);
       assert.ok(factors.half > 0 && factors.half <= 0.15);
     }
+  });
+
+  it("sizes the wig plate to a plausible multiple of face width", () => {
+    const face = {
+      forehead: { x: 0.5, y: 0.3 },
+      chin: { x: 0.5, y: 0.7 },
+      cheekL: { x: 0.4, y: 0.5 },
+      cheekR: { x: 0.6, y: 0.5 },
+    };
+    const sprite = wigSprite(face.forehead, face.chin, face.cheekL, face.cheekR, 1.1, 1, 0.12, 0.42);
+    assert.ok(sprite.w / 0.2 < 2.3);
+    assert.ok(sprite.w / 0.2 > 2.0);
   });
 
   it("reads ten nail tips from two hands", () => {
