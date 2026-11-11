@@ -1,0 +1,46 @@
+name: Isibuko visual-fit CI
+
+on:
+  pull_request:
+    branches:
+      - build/isibuko-decart-inspired-live-experience
+  push:
+    branches:
+      - fix/live-wig-nail-fit-2026-11-11
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isibuko-visual-fit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Tests, types and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Check TypeScript
+        run: npm run typecheck
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Build production bundle
+        run: npm run build
