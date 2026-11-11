@@ -6,6 +6,7 @@ import {
   glassesSprite,
   hairFrame,
   hasSleeves,
+  isPlausibleClothingQuad,
   hatSprite,
   nailSegments,
   nailShapeFactors,
@@ -543,7 +544,7 @@ export function startEngine(opts: {
     const elR = poseLm && shR && seen(poseLm[14], 0.2) ? remember("elR", flip(poseLm[14]!)) : shR;
     const wrL = poseLm && elL && seen(poseLm[15], 0.2) ? remember("wrL", flip(poseLm[15]!)) : elL;
     const wrR = poseLm && elR && seen(poseLm[16], 0.2) ? remember("wrR", flip(poseLm[16]!)) : elR;
-    const clothing =
+    const proposedClothing =
       mode === "clothing" && shL && shR && hipL && hipR && category && category !== "wig" && category !== "hat"
         ? clothingQuad({
             shoulderL: shL,
@@ -557,6 +558,8 @@ export function startEngine(opts: {
             sleevesInPhoto: false,
           })
         : null;
+    // Never render a garment from stale, collapsed, or runaway pose landmarks.
+    const clothing = proposedClothing && isPlausibleClothingQuad(proposedClothing) ? proposedClothing : null;
     const chin = memory.get("chin") ?? null;
     if (clothing && chin && shL && shR && (category === "shirt" || category === "jacket" || category === "dress")) {
       const shoulderY = (shL.y + shR.y) / 2;
