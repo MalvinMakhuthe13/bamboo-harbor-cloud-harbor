@@ -7,6 +7,7 @@ import { CATEGORY_LABEL, CATEGORY_ORDER, findProduct, productsIn } from "@/lib/i
 import { conditionProduct } from "@/lib/isibuko-ai/condition";
 import type { Drag } from "@/lib/isibuko-ai/engine";
 import { localFitProvider, requestFit, type AdvisorRefusal, type FitAdvice } from "@/lib/isibuko-ai/advisor";
+import { catalogueReader, factText, FIELD_LABEL, ORIGIN_LABEL } from "@/lib/isibuko-ai/product-facts";
 import { matchSize, sizeScaleFor } from "@/lib/isibuko-ai/fit";
 import { useWardrobe } from "@/lib/isibuko-ai/store";
 import type { Category, FrameRequest, LiveMetrics, Product, TryEvent } from "@/lib/isibuko-ai/types";
@@ -37,6 +38,7 @@ function MirrorPage() {
   const [sessionSeen, setSessionSeen] = useState<number | null>(null);
   const [fitHelp, setFitHelp] = useState(false);
   const [advice, setAdvice] = useState<FitAdvice | AdvisorRefusal | null>(null);
+  const [productFacts, setProductFacts] = useState(false);
   const controlsRef = useRef<{ setDelegate: (delegate: "CPU" | "GPU") => void } | null>(null);
   const active = findProduct(data.products, productId);
   const swatch = active.swatches.find((item) => item.id === swatchId) ?? active.swatches[0];
@@ -67,6 +69,21 @@ function MirrorPage() {
     });
     return () => controller.abort();
   }, [fitHelp, active.id, active.category, active.sizes, chestCm, waistCm, shoulderCm, headCircCm, wristCm, faceWidthCm, hipCm]);
+
+  const photographPresent = Boolean(active.image);
+  const productFactRead = useMemo(() => {
+    if (!productFacts) return null;
+    return catalogueReader.read({
+      productId: active.id,
+      name: active.name,
+      category: active.category,
+      custom: active.custom === true,
+      fabric: active.fabric ?? null,
+      photograph: photographPresent,
+      swatchName: swatch?.name ?? null,
+      sizeCount: active.sizes.length,
+    });
+  }, [productFacts, active.id, active.name, active.category, active.custom, active.fabric, photographPresent, swatch?.name, active.sizes.length]);
 
   const requestRef = useRef<FrameRequest>({
     productId: active.id,
@@ -209,6 +226,34 @@ function MirrorPage() {
                   ? `Fit help suggests ${advice.size}. Source: ${advice.source}. ${advice.explanation}`
                   : `Fit help is unavailable (${advice.source}). ${advice.reason}`}
               </p>
+            )}
+          </div>
+          <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={productFacts}
+              onChange={(event) => setProductFacts(event.target.checked)}
+            />
+            Product facts, off by default. The photograph is not analysed.
+          </label>
+          <div aria-live="polite" aria-atomic="true">
+            {productFacts && productFactRead && (
+              <div className="text-sm text-brass-2">
+                <p>No model looked at the photograph. These facts come from the product record.</p>
+                <p>Merchant-supplied facts were entered by the merchant. They are not an independent check.</p>
+                <p>Rule-derived facts come from Isibuko's category rules, not from the photograph.</p>
+                {productFactRead.ok ? (
+                  <ul className="mt-2 space-y-1">
+                    {productFactRead.facts.map((fact) => (
+                      <li key={fact.field}>
+                        {FIELD_LABEL[fact.field] ?? fact.field}: {factText(fact)}. {ORIGIN_LABEL[fact.origin]}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>{productFactRead.reason}</p>
+                )}
+              </div>
             )}
           </div>
           <label className="text-sm text-muted">
