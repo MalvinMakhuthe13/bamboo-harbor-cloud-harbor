@@ -217,3 +217,17 @@ The next milestone is a short moving-person clip with the same garment identity 
 ---
 
 **Current state reminder:** the repository's existing `isibuko.shirt-diffusion` architecture is designed but untrained; its runner deliberately returns no image. This blueprint does not change that fact and does not authorise any paid service or training run.
+
+
+## 11. First baseline candidate: FASHN VTON v1.5
+
+Primary-source review performed 11 November 2026:
+
+- The [official FASHN repository](https://github.com/fashn-AI/fashn-vton-1.5) publishes an inference pipeline and says the model weights are downloadable separately. The repository describes still-image person + garment inference and supports tops, bottoms, and one-pieces.
+- The [official model research page](https://fashn.ai/research/vton-1-5) describes a 972M-parameter pixel-space MMDiT and reports approximately 5 seconds on an H100 with about 8 GB VRAM. These are FASHN's published figures, not Isibuko measurements.
+- The [Hugging Face model card](https://huggingface.co/fashn-ai/fashn-vton-1.5) identifies the model weights as Apache-2.0. The repository also lists third-party components, including the FASHN Human Parser, whose licence must be reviewed separately before redistributing or shipping the full pipeline.
+- FASHN describes training on 18M masked try-on pairs and a second phase mixing those pairs with 4M synthetic triplets. That description does not itself grant Isibuko rights to any underlying training assets.
+
+**Decision:** FASHN VTON v1.5 is the first candidate to benchmark for the P0 *still-image shirt* milestone, not an Isibuko-owned model and not a live-video solution. Do not install or download weights until the team has reviewed the complete dependency/licence chain, checked the target deployment environment, and approved storage/compute requirements. No paid API is needed for the local inference path described by the repository, but an appropriate GPU is likely necessary for practical testing.
+
+The benchmark must test exact product fidelity, identity preservation, garment cut/print preservation, and garment transitions. The model's published limitations and performance must be treated as hypotheses to verify against Isibuko's own evaluation set.
