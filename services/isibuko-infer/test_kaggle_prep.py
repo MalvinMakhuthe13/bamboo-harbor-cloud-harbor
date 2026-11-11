@@ -10,7 +10,8 @@ import numpy as np
 from PIL import Image
 
 from dataset_gate import admit, approve, catalog_drafts, content_id, correct, file_hash, problems, set_rights, write_manifest
-from dinov2_experiment import fit_splits, load_checkpoint, run_experiment, save_checkpoint
+from dinov2_experiment import extract_patch_features, fit_splits, load_checkpoint, load_feature_images, run_experiment, save_checkpoint
+from install_isolated import install
 from garment_intel import PARTS
 from gpu_probe import probe_gpu
 from kaggle_setup import BRANCH, REPO, build_report, clone_plan, main, prepare_checkout, read_git_token
@@ -188,6 +189,76 @@ class KagglePrepTests(unittest.TestCase):
             self.assertTrue(result["notLiveVideo"])
             self.assertTrue(result["notDeformation"])
             self.assertFalse(result["readyForLive"])
+
+    def test_decoded_dimensions_foreground_and_held_out_images(self):
+        import dinov2_experiment as experiment
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            train = make_row(folder, "tr", (10, 20, 30), "train", "s1")
+            val = make_row(folder, "va", (30, 20, 10), "val", "s2")
+            held = make_row(folder, "held-out", (1, 2, 3), "test", "s3")
+            seen = []
+
+            def opener(path):
+                seen.append(Path(path).name)
+                if "held-out" in Path(path).name:
+                    raise AssertionError("test image opened")
+                return path
+
+            selected, _images = load_feature_images([train, val, held], opener)
+            self.assertEqual([row["split"] for row in selected], ["train", "val"])
+
+            def stop(images, weight_dir):
+                del images, weight_dir
+                raise RuntimeError("encoder stopped before any weights")
+
+            original = experiment._encode_images
+            experiment._encode_images = stop
+            try:
+                with self.assertRaises(RuntimeError):
+                    extract_patch_features([train, val, held], folder / "weights", open_image=opener)
+            finally:
+                experiment._encode_images = original
+            self.assertNotIn("held-out.png", seen)
+
+            wrong_size = {**train, "imageWidth": train["imageWidth"] + 5}
+            self.assertTrue(any("decoded image" in error for error in problems(wrong_size)))
+            wrong_count = {**train, "garmentMask": {**train["garmentMask"], "foregroundPixels": 1}}
+            self.assertTrue(any("foreground count" in error for error in problems(wrong_count)))
+            wrong_mask = {**train, "garmentMask": {**train["garmentMask"], "width": 2, "height": 2}}
+            self.assertTrue(any("decoded mask" in error for error in problems(wrong_mask)))
+
+    def test_install_stays_inside_the_venv(self):
+        calls = []
+
+        def fake(argv, check, capture_output, text):
+            del check, capture_output, text
+            calls.append(list(argv))
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        venv = Path(tempfile.mkdtemp()) / "venv"
+        ready = install(venv, run=fake, probe=lambda: {"numpy": True, "pillow": True})
+        self.assertFalse(ready["pipCalled"])
+        self.assertTrue(ready["torchUntouched"])
+        self.assertTrue(any("--system-site-packages" in command for command in calls))
+        self.assertFalse(any("torch" in part for command in calls for part in command))
+        calls.clear()
+        missing = install(venv, run=fake, probe=lambda: {"numpy": True, "pillow": False})
+        pip = [command for command in calls if "install" in command and "--no-deps" in command]
+        self.assertEqual(len(pip), 1)
+        self.assertIn("pillow==12.3.0", pip[0])
+        self.assertIn(str(venv), pip[0][0])
+        self.assertNotIn("torch", " ".join(pip[0]))
+        self.assertTrue(missing["pipCalled"])
+
+        notebook = json.loads((ROOT / "kaggle" / "isibuko-gpu-setup.ipynb").read_text(encoding="utf-8"))
+        code = ["".join(cell["source"]) for cell in notebook["cells"] if cell["cell_type"] == "code"]
+        self.assertIn("install_isolated.py", code[1])
+        self.assertNotIn("requirements-kaggle.txt", code[1])
+        self.assertNotIn("SystemExit", code[-1])
+        self.assertIn("--require-gpu", code[-1])
+        self.assertIn("RuntimeError", code[-1])
 
     def test_train_step_never_sees_validation_or_test(self):
         rows = []

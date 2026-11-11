@@ -39,7 +39,7 @@ def expected_resources() -> dict:
         "headCheckpointBytes": head * 4,
         "optimizerStateBytes": head * 8,
         "vramArithmeticMeasured": False,
-        "expectedKaggleGpu": "Unobserved. Free Kaggle sessions often expose a T4 or P100 with 16 GB. The notebook records the actual device.",
+        "expectedKaggleGpu": "First preflight measured a Tesla T4 with 14911 MB, PyTorch 2.11.0+cu130, CUDA 13.0. This process has not repeated that measurement. The notebook records the live device.",
         "diskNote": "The notebook measures free space. The weight figure is 22.1M parameters times 4 bytes, not a downloaded file size.",
         "trained": False,
         "syntheticSmokeIsThisModel": False,
@@ -99,24 +99,42 @@ def download_backbone(dest: Path) -> None:
         hf_hub_download(repo_id="facebook/dinov2-small", filename=filename, local_dir=str(dest))
 
 
-def extract_patch_features(image_paths: list[Path], weight_dir: Path):
-    import torch
+def load_feature_images(rows: list[dict], open_image):
+    """Open train and validation images only. A test row is never passed to open_image."""
+    selected = [row for row in rows if row.get("split") in ("train", "val")]
+    if any(row.get("split") == "test" for row in selected):
+        raise RuntimeError("Test split reached feature loading.")
+    return selected, [open_image(row["imagePath"]) for row in selected]
+
+
+def extract_patch_features(rows: list[dict], weight_dir: Path, open_image=None):
     from PIL import Image
+
+    def opener(path):
+        return Image.open(path).convert("RGB")
+
+    selected, images = load_feature_images(rows, open_image or opener)
+    if not selected:
+        raise ValueError("No train or validation images to encode. Test images are not loaded.")
+    return _encode_images(images, weight_dir)
+
+
+def _encode_images(images, weight_dir: Path):
+    import torch
     from transformers import AutoImageProcessor, AutoModel
 
     processor = AutoImageProcessor.from_pretrained(weight_dir)
     model = AutoModel.from_pretrained(weight_dir)
     model.eval()
     model.to("cuda")
-    rows = []
-    for path in image_paths:
-        image = Image.open(path).convert("RGB")
+    encoded = []
+    for image in images:
         batch = processor(images=image, return_tensors="pt")
         batch = {key: value.to("cuda") for key, value in batch.items()}
         with torch.no_grad():
             tokens = model(**batch).last_hidden_state
-        rows.append(tokens[:, 1:, :].mean(dim=1).squeeze(0).detach().cpu().numpy())
-    return np.stack(rows)
+        encoded.append(tokens[:, 1:, :].mean(dim=1).squeeze(0).detach().cpu().numpy())
+    return np.stack(encoded)
 
 
 def fit_splits(features: np.ndarray, rows: list[dict], step, steps: int = 200, seed: int = 4) -> dict:
@@ -188,7 +206,8 @@ def run_experiment(manifest_path: Path, env: dict | None = None) -> dict:
     weights = Path(env["ISIBUKO_WEIGHTS"])
     download_backbone(weights)
     rows = load_manifest(manifest_path)
-    features = extract_patch_features([Path(row["imagePath"]) for row in rows], weights)
+    features = extract_patch_features(rows, weights)
+    batch = [row for row in rows if row.get("split") in ("train", "val")]
     from garment_intel import GarmentHead, evaluate
 
     head = GarmentHead(in_dim=features.shape[1], hidden=128, identity=16, seed=4)
@@ -197,7 +216,7 @@ def run_experiment(manifest_path: Path, env: dict | None = None) -> dict:
         del indices
         head.step(feats, category, parts, proportions, sku, 0.05)
 
-    summary = fit_splits(features, rows, step)
+    summary = fit_splits(features, batch, step)
     val = np.array(summary["valIndex"])
     category, parts, proportions, sku = summary["valLabels"]
     metrics = evaluate(head, features[val], {"category": category, "parts": parts, "proportions": proportions, "sku": sku})
@@ -213,7 +232,8 @@ def run_experiment(manifest_path: Path, env: dict | None = None) -> dict:
         "metrics": metrics,
         "trainCount": summary["trainCount"],
         "valCount": summary["valCount"],
-        "testCount": summary["testCount"],
+        "testCount": sum(1 for row in rows if row.get("split") == "test"),
+        "testImagesLoaded": False,
         "checkpoint": checkpoint.name,
         "readyForLive": False,
     }

@@ -130,6 +130,22 @@ def _inside(point, width: int, height: int) -> bool:
     )
 
 
+def _decoded_size(path: Path) -> tuple[int, int]:
+    with Image.open(path) as image:
+        image.load()
+        return image.size
+
+
+def _decoded_mask(path: Path) -> tuple[int, int, int]:
+    with Image.open(path) as image:
+        gray = image.convert("L")
+        gray.load()
+        width, height = gray.size
+        pixels = gray.get_flattened_data() if hasattr(gray, "get_flattened_data") else gray.getdata()
+        foreground = sum(1 for value in pixels if value > 0)
+    return width, height, foreground
+
+
 def _mask_errors(mask, width: int, height: int, label: str) -> list[str]:
     if not isinstance(mask, dict):
         return [f"{label} mask file is missing."]
@@ -139,11 +155,18 @@ def _mask_errors(mask, width: int, height: int, label: str) -> list[str]:
     file = Path(str(path))
     if file_hash(file) != mask.get("sha256"):
         return [f"{label} mask hash does not match the file."]
-    if int(mask.get("width") or 0) != width or int(mask.get("height") or 0) != height:
-        return [f"{label} mask dimensions do not match the image."]
-    if int(mask.get("foregroundPixels") or 0) <= 0:
-        return [f"{label} mask foreground is empty."]
-    return []
+    try:
+        decoded_width, decoded_height, foreground = _decoded_mask(file)
+    except Exception:
+        return [f"{label} mask could not be decoded."]
+    reasons = []
+    if decoded_width != int(mask.get("width") or -1) or decoded_height != int(mask.get("height") or -1):
+        reasons.append(f"{label} mask dimensions do not match the decoded mask.")
+    if foreground != int(mask.get("foregroundPixels") or -1):
+        reasons.append(f"{label} mask foreground count does not match the decoded mask.")
+    if decoded_width != width or decoded_height != height:
+        reasons.append(f"{label} mask dimensions do not match the image.")
+    return reasons
 
 
 def _part_errors(name: str, part, width: int, height: int) -> list[str]:
@@ -191,6 +214,14 @@ def problems(row: dict) -> list[str]:
             reasons.append("Recorded sha256 does not match the image file.")
         if file.stat().st_size != int(row.get("byteSize") or -1):
             reasons.append("byteSize does not match the image file.")
+        try:
+            decoded_width, decoded_height = _decoded_size(file)
+        except Exception:
+            reasons.append("Image could not be decoded.")
+        else:
+            if decoded_width != width or decoded_height != height:
+                reasons.append("Manifest image dimensions do not match the decoded image.")
+            width, height = decoded_width, decoded_height
     provenance = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
     if not str(provenance.get("source", "")).strip() or not str(provenance.get("acquired", "")).strip():
         reasons.append("Provenance needs a source and an acquired date.")
