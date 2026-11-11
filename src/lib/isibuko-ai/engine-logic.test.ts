@@ -163,7 +163,7 @@ describe("product conditioning", () => {
         topL: { x: 0.3, y: 0.3 },
         topR: { x: 0.7, y: 0.3 },
         botL: { x: 0.3, y: 0.7 },
-        botR: { x: 0.5, y: 0.45 },
+        botR: { x: 0.25, y: 0.45 },
       }),
       false,
     );
