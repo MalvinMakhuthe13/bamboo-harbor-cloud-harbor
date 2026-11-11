@@ -57,6 +57,7 @@ function MirrorPage() {
     const controller = new AbortController();
     void requestFit(localFitProvider, {
       productId: active.id,
+      category: active.category,
       sizes: active.sizes,
       measurements: { chestCm, waistCm, shoulderCm, headCircCm, wristCm, faceWidthCm, hipCm },
       signal: controller.signal,
@@ -65,7 +66,7 @@ function MirrorPage() {
       if (!controller.signal.aborted) setAdvice(result);
     });
     return () => controller.abort();
-  }, [fitHelp, active.id, active.sizes, chestCm, waistCm, shoulderCm, headCircCm, wristCm, faceWidthCm, hipCm]);
+  }, [fitHelp, active.id, active.category, active.sizes, chestCm, waistCm, shoulderCm, headCircCm, wristCm, faceWidthCm, hipCm]);
 
   const requestRef = useRef<FrameRequest>({
     productId: active.id,
@@ -201,13 +202,15 @@ function MirrorPage() {
             />
             Fit help, off by default. Measurements stay on this device.
           </label>
-          {fitHelp && advice && (
-            <p className="text-sm text-brass-2">
-              {advice.ok
-                ? `Fit help suggests ${advice.size}. Source: ${advice.source}. ${advice.explanation}`
-                : `Fit help is unavailable (${advice.source}). ${advice.reason}`}
-            </p>
-          )}
+          <div aria-live="polite" aria-atomic="true">
+            {fitHelp && advice && (
+              <p className="text-sm text-brass-2">
+                {advice.ok
+                  ? `Fit help suggests ${advice.size}. Source: ${advice.source}. ${advice.explanation}`
+                  : `Fit help is unavailable (${advice.source}). ${advice.reason}`}
+              </p>
+            )}
+          </div>
           <label className="text-sm text-muted">
             Height in centimetres
             <input
