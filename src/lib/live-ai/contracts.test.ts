@@ -5,7 +5,7 @@ import {
   validatePhotoRequest,
   type LiveAiProvider,
   type PhotoTryOnRequest,
-} from "./contracts";
+} from "./contracts.ts";
 
 const validRequest: PhotoTryOnRequest = {
   mode: "photo",
