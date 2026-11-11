@@ -20,6 +20,7 @@ import {
 import { COMPOSITE_FRAG, FULLSCREEN_VERT, SPRITE_FRAG, SPRITE_VERT } from "@/lib/isibuko-ai/shaders";
 import { applySessionEvent, reuseLiveCamera } from "@/lib/isibuko-ai/session";
 import { noteLiveFrame } from "@/lib/isibuko-gen/live-track";
+import { notePerception } from "@/lib/isibuko-gen/perception";
 import {
   FULL_FRAME,
   GPU_STALL_MS,
@@ -713,6 +714,13 @@ export function startEngine(opts: {
         fps,
         compositeMs: times.composite,
         receipt: null,
+      });
+      notePerception({
+        atMs: performance.now(),
+        face: faceLm,
+        pose: poseLm,
+        hands: handLms,
+        silhouetteFresh: hasMask && lastMaskAt > 0 && performance.now() - lastMaskAt < 700,
       });
     } catch {
       // A feasibility log must not stop the camera or the photographic composite.
