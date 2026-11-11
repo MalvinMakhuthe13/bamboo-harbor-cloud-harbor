@@ -9,6 +9,7 @@ import {
   containPoint,
   glassesSprite,
   nailSegments,
+  nailShapeFactors,
   hidesOriginalHair,
   regionMode,
   torsoUv,
@@ -181,6 +182,15 @@ describe("product conditioning", () => {
     const sprite = glassesSprite({ x: 0.4, y: 0.4 }, { x: 0.6, y: 0.4 }, 0.34, 1);
     assert.ok(Math.abs(sprite.w - 0.2 * 2.55) < 1e-6);
     assert.equal(sprite.cx, 0.5);
+  });
+
+  it("keeps polish inside the distal nail plate instead of extending past the fingertip", () => {
+    for (const shape of ["almond", "square", "stiletto"] as const) {
+      const factors = nailShapeFactors(shape);
+      assert.ok(factors.start >= 0.4 && factors.start < factors.tip);
+      assert.ok(factors.tip <= 1);
+      assert.ok(factors.half > 0 && factors.half <= 0.15);
+    }
   });
 
   it("reads ten nail tips from two hands", () => {
