@@ -6,6 +6,7 @@ import { Nav } from "@/components/site/Nav";
 import { CATEGORY_LABEL, CATEGORY_ORDER, findProduct, productsIn } from "@/lib/isibuko-ai/catalog";
 import { conditionProduct } from "@/lib/isibuko-ai/condition";
 import type { Drag } from "@/lib/isibuko-ai/engine";
+import { localFitProvider, requestFit, type AdvisorRefusal, type FitAdvice } from "@/lib/isibuko-ai/advisor";
 import { matchSize, sizeScaleFor } from "@/lib/isibuko-ai/fit";
 import { useWardrobe } from "@/lib/isibuko-ai/store";
 import type { Category, FrameRequest, LiveMetrics, Product, TryEvent } from "@/lib/isibuko-ai/types";
@@ -34,10 +35,37 @@ function MirrorPage() {
   const [height, setHeight] = useState(data.heightCm);
   const [switches, setSwitches] = useState(0);
   const [sessionSeen, setSessionSeen] = useState<number | null>(null);
+  const [fitHelp, setFitHelp] = useState(false);
+  const [advice, setAdvice] = useState<FitAdvice | AdvisorRefusal | null>(null);
   const controlsRef = useRef<{ setDelegate: (delegate: "CPU" | "GPU") => void } | null>(null);
   const active = findProduct(data.products, productId);
   const swatch = active.swatches.find((item) => item.id === swatchId) ?? active.swatches[0];
   const fit = useMemo(() => (metrics ? matchSize(active.sizes, metrics.body) : null), [active.sizes, metrics]);
+  const chestCm = metrics?.body.chestCm ?? null;
+  const waistCm = metrics?.body.waistCm ?? null;
+  const shoulderCm = metrics?.body.shoulderCm ?? null;
+  const headCircCm = metrics?.body.headCircCm ?? null;
+  const wristCm = metrics?.body.wristCm ?? null;
+  const faceWidthCm = metrics?.body.faceWidthCm ?? null;
+  const hipCm = metrics?.body.hipCm ?? null;
+
+  useEffect(() => {
+    if (!fitHelp) {
+      setAdvice(null);
+      return;
+    }
+    const controller = new AbortController();
+    void requestFit(localFitProvider, {
+      productId: active.id,
+      sizes: active.sizes,
+      measurements: { chestCm, waistCm, shoulderCm, headCircCm, wristCm, faceWidthCm, hipCm },
+      signal: controller.signal,
+      timeoutMs: 1500,
+    }).then((result) => {
+      if (!controller.signal.aborted) setAdvice(result);
+    });
+    return () => controller.abort();
+  }, [fitHelp, active.id, active.sizes, chestCm, waistCm, shoulderCm, headCircCm, wristCm, faceWidthCm, hipCm]);
 
   const requestRef = useRef<FrameRequest>({
     productId: active.id,
@@ -165,6 +193,21 @@ function MirrorPage() {
           )}
           {fit?.warning && <p className="text-sm text-clay">{fit.warning}</p>}
           {fit?.detail && <p className="text-sm text-muted">{fit.detail}</p>}
+          <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={fitHelp}
+              onChange={(event) => setFitHelp(event.target.checked)}
+            />
+            Fit help, off by default. Measurements stay on this device.
+          </label>
+          {fitHelp && advice && (
+            <p className="text-sm text-brass-2">
+              {advice.ok
+                ? `Fit help suggests ${advice.size}. Source: ${advice.source}. ${advice.explanation}`
+                : `Fit help is unavailable (${advice.source}). ${advice.reason}`}
+            </p>
+          )}
           <label className="text-sm text-muted">
             Height in centimetres
             <input
