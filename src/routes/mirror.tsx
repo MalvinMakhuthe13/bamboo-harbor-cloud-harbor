@@ -122,6 +122,7 @@ function MirrorPage() {
                 key={product.id}
                 type="button"
                 onClick={() => selectProduct(product)}
+                data-product-id={product.id}
                 className={`min-h-11 shrink-0 rounded-full px-3 text-sm ${product.id === active.id ? "bg-paper text-ink" : "text-muted"}`}
               >
                 {product.name}

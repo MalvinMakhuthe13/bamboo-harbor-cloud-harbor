@@ -4,6 +4,7 @@
  * A headless run is not a measurement of camera fps, tracking, or product switching.
  */
 import { readdirSync } from "node:fs";
+import { parseCameraPanel } from "./camera-panel.mjs";
 
 function physicalCameras() {
   try {
@@ -92,8 +93,26 @@ try {
   report.errorName = devices.errorName;
   const buttons = page.getByRole("button", { name: "Use my camera" });
   await buttons.last().click({ timeout: 10000 });
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(2500);
   report.panel = await page.locator("body").innerText();
+  const rates = parseCameraPanel(report.panel);
+  report.fps = rates.fps;
+  report.faceHz = rates.faceHz;
+  report.poseHz = rates.poseHz;
+  report.handHz = rates.handHz;
+  report.segmentHz = rates.segmentHz;
+  report.compositeMs = rates.compositeMs;
+  report.cameraSession = rates.cameraSession;
+  report.motion = rates.motion;
+  report.faceFound = rates.faceFound;
+  report.trackingRecovery = null;
+  const products = page.locator("[data-product-id]");
+  if (rates.live && rates.cameraSession !== null && (await products.count()) > 1) {
+    await products.nth(1).click();
+    await page.waitForTimeout(700);
+    const after = parseCameraPanel(await page.locator("body").innerText());
+    report.productSwitchKeptSession = after.cameraSession === rates.cameraSession;
+  }
   if (report.panel.includes("No camera was found")) report.pageError = "No camera was found on this device.";
   else if (report.panel.includes("Camera permission was blocked")) report.pageError = "Camera permission was blocked.";
 } catch (error) {
