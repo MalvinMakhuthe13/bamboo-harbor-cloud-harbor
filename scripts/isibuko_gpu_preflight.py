@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 
-def gb(value: int | float) -> float:
+def gb(value) -> float:
     return round(float(value) / (1024 ** 3), 2)
 
 
@@ -60,7 +60,7 @@ def main() -> int:
                 "total_vram_gb": gb(total_bytes),
                 "free_vram_gb": gb(free_bytes),
                 "bf16_supported": bool(torch.cuda.is_bf16_supported()),
-                "fp16_supported": bool(torch.cuda.is_available()),
+                "fp16_supported": tuple(torch.cuda.get_device_capability(0)) >= (5, 3),
             }
         else:
             report["gpu"] = None
