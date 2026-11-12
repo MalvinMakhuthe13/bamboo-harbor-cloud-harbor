@@ -149,7 +149,7 @@ This is one of the most useful discoveries for Isibuko's longer-term garment pip
 
 This is valuable for generating and testing category-specific garment templates and understanding garment construction. It is **not** a ready-made real-person virtual try-on dataset, and it does not automatically turn a retailer's single flat product image into an accurate 3D garment.
 
-Use it as a geometry/template research source with attribution and review of the dataset documentation and any upstream body-model restrictions before incorporating data into a production asset pipeline.
+Use it as a geometry/template research source with attribution and review of the dataset documentation and any upstream body-model restrictions before incorporating data into a production asset pipeline. Important: the separate `NvidiaWarp-GarmentCode` fork used by the published GarmentCodeData simulator is under the NVIDIA Source Code License and its README explicitly says that this fork currently allows only non-commercial use. Do not use that fork in Isibuko's commercial simulator without a separate commercial permission. The GarmentCode pattern code and the GarmentCodeData dataset are separate from this simulator licence.
 
 Sources:
 - https://github.com/maria-korosteleva/GarmentCode
@@ -157,8 +157,31 @@ Sources:
 - https://www.research-collection.ethz.ch/items/9d16a4da-0d30-4963-8842-af20fcf82899
 - https://github.com/ChimerAI-MMLab/Garment-GPT
 - https://huggingface.co/ChimerAI/GarmentGPT
+- https://github.com/Style3D/design2garmentcode-impl
+- https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct
+- https://github.com/biansy000/ChatGarment
+- https://github.com/georgeNakayama/AIpparel-Code
+- https://huggingface.co/georgeNakayama/AIpparel
 
-### 5.2 Rapier soft bodies
+### 5.2 Design2GarmentCode — practical offline asset-conversion candidate
+
+This is a particularly promising candidate for a first product-image-to-pattern experiment:
+
+- Official implementation is MIT-licensed.
+- It accepts a garment photograph or design and generates a parametric sewing-pattern program.
+- It can use a local Qwen2-VL-2B-Instruct model rather than the default GPT-4o API path, so a local experiment does not require paid inference.
+- The base Qwen2-VL-2B-Instruct weights are Apache-2.0 and approximately 4.43 GB in the published Hugging Face repository.
+- The project's README points to a separate fine-tuned Qwen LoRA checkpoint hosted on Google Drive; that checkpoint's licence and training-data provenance were not verified in this audit.
+- Its optional 3D cloth simulation uses the separate NVIDIA Warp GarmentCode fork described above, whose current fork licence is non-commercial. Do not enable that simulation for commercial use. Pattern generation can be evaluated separately, then use a separately cleared simulator such as Rapier.
+
+A 16 GB Kaggle T4 is a plausible place to benchmark the 2B base model plus the project adapter, but the actual peak VRAM, dependency compatibility and output quality have not been measured. A 4 GB RTX 3050 should not be assumed to run the full unquantized 4.43 GB base weights. This is the best low-cost asset-conversion experiment to investigate before attempting the 96.5 GB GarmentGPT repository.
+
+Sources:
+- https://github.com/Style3D/design2garmentcode-impl
+- https://github.com/Style3D/design2garmentcode-impl/blob/main/requirements.txt
+- https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct
+
+### 5.3 Rapier soft bodies
 
 Rapier is the leading first prototype candidate for cloth physics because its project states Apache-2.0 and it has JavaScript bindings. Its JavaScript soft-body documentation includes cloth, cloth tubes, structural/shear/bending constraints, collision surfaces, kinematic particle control and deformable-body APIs.
 
@@ -173,7 +196,7 @@ Sources:
 - https://rapier.rs/docs/user_guides/javascript/soft_body_creation_and_insertion/
 - https://github.com/dimforge/rapier/tree/master/typescript
 
-### 5.3 WebGPU XPBD
+### 5.4 WebGPU XPBD
 
 An MIT-licensed WebGPU XPBD cloth sample demonstrates GPU compute-based cloth simulation. It is a useful reference for a high-end path, but the repository describes a small cloth demo and its README reports testing on Chrome Dev with unsafe WebGPU flags. That is not sufficient evidence for a production mobile dependency.
 
@@ -186,7 +209,7 @@ Sources:
 - https://developer.chrome.com/blog/new-in-webgpu-121
 - https://developer.chrome.com/blog/new-in-webgpu-146
 
-### 5.4 What a single product photo cannot tell us
+### 5.5 What a single product photo cannot tell us
 
 A single front image does not contain the garment's actual back, side, inner construction, thickness or reliable physical measurements. Any model that generates those unseen regions is inferring them.
 
@@ -276,7 +299,7 @@ Relevant work:
 - **TRELLIS:** MIT code/model family for generic image-to-3D asset creation, but it is not a garment-pattern solver and requires substantial GPU resources. Its output must be checked for garment separability and simulation readiness.
 - **Stable Fast 3D:** community licence permits commercial use under a revenue threshold, but creates a licence constraint if the company grows beyond that threshold.
 
-**Decision:** evaluate GarmentGPT as the first offline pattern-generation experiment, then pass its GCD JSON through GarmentCode. Human-review the generated pattern and reconcile it against merchant measurements before approving it as a garment asset. Keep generic image-to-3D as a separate experiment, not a runtime requirement or source of exact physical fit.
+**Decision:** evaluate Design2GarmentCode first as the lowest-cost offline pattern-generation experiment, subject to clearance of its fine-tuned adapter. GarmentGPT is a second research candidate, not the first smoke test: its Hugging Face repository is 96.5 GB in total, which is not suitable for a one-hour free T4 session. ChatGarment and AIpparel are useful academic references but use larger LLaVA-based models and training datasets whose separate commercial rights need review. Human-review any generated pattern and reconcile it against merchant measurements before approving it as a garment asset. Keep generic image-to-3D as a separate experiment, not a runtime requirement or source of exact physical fit.
 
 Sources:
 - https://dress-1-to-3.github.io/
