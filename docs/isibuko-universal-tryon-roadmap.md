@@ -22,6 +22,10 @@ The target is one fitting platform with category-specific fitting models. Garmen
 | Watches, bracelets, rings | Hand/wrist/finger-anchored fitting | Hand landmarks, wrist and finger geometry |
 | Nails | Per-nail geometry and surface alignment | Fingertip and nail landmarks |
 
+## Catalogue taxonomy notes
+
+The current `Category` union has canonical buckets rather than every retail subtype. T-shirts, polos, shirts and blouses currently map to `shirt`; hoodies, sweaters, jackets and coats map to `jacket`; jeans, trousers and shorts map to `pants`; jumpsuits map to the one-piece `dress` family until the catalogue needs a separate first-class subtype. Product cut, sleeve length, garment length and silhouette should be represented as product metadata rather than guessed from the category name. Add a first-class category only when the catalogue and renderer both need distinct routing.
+
 ## Shared fitting pipeline
 
 Every category should use the same high-level pipeline:
