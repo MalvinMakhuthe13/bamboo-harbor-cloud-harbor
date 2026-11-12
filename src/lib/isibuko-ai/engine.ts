@@ -1,6 +1,7 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
 import { buildShirtMesh } from "@/lib/isibuko-ai/garment-mesh";
 import { buildLowerBodyMesh } from "@/lib/isibuko-ai/lower-body-mesh";
+import { getWigFittingParameters } from "@/lib/isibuko-ai/anchors";
 import { getGarmentFitProfile, isGarmentCategory } from "@/lib/isibuko-ai/garment-profiles";
 import { FrameBudgetMonitor } from "@/lib/isibuko-ai/budget";
 import { fuseHeadPose, HeadPoseSmoother, type HeadPose } from "@/lib/isibuko-ai/head-pose";
@@ -783,8 +784,8 @@ export function startEngine(opts: {
       if (category === "glasses") sprites.push(nudge(glassesSprite(eyeL, eyeR, aspect, scale)));
       if (category === "hat") sprites.push(nudge(hatSprite(forehead, cheekL, cheekR, upright, aspect, scale, request.productId === "hat-cap")));
       if (category === "wig" && maskFresh) {
-        const opening = request.productId === "wig-bob" ? 0.37 : request.productId === "wig-braids" ? 0.11 : 0.12;
-        sprites.push(nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale, opening, 0.42)));
+        const wigFit = getWigFittingParameters(request.fittingAnchors);
+        sprites.push(nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale, wigFit.opening, wigFit.holeFrac)));
       }
       if (category === "earrings") {
         const midX = (cheekL.x + cheekR.x) / 2;
