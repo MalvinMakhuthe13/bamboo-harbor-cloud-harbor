@@ -18,6 +18,16 @@ export type Category =
 
 export type NailShape = "almond" | "square" | "stiletto";
 
+export type ProductAnchorPoint = { x: number; y: number; confidence?: number };
+export type ProductFittingAnchors = {
+  version: "isibuko.anchors/1";
+  points?: Record<string, ProductAnchorPoint>;
+  parameters?: {
+    wigOpening?: number;
+    wigHoleFraction?: number;
+  };
+};
+
 export type Swatch = {
   id: string;
   name: string;
