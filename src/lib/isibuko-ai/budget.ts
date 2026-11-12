@@ -45,7 +45,7 @@ export class FrameBudgetMonitor {
     this.jankThresholdMs = safeMs(options.jankThresholdMs ?? 50) || 50;
   }
 
-  observe(frameIntervalMs: number, frameWorkMs: number): FrameBudgetSnapshot {
+  observe(frameIntervalMs: number, frameWorkMs: number): void {
     const interval = safeMs(frameIntervalMs);
     const work = safeMs(frameWorkMs);
     this.frameIntervalMs = interval;
@@ -59,7 +59,6 @@ export class FrameBudgetMonitor {
     }
     if (work > 0) this.push(this.workTimes, work);
 
-    return this.snapshot();
   }
 
   snapshot(): FrameBudgetSnapshot {
