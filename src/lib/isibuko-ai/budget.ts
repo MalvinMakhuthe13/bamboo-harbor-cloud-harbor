@@ -14,10 +14,10 @@ export type FrameBudgetSnapshot = {
   p95FrameIntervalMs: number;
   meanFrameWorkMs: number;
   jankFrames: number;
-  longestFrameMs: number;
+  longestFrameIntervalMs: number;
   sampleCount: number;
-  rung: BudgetRung;
-  reason: "measurement-only";
+  rung: BudgetRung | null;
+  reason: "measurement-only; no quality changes";
 };
 
 export type FrameBudgetOptions = {
@@ -75,10 +75,10 @@ export class FrameBudgetMonitor {
       p95FrameIntervalMs: round(sorted.length ? sorted[p95Index]! : 0),
       meanFrameWorkMs: round(this.workTimes.length ? workSum / this.workTimes.length : 0),
       jankFrames: this.jankFrames,
-      longestFrameMs: round(this.longestFrameMs),
+      longestFrameIntervalMs: round(this.longestFrameMs),
       sampleCount: this.sampleCount,
-      rung: 0,
-      reason: "measurement-only",
+      rung: null,
+      reason: "measurement-only; no quality changes",
     };
   }
 
