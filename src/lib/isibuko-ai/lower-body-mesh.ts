@@ -71,18 +71,23 @@ function buildPanel(
   widthScale: number,
 ): LowerBodyVertex[] {
   const vertices: LowerBodyVertex[] = [];
-  const axis = { x: end.x - start.x, y: end.y - start.y };
-  const length = Math.hypot(axis.x, axis.y) || 1;
-  const normal = { x: -axis.y / length, y: axis.x / length };
   const startHalf = Math.max(dist(start, middle) * 0.22, 0.018) * widthScale;
   const midHalf = Math.max(dist(start, middle) * 0.17, 0.014) * widthScale;
   const endHalf = Math.max(dist(middle, end) * 0.12, 0.01) * widthScale;
+  const centerAt = (v: number): Pt => v <= 0.5
+    ? { x: mix(start.x, middle.x, smooth(v * 2)), y: mix(start.y, middle.y, smooth(v * 2)) }
+    : { x: mix(middle.x, end.x, smooth((v - 0.5) * 2)), y: mix(middle.y, end.y, smooth((v - 0.5) * 2)) };
   for (let r = 0; r < rows; r++) {
     const v = r / (rows - 1);
     const t = smooth(v);
-    const center = v <= 0.5
-      ? { x: mix(start.x, middle.x, smooth(v * 2)), y: mix(start.y, middle.y, smooth(v * 2)) }
-      : { x: mix(middle.x, end.x, smooth((v - 0.5) * 2)), y: mix(middle.y, end.y, smooth((v - 0.5) * 2)) };
+    const center = centerAt(v);
+    // Recompute the panel normal along the curved hip-knee-ankle path.
+    // A single start-to-end normal makes bent legs look like flat strips.
+    const before = centerAt(Math.max(0, v - 0.015));
+    const after = centerAt(Math.min(1, v + 0.015));
+    const tangent = { x: after.x - before.x, y: after.y - before.y };
+    const tangentLength = Math.hypot(tangent.x, tangent.y) || 1;
+    const normal = { x: -tangent.y / tangentLength, y: tangent.x / tangentLength };
     const half = v <= 0.5 ? mix(startHalf, midHalf, t * 2) : mix(midHalf, endHalf, (t - 0.5) * 2);
     for (let c = 0; c < columns; c++) {
       const u = c / (columns - 1);
