@@ -1,5 +1,6 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
 import { FrameBudgetMonitor } from "@/lib/isibuko-ai/budget";
+import { fuseHeadPose, HeadPoseSmoother, type HeadPose } from "@/lib/isibuko-ai/head-pose";
 import {
   braceletSprite,
   clothingQuad,
@@ -242,6 +243,9 @@ export function startEngine(opts: {
   const memory = new Map<string, Pt>();
   const nailBuf = new Float32Array(40);
   let faceLm: Lm[] | null = null;
+  let headPose: HeadPose | null = null;
+  let headPoseMs = 0;
+  const headPoseSmoother = new HeadPoseSmoother();
   let poseLm: Lm[] | null = null;
   let poseWorld: { x: number; y: number; z: number }[] | null = null;
   let handLms: Lm[][] = [];
@@ -304,6 +308,9 @@ export function startEngine(opts: {
       studioImg = null;
       stillUploaded = false;
       faceLm = null;
+      headPose = null;
+      headPoseMs = 0;
+      headPoseSmoother.reset();
       poseLm = null;
       poseWorld = null;
       handLms = [];
@@ -878,6 +885,7 @@ export function startEngine(opts: {
     job?: Job;
     ms?: number;
     face?: Lm[] | null;
+    pose4?: number[] | null;
     pose?: Lm[] | null;
     world?: { x: number; y: number; z: number }[] | null;
     hands?: Lm[][];
@@ -925,7 +933,16 @@ export function startEngine(opts: {
       if (face) {
         faceLm = face;
         faceMiss = 0;
-      } else if (++faceMiss > 8) faceLm = null;
+        const poseStarted = performance.now();
+        const estimate = fuseHeadPose(msg.pose4, face);
+        if (estimate) headPose = headPoseSmoother.update(estimate, now);
+        headPoseMs = performance.now() - poseStarted;
+      } else if (++faceMiss > 8) {
+        faceLm = null;
+        headPose = null;
+        headPoseMs = 0;
+        headPoseSmoother.reset();
+      }
     } else if (msg.job === "pose") {
       times.pose = ms;
       const pose = remapList(msg.pose, roi);
@@ -993,6 +1010,8 @@ export function startEngine(opts: {
       handMs: Math.round(times.hand),
       segmentMs: Math.round(times.segment),
       compositeMs: Math.round(times.composite),
+      headPose,
+      headPoseMs: Math.round(headPoseMs * 10) / 10,
       frameIntervalMs: budget.frameIntervalMs,
       frameWorkMs: budget.frameWorkMs,
       meanFrameIntervalMs: budget.meanFrameIntervalMs,
