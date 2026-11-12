@@ -22,6 +22,9 @@ export function Nav({ tone = "paper" }: { tone?: "paper" | "ink" }) {
         <Link to="/annotate" className="inline-flex min-h-11 items-center rounded-full px-3">
           Annotate
         </Link>
+        <Link to="/asset-editor" className="inline-flex min-h-11 items-center rounded-full px-3">
+          Asset editor
+        </Link>
         <Link to="/wardrobe" className="inline-flex min-h-11 items-center rounded-full px-3">
           Wardrobe
         </Link>
