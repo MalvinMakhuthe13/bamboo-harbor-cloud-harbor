@@ -45,12 +45,8 @@ export type ShirtMeshOptions = {
 };
 
 const EPSILON = 1e-5;
-const DEFAULT_COLUMNS =  nine();
+const DEFAULT_COLUMNS = 9;
 const DEFAULT_ROWS = 9;
-
-function nine(): number {
-  return 9;
-}
 
 function finitePoint(point: Pt | null | undefined): point is Pt {
   return Boolean(point && Number.isFinite(point.x) && Number.isFinite(point.y));
