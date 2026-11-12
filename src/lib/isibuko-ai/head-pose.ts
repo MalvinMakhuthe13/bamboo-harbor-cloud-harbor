@@ -63,10 +63,11 @@ export function matrixToEuler(matrix: readonly number[] | null | undefined): Eul
     roll = 0;
   }
 
+  const cleanZero = (value: number) => (Object.is(value, -0) ? 0 : value);
   const result = {
-    yaw: yaw * RAD_TO_DEG,
-    pitch: pitch * RAD_TO_DEG,
-    roll: roll * RAD_TO_DEG,
+    yaw: cleanZero(yaw * RAD_TO_DEG),
+    pitch: cleanZero(pitch * RAD_TO_DEG),
+    roll: cleanZero(roll * RAD_TO_DEG),
   };
   return finite([result.yaw, result.pitch, result.roll]) ? result : null;
 }
