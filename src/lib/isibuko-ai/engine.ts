@@ -509,6 +509,9 @@ export function startEngine(opts: {
 
   function draw(request: FrameRequest) {
     const t0 = performance.now();
+    // Segmentation is refreshed asynchronously; never draw a fitted garment
+    // against an old silhouette when the segment worker stalls or loses input.
+    const maskFresh = hasMask && lastMaskAt > 0 && t0 - lastMaskAt < 700;
     const category = request.category;
     const mode = regionMode(category);
     const modeId = mode === "clothing" ? 1 : mode === "hair" ? 2 : 0;
@@ -545,7 +548,7 @@ export function startEngine(opts: {
     gl.bindTexture(gl.TEXTURE_2D, maskTex);
     gl.uniform1i(gl.getUniformLocation(composite, "uMask"), 2);
     gl.uniform1i(u.mode, modeId);
-    gl.uniform1f(u.hasMask, hasMask ? 1 : 0);
+    gl.uniform1f(u.hasMask, maskFresh ? 1 : 0);
     gl.uniform1f(u.cover, 1);
     gl.uniform1f(u.full, category === "pants" || category === "dress" || category === "skirt" ? 1 : 0);
     gl.uniform3f(u.tint, tint?.[0] ?? 1, tint?.[1] ?? 1, tint?.[2] ?? 1);
@@ -616,7 +619,7 @@ export function startEngine(opts: {
     // Never render a garment from stale, collapsed, or runaway pose landmarks.
     const clothing = proposedClothing && isPlausibleClothingQuad(proposedClothing) ? proposedClothing : null;
     const shirtMesh =
-      category === "shirt" && clothing && productImg && hasMask && shL && shR && hipL && hipR
+      category === "shirt" && clothing && productImg && maskFresh && shL && shR && hipL && hipR
         ? buildShirtMesh({
             shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
             shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
@@ -633,7 +636,7 @@ export function startEngine(opts: {
     const ankleL = poseLm && seen(poseLm[27], 0.25) ? remember("anL", flip(poseLm[27]!)) : null;
     const ankleR = poseLm && seen(poseLm[28], 0.25) ? remember("anR", flip(poseLm[28]!)) : null;
     const lowerBodyMesh =
-      (category === "pants" || category === "skirt") && productImg && hasMask && hipL && hipR
+      (category === "pants" || category === "skirt") && productImg && maskFresh && hipL && hipR
         ? buildLowerBodyMesh(category, {
             hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
             hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
@@ -718,7 +721,7 @@ export function startEngine(opts: {
     // Phase 1 shirt path: draw a body-constrained mesh over the camera.
     // The legacy fragment-warp remains active whenever this mesh cannot be
     // built, the product image is absent, or segmentation is unavailable.
-    if (useGarmentMesh && activeGarmentMesh && productImg && hasMask) {
+    if (useGarmentMesh && activeGarmentMesh && productImg && maskFresh) {
       const packed: number[] = [];
       for (const vertex of activeGarmentMesh.vertices) {
         packed.push(1 - vertex.x * 2, 1 - vertex.y * 2, vertex.u, 1 - vertex.v);
@@ -779,7 +782,7 @@ export function startEngine(opts: {
       const faceW = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
       if (category === "glasses") sprites.push(nudge(glassesSprite(eyeL, eyeR, aspect, scale)));
       if (category === "hat") sprites.push(nudge(hatSprite(forehead, cheekL, cheekR, upright, aspect, scale, request.productId === "hat-cap")));
-      if (category === "wig" && hasMask) {
+      if (category === "wig" && maskFresh) {
         const opening = request.productId === "wig-bob" ? 0.37 : request.productId === "wig-braids" ? 0.11 : 0.12;
         sprites.push(nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale, opening, 0.42)));
       }
