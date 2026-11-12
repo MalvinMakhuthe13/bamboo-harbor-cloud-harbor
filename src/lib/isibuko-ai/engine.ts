@@ -1,5 +1,6 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
 import { buildShirtMesh } from "@/lib/isibuko-ai/garment-mesh";
+import { getGarmentFitProfile, isGarmentCategory } from "@/lib/isibuko-ai/garment-profiles";
 import { FrameBudgetMonitor } from "@/lib/isibuko-ai/budget";
 import { fuseHeadPose, HeadPoseSmoother, type HeadPose } from "@/lib/isibuko-ai/head-pose";
 import {
@@ -592,8 +593,9 @@ export function startEngine(opts: {
     const elR = poseLm && shR && seen(poseLm[14], 0.2) ? remember("elR", flip(poseLm[14]!)) : shR;
     const wrL = poseLm && elL && seen(poseLm[15], 0.2) ? remember("wrL", flip(poseLm[15]!)) : elL;
     const wrR = poseLm && elR && seen(poseLm[16], 0.2) ? remember("wrR", flip(poseLm[16]!)) : elR;
+    const fitProfile = getGarmentFitProfile(category);
     const proposedClothing =
-      mode === "clothing" && shL && shR && hipL && hipR && category && category !== "wig" && category !== "hat"
+      mode === "clothing" && isGarmentCategory(category) && fitProfile && shL && shR && hipL && hipR
         ? clothingQuad({
             shoulderL: shL,
             shoulderR: shR,
