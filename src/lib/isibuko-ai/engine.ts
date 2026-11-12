@@ -1,4 +1,5 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
+import { FrameBudgetMonitor } from "@/lib/isibuko-ai/budget";
 import {
   braceletSprite,
   clothingQuad,
@@ -251,6 +252,8 @@ export function startEngine(opts: {
   let fpsMark = performance.now();
   let fps = 0;
   let lastMetric = 0;
+  let lastLoopAt = 0;
+  const frameBudget = new FrameBudgetMonitor();
   const blit = document.createElement("canvas");
   const blitCtx = blit.getContext("2d", { alpha: false });
   const scratch = document.createElement("canvas");
@@ -987,6 +990,20 @@ export function startEngine(opts: {
       handMs: Math.round(times.hand),
       segmentMs: Math.round(times.segment),
       compositeMs: Math.round(times.composite),
+      ...(() => {
+        const budget = frameBudget.snapshot();
+        return {
+          frameIntervalMs: budget.frameIntervalMs,
+          frameWorkMs: budget.frameWorkMs,
+          meanFrameIntervalMs: budget.meanFrameIntervalMs,
+          p95FrameIntervalMs: budget.p95FrameIntervalMs,
+          meanFrameWorkMs: budget.meanFrameWorkMs,
+          jankFrames: budget.jankFrames,
+          longestFrameMs: budget.longestFrameMs,
+          budgetRung: budget.rung,
+          budgetReason: budget.reason,
+        };
+      })(),
       switchMs,
       delegate: faceReady || bodyReady || segReady ? delegateName : "loading",
       delegateNote,
@@ -1049,12 +1066,21 @@ export function startEngine(opts: {
   function loop(_now: number) {
     if (disposed) return;
     raf = requestAnimationFrame(loop);
-    if (pageHidden) return;
+    if (pageHidden) {
+      lastLoopAt = 0;
+      return;
+    }
+    if (!frameSource()) {
+      lastLoopAt = 0;
+      return;
+    }
+    const frameStarted = performance.now();
+    const frameIntervalMs = lastLoopAt > 0 ? frameStarted - lastLoopAt : 0;
+    lastLoopAt = frameStarted;
     if (!drag.hold) {
       drag.x *= 0.86;
       drag.y *= 0.86;
     }
-    if (!frameSource()) return;
     resize();
     const request = getRequest();
     watchSwitch(request);
@@ -1067,6 +1093,7 @@ export function startEngine(opts: {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The composite failed.");
     }
+    frameBudget.observe(frameIntervalMs, performance.now() - frameStarted);
     publish(request);
     if (source !== "off") {
       if (trackerFault) setStatus(trackerFault);
