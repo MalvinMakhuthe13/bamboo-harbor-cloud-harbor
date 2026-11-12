@@ -317,6 +317,7 @@ uniform sampler2D uProduct;
 uniform sampler2D uMask;
 uniform sampler2D uCamera;
 uniform float uHasMask;
+uniform float uHasFace;
 uniform vec2 uInvResolution;
 uniform vec2 uHand0;
 uniform vec2 uHand1;
@@ -337,6 +338,7 @@ bool nearHand(vec2 p) {
   return distance(p, uHand0) < uHandR || distance(p, uHand1) < uHandR;
 }
 bool protectedFace(vec2 p) {
+  if (uHasFace < 0.5) return false;
   vec2 d = p - uProtectC;
   float x = d.x * uProtectCos + d.y * uProtectSin;
   float y = -d.x * uProtectSin + d.y * uProtectCos;
