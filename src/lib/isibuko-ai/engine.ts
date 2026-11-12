@@ -1,4 +1,5 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
+import { buildShirtMesh } from "@/lib/isibuko-ai/garment-mesh";
 import { FrameBudgetMonitor } from "@/lib/isibuko-ai/budget";
 import { fuseHeadPose, HeadPoseSmoother, type HeadPose } from "@/lib/isibuko-ai/head-pose";
 import {
@@ -20,7 +21,7 @@ import {
   wigSprite,
   type Sprite,
 } from "@/lib/isibuko-ai/placement";
-import { COMPOSITE_FRAG, FULLSCREEN_VERT, SPRITE_FRAG, SPRITE_VERT } from "@/lib/isibuko-ai/shaders";
+import { COMPOSITE_FRAG, FULLSCREEN_VERT, GARMENT_MESH_FRAG, GARMENT_MESH_VERT, SPRITE_FRAG, SPRITE_VERT } from "@/lib/isibuko-ai/shaders";
 import { applySessionEvent, reuseLiveCamera } from "@/lib/isibuko-ai/session";
 import { noteLiveFrame } from "@/lib/isibuko-gen/live-track";
 import { notePerception } from "@/lib/isibuko-gen/perception";
@@ -124,6 +125,7 @@ export function startEngine(opts: {
   const gl: WebGL2RenderingContext = glMaybe;
 
   const composite = program(gl, FULLSCREEN_VERT, COMPOSITE_FRAG);
+  const garmentMeshProg = program(gl, GARMENT_MESH_VERT, GARMENT_MESH_FRAG);
   const spriteProg = program(gl, SPRITE_VERT, SPRITE_FRAG);
   const camTex = makeTex(gl, gl.LINEAR);
   const prodTex = makeTex(gl, gl.LINEAR);
@@ -150,6 +152,38 @@ export function startEngine(opts: {
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
   gl.enableVertexAttribArray(1);
   gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
+
+  const garmentMeshBuf = gl.createBuffer();
+  const garmentMeshIndexBuf = gl.createBuffer();
+  const garmentMeshVao = gl.createVertexArray();
+  gl.bindVertexArray(garmentMeshVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, garmentMeshBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, 256 * 4 * 4, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, garmentMeshIndexBuf);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, 1024 * 2, gl.DYNAMIC_DRAW);
+  gl.bindVertexArray(null);
+
+  const garmentUniform = {
+    product: gl.getUniformLocation(garmentMeshProg, "uProduct"),
+    mask: gl.getUniformLocation(garmentMeshProg, "uMask"),
+    camera: gl.getUniformLocation(garmentMeshProg, "uCamera"),
+    hasMask: gl.getUniformLocation(garmentMeshProg, "uHasMask"),
+    invResolution: gl.getUniformLocation(garmentMeshProg, "uInvResolution"),
+    hand0: gl.getUniformLocation(garmentMeshProg, "uHand0"),
+    hand1: gl.getUniformLocation(garmentMeshProg, "uHand1"),
+    handR: gl.getUniformLocation(garmentMeshProg, "uHandR"),
+    hasHands: gl.getUniformLocation(garmentMeshProg, "uHasHands"),
+    protectC: gl.getUniformLocation(garmentMeshProg, "uProtectC"),
+    protectH: gl.getUniformLocation(garmentMeshProg, "uProtectHalf"),
+    protectCos: gl.getUniformLocation(garmentMeshProg, "uProtectCos"),
+    protectSin: gl.getUniformLocation(garmentMeshProg, "uProtectSin"),
+    tint: gl.getUniformLocation(garmentMeshProg, "uTint"),
+    tintOn: gl.getUniformLocation(garmentMeshProg, "uTintOn"),
+  };
 
   const spriteBuf = gl.createBuffer();
   const spriteVao = gl.createVertexArray();
@@ -503,7 +537,22 @@ export function startEngine(opts: {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, maskTex);
     gl.uniform1i(gl.getUniformLocation(composite, "uMask"), 2);
-    gl.uniform1i(u.mode, modeId);
+    const shirtMesh =
+      category === "shirt" && clothing && productImg && hasMask && shL && shR && hipL && hipR
+        ? buildShirtMesh({
+            shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
+            shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
+            hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
+            hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
+            elbowL: elL ? { x: elL.x + dragPt.x, y: elL.y + dragPt.y } : null,
+            elbowR: elR ? { x: elR.x + dragPt.x, y: elR.y + dragPt.y } : null,
+            wristL: wrL ? { x: wrL.x + dragPt.x, y: wrL.y + dragPt.y } : null,
+            wristR: wrR ? { x: wrR.x + dragPt.x, y: wrR.y + dragPt.y } : null,
+          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
+        : null;
+    const useShirtMesh = Boolean(shirtMesh && shirtMesh.parts.some((part) => part.kind === "torso"));
+
+    gl.uniform1i(u.mode, useShirtMesh ? 0 : modeId);
     gl.uniform1f(u.hasMask, hasMask ? 1 : 0);
     gl.uniform1f(u.cover, 1);
     gl.uniform1f(u.full, category === "pants" || category === "dress" || category === "skirt" ? 1 : 0);
@@ -641,6 +690,47 @@ export function startEngine(opts: {
     gl.uniform1f(u.nailStart, shape.start);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    // Phase 1 shirt path: draw a body-constrained mesh over the camera.
+    // The legacy fragment-warp remains active whenever this mesh cannot be
+    // built, the product image is absent, or segmentation is unavailable.
+    if (useShirtMesh && shirtMesh && productImg && hasMask) {
+      const packed: number[] = [];
+      for (const vertex of shirtMesh.vertices) {
+        packed.push(vertex.x * 2 - 1, 1 - vertex.y * 2, vertex.u, 1 - vertex.v);
+      }
+      gl.useProgram(garmentMeshProg);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, prodTex);
+      gl.uniform1i(garmentUniform.product, 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, maskTex);
+      gl.uniform1i(garmentUniform.mask, 1);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, camTex);
+      gl.uniform1i(garmentUniform.camera, 2);
+      gl.uniform1f(garmentUniform.hasMask, 1);
+      gl.uniform2f(garmentUniform.invResolution, 1 / Math.max(1, canvas.width), 1 / Math.max(1, canvas.height));
+      gl.uniform2f(garmentUniform.hand0, palms[0]?.x ?? -2, palms[0]?.y ?? -2);
+      gl.uniform2f(garmentUniform.hand1, palms[1]?.x ?? -2, palms[1]?.y ?? -2);
+      gl.uniform1f(garmentUniform.handR, handR);
+      gl.uniform1f(garmentUniform.hasHands, palms.length ? 1 : 0);
+      gl.uniform2f(garmentUniform.protectC, hair?.protect.center.x ?? 0.5, hair?.protect.center.y ?? 0.4);
+      gl.uniform2f(garmentUniform.protectH, hair?.protect.halfW ?? 0.12, hair?.protect.halfH ?? 0.16);
+      gl.uniform1f(garmentUniform.protectCos, hair ? Math.cos(hair.protect.rot) : 1);
+      gl.uniform1f(garmentUniform.protectSin, hair ? Math.sin(hair.protect.rot) : 0);
+      gl.uniform3f(garmentUniform.tint, tint?.[0] ?? 1, tint?.[1] ?? 1, tint?.[2] ?? 1);
+      gl.uniform1f(garmentUniform.tintOn, tint ? 1 : 0);
+      gl.bindVertexArray(garmentMeshVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, garmentMeshBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(packed), gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, garmentMeshIndexBuf);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(shirtMesh.indices), gl.DYNAMIC_DRAW);
+      gl.drawElements(gl.TRIANGLES, shirtMesh.indices.length, gl.UNSIGNED_SHORT, 0);
+      gl.disable(gl.BLEND);
+    }
 
     const sprites: Sprite[] = [];
     const aspect = productImg && productImg.naturalWidth ? productImg.naturalHeight / productImg.naturalWidth : 1;
