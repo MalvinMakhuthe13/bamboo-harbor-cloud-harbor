@@ -998,6 +998,7 @@ export function startEngine(opts: {
       meanFrameWorkMs: budget.meanFrameWorkMs,
       jankFrames: budget.jankFrames,
       longestFrameIntervalMs: budget.longestFrameIntervalMs,
+      frameSamples: budget.sampleCount,
       budgetRung: budget.rung,
       budgetReason: budget.reason,
       switchMs,
