@@ -1,7 +1,7 @@
 import type { Category } from "@/lib/isibuko-ai/types";
 
 export type FitFamily = "upper-garment" | "full-body-garment" | "lower-garment" | "headwear" | "face-accessory" | "jewellery" | "hand-accessory" | "nail";
-export type GeometryStrategy = "torso-panels" | "full-body-panels" | "leg-panels" | "head-pose-sprite" | "face-landmark-sprite" | "landmark-sprite" | "hand-landmark-sprite" | "nail-surface";
+export type GeometryStrategy = "torso-panels" | "full-body-panels" | "leg-panels" | "skirt-panels" | "head-pose-sprite" | "face-landmark-sprite" | "landmark-sprite" | "hand-landmark-sprite" | "nail-surface";
 
 export type GarmentFitProfile = {
   category: Category;
@@ -47,7 +47,7 @@ const profiles: Record<Category, GarmentFitProfile> = {
     segmentation: "required", sleeves: "no",
   },
   skirt: {
-    category: "skirt", family: "lower-garment", geometry: "full-body-panels",
+    category: "skirt", family: "lower-garment", geometry: "skirt-panels",
     requiredAnchors: ["hipL", "hipR"],
     optionalAnchors: ["kneeL", "kneeR", "ankleL", "ankleR"],
     segmentation: "required", sleeves: "no",
