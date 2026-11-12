@@ -107,8 +107,8 @@ export type LiveMetrics = {
   p95FrameIntervalMs: number;
   meanFrameWorkMs: number;
   jankFrames: number;
-  longestFrameMs: number;
-  budgetRung: 0 | 1 | 2 | 3;
+  longestFrameIntervalMs: number;
+  budgetRung: 0 | 1 | 2 | 3 | null;
   budgetReason: string;
   /** Milliseconds from a product, colour, or size change until that photograph is bound. Null before any change. Zero means the change landed in the same frame. */
   switchMs: number | null;
