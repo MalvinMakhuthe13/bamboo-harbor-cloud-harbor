@@ -36,7 +36,7 @@ describe("universal Isibuko fitting profiles", () => {
     assert.equal(getGarmentFitProfile("jacket")?.geometry, "torso-panels");
     assert.equal(getGarmentFitProfile("dress")?.geometry, "full-body-panels");
     assert.equal(getGarmentFitProfile("pants")?.geometry, "leg-panels");
-    assert.equal(getGarmentFitProfile("skirt")?.geometry, "full-body-panels");
+    assert.equal(getGarmentFitProfile("skirt")?.geometry, "skirt-panels");
   });
 
   it("declares category-specific anchors and segmentation needs", () => {
