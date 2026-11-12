@@ -93,6 +93,7 @@ function MirrorPage() {
     sizeScale: sizeScaleFor(sizeLabel),
     nail: active.nail,
     heightCm: height,
+    fittingAnchors: active.fittingAnchors,
   });
   requestRef.current = {
     productId: active.id,
@@ -102,6 +103,7 @@ function MirrorPage() {
     sizeScale: sizeScaleFor(sizeLabel),
     nail: active.nail,
     heightCm: height,
+    fittingAnchors: active.fittingAnchors,
   };
   const dragRef = useRef<Drag>({ x: 0, y: 0, hold: false });
 

@@ -17,7 +17,27 @@ import {
   torsoUv,
 } from "./placement.ts";
 import { MODEL_REGISTRY, WEIGHT_BYTES } from "./registry.ts";
-import { COMPOSITE_FRAG } from "./shaders.ts";
+import { COMPOSITE_FRAG, GARMENT_MESH_FRAG, GARMENT_MESH_VERT } from "./shaders.ts";
+
+describe("body-constrained shirt mesh renderer", () => {
+  it("uses mirrored camera-space coordinates for the mesh", () => {
+    assert.ok(GARMENT_MESH_VERT.includes("1.0 - (aClip.x + 1.0) * 0.5"));
+    assert.ok(GARMENT_MESH_VERT.includes("vMaskUv = vec2(vScreen.x, 1.0 - vScreen.y)"));
+  });
+
+  it("uses the segmentation mask to keep background, hair and face in front", () => {
+    assert.ok(GARMENT_MESH_FRAG.includes("bool body = cls > 1.5 && cls < 2.5"));
+    assert.ok(GARMENT_MESH_FRAG.includes("bool clothes = cls > 3.5 && cls < 4.5"));
+    assert.ok(GARMENT_MESH_FRAG.includes("protectedFace(vScreen) || nearHand(vScreen)"));
+    assert.ok(GARMENT_MESH_FRAG.includes("if (uHasFace < 0.5) return false;"));
+    assert.ok(GARMENT_MESH_FRAG.includes("if (!(body || clothes || other)) discard"));
+  });
+
+  it("keeps the product's transparent background and green-screen key", () => {
+    assert.ok(GARMENT_MESH_FRAG.includes("if (product.a < 0.12) discard"));
+    assert.ok(GARMENT_MESH_FRAG.includes("if (green > 0.22 && product.g > 0.25) discard"));
+  });
+});
 
 describe("shader edge definitions", () => {
   it("uses defined ascending smoothstep edges for wig feathering", () => {

@@ -18,6 +18,16 @@ export type Category =
 
 export type NailShape = "almond" | "square" | "stiletto";
 
+export type ProductAnchorPoint = { x: number; y: number; confidence?: number };
+export type ProductFittingAnchors = {
+  version: "isibuko.anchors/1";
+  points?: Record<string, ProductAnchorPoint>;
+  parameters?: {
+    wigOpening?: number;
+    wigHoleFraction?: number;
+  };
+};
+
 export type Swatch = {
   id: string;
   name: string;
@@ -52,6 +62,8 @@ export type Product = {
   merchantUrl?: string;
   /** Merchant's own words. Not inferred from the photograph. */
   fabric?: string;
+  /** Versioned, reviewed fitting metadata derived from the product asset. */
+  fittingAnchors?: ProductFittingAnchors;
 };
 
 export type TryEvent = {
@@ -147,6 +159,7 @@ export type FrameRequest = {
   sizeScale: number;
   nail: NailShape;
   heightCm: number;
+  fittingAnchors?: ProductFittingAnchors;
 };
 
 export type Pt = { x: number; y: number };
