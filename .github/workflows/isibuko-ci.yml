@@ -43,3 +43,6 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
+
+      - name: Build application bundle
+        run: node scripts/with-app-env.mjs vite build
