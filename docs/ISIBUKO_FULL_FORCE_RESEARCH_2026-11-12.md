@@ -155,6 +155,8 @@ Sources:
 - https://github.com/maria-korosteleva/GarmentCode
 - https://igl.ethz.ch/projects/GarmentCodeData/
 - https://www.research-collection.ethz.ch/items/9d16a4da-0d30-4963-8842-af20fcf82899
+- https://github.com/ChimerAI-MMLab/Garment-GPT
+- https://huggingface.co/ChimerAI/GarmentGPT
 
 ### 5.2 Rapier soft bodies
 
@@ -266,6 +268,7 @@ Relevant work:
 
 - **GarmentCode:** practical parametric sewing-pattern framework; MIT code.
 - **GarmentCodeData:** large synthetic pattern/garment dataset; CC BY 4.0.
+- **GarmentGPT:** a newly published single-image-to-garment-pattern system. Its GitHub README says it generates structured GCD JSON with panels, edges, curves, panel transforms and stitches; its code repository and Hugging Face model card state Apache-2.0. This is the most promising new offline product-asset candidate found: convert a merchant garment image into a structured sewing-pattern representation, then use GarmentCode to drape/export a mesh. It is not a live model, and its paper is listed as coming soon. Its training-data provenance is not adequately documented in the public README/model card, so its weights remain conditional pending data-rights review. It requires an NVIDIA GPU, CUDA 11.8+, vLLM and separate model components; GPU memory/runtime are not established for our available hardware.
 - **Dress-1-to-3 (SIGGRAPH 2025):** specifically targets simulation-ready separated garments and sewing patterns from a single image. The paper is a strong research direction, but no production-ready commercial implementation was verified in this audit.
 - **GarmentCrafter (3DV 2026):** single-view garment reconstruction and novel-view generation. Its research is highly relevant, but code/weights/licensing must be confirmed before use.
 - **VTON 360 (CVPR 2025):** the most directly relevant any-view try-on research. It starts with a 3D human model and front/back garment images, renders multiple camera views, applies a 2D try-on network with multi-view spatial attention and camera-aware garment embeddings, then reconstructs a 3D result. This demonstrates why a true 360° experience needs multi-view garment information and 3D consistency. Its official pipeline uses SMPL-X normal maps and DensePose/THuman/MVHumanNet assets, whose non-commercial or research restrictions prevent treating the released stack as a production dependency.
@@ -273,11 +276,13 @@ Relevant work:
 - **TRELLIS:** MIT code/model family for generic image-to-3D asset creation, but it is not a garment-pattern solver and requires substantial GPU resources. Its output must be checked for garment separability and simulation readiness.
 - **Stable Fast 3D:** community licence permits commercial use under a revenue threshold, but creates a licence constraint if the company grows beyond that threshold.
 
-**Decision:** use GarmentCode templates and merchant-supplied assets first. Keep generic image-to-3D as an offline asset-preparation experiment, not a runtime requirement or source of exact physical fit.
+**Decision:** evaluate GarmentGPT as the first offline pattern-generation experiment, then pass its GCD JSON through GarmentCode. Human-review the generated pattern and reconcile it against merchant measurements before approving it as a garment asset. Keep generic image-to-3D as a separate experiment, not a runtime requirement or source of exact physical fit.
 
 Sources:
 - https://dress-1-to-3.github.io/
 - https://humansensinglab.github.io/garment-crafter/
+- https://github.com/ChimerAI-MMLab/Garment-GPT
+- https://huggingface.co/ChimerAI/GarmentGPT
 - https://github.com/layumi/3D-Magic-Mirror
 - https://github.com/microsoft/TRELLIS
 - https://huggingface.co/stabilityai/stable-fast-3d
@@ -302,7 +307,7 @@ This is a hosted proprietary service and quality benchmark, not a free/open-sour
 
 ### Google virtual try-on
 
-Google's public shopping announcement describes a custom fashion image-generation model that understands fabric folds, stretch and drape. It is proprietary, not a downloadable open-weight model. It is a quality reference, not a component.
+Google's public shopping announcement describes a custom fashion image-generation model that understands fabric folds, stretch and drape. The published shopping flow asks the customer to upload a full-length photo; it is not a downloadable open-weight live-camera model. It is a quality reference for AI Studio, not a component.
 
 ### Adobe
 
@@ -326,7 +331,7 @@ Sources:
 - https://docs.platform.decart.ai/models/realtime/virtual-try-on
 - https://docs.platform.decart.ai/getting-started/pricing
 - https://blog.google/products-and-platforms/products/shopping/google-shopping-ai-mode-virtual-try-on-update/
-- https://news.adobe.com/news/2026/11/adobe-transforms-creative-cloud-tools
+- https://helpx.adobe.com/photoshop/desktop/whats-new/whats-new-in-adobe-photoshop-on-desktop.html
 - https://research.adobe.com/news/new-photoshop-feature-rotate-2d-objects-in-three-dimensions/
 
 ## 9. Data, training and commercial rights
