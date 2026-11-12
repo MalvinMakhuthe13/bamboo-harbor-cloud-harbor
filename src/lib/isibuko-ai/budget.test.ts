@@ -12,8 +12,8 @@ describe("frame budget telemetry", () => {
     assert.equal(snapshot.frameWorkMs, 5);
     assert.equal(snapshot.meanFrameIntervalMs, 18.4);
     assert.equal(snapshot.meanFrameWorkMs, 4.6);
-    assert.equal(snapshot.rung, 0);
-    assert.equal(snapshot.reason, "measurement-only");
+    assert.equal(snapshot.rung, null);
+    assert.equal(snapshot.reason, "measurement-only; no quality changes");
     assert.equal(snapshot.jankFrames, 0);
   });
 
@@ -24,7 +24,7 @@ describe("frame budget telemetry", () => {
     const snapshot = budget.observe(83.3, 6);
 
     assert.equal(snapshot.jankFrames, 2);
-    assert.equal(snapshot.longestFrameMs, 83.3);
+    assert.equal(snapshot.longestFrameIntervalMs, 83.3);
     assert.equal(snapshot.p95FrameIntervalMs, 83.3);
   });
 
@@ -36,7 +36,7 @@ describe("frame budget telemetry", () => {
     assert.equal(snapshot.sampleCount, 5);
     assert.equal(snapshot.meanFrameIntervalMs, 47.5);
     assert.equal(snapshot.p95FrameIntervalMs, 100);
-    assert.equal(snapshot.longestFrameMs, 100);
+    assert.equal(snapshot.longestFrameIntervalMs, 100);
   });
 
   it("sanitises invalid measurements and resets session statistics", () => {
@@ -51,7 +51,7 @@ describe("frame budget telemetry", () => {
     const reset = budget.snapshot();
     assert.equal(reset.sampleCount, 0);
     assert.equal(reset.jankFrames, 0);
-    assert.equal(reset.longestFrameMs, 0);
+    assert.equal(reset.longestFrameIntervalMs, 0);
     assert.equal(reset.meanFrameIntervalMs, 0);
   });
 });
