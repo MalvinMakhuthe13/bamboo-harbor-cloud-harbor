@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - integration/isibuko-unified
+      - build/isibuko-full-force-2026-11-11
   push:
     branches:
       - integration/isibuko-unified
