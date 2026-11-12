@@ -148,8 +148,13 @@ export function buildLowerBodyMesh(
     const [kneeL, kneeR, ankleL, ankleR] = required;
     if (dist(hipL, kneeL) < 0.025 || dist(hipR, kneeR) < 0.025 ||
         dist(kneeL, ankleL) < 0.025 || dist(kneeR, ankleR) < 0.025) return null;
-    appendGrid(mesh, "pant-leg-left", buildPanel(waistL, kneeL, ankleL, columns, rows, 0.02, 0.48, 1), columns, rows);
-    appendGrid(mesh, "pant-leg-right", buildPanel(waistR, kneeR, ankleR, columns, rows, 0.52, 0.98, 1), columns, rows);
+    // Hip landmarks mark the pelvis edges, not the centre of each thigh.
+    // Move each leg's top anchor inward before following its own knee/ankle.
+    const across = { x: hipR.x - hipL.x, y: hipR.y - hipL.y };
+    const leftLegTop = { x: hipL.x + across.x * 0.28, y: hipL.y + across.y * 0.28 };
+    const rightLegTop = { x: hipR.x - across.x * 0.28, y: hipR.y - across.y * 0.28 };
+    appendGrid(mesh, "pant-leg-left", buildPanel(leftLegTop, kneeL, ankleL, columns, rows, 0.02, 0.48, 1), columns, rows);
+    appendGrid(mesh, "pant-leg-right", buildPanel(rightLegTop, kneeR, ankleR, columns, rows, 0.52, 0.98, 1), columns, rows);
   }
 
   if (!mesh.vertices.every((v) => [v.x, v.y, v.u, v.v].every(Number.isFinite))) return null;
