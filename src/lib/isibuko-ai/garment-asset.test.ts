@@ -26,7 +26,11 @@ describe("garment asset preparation plan", () => {
     const plan = prepareGarmentAsset("shirt", alphaFixture());
     assert.equal(plan.version, "isibuko.asset-plan/1");
     assert.equal(plan.state, "ready-for-review");
-    assert.deepEqual(plan.crop, { left: 0.075, top: 0.055, right: 0.925, bottom: 0.965 });
+    assert.ok(plan.crop);
+    assert.ok(Math.abs(plan.crop.left - 0.075) < 1e-9);
+    assert.ok(Math.abs(plan.crop.top - 0.055) < 1e-9);
+    assert.ok(Math.abs(plan.crop.right - 0.925) < 1e-9);
+    assert.ok(Math.abs(plan.crop.bottom - 0.965) < 1e-9);
     assert.deepEqual(plan.uvRegions.map((region) => region.part), ["torso", "sleeve-left", "sleeve-right"]);
     assert.ok(plan.review.some((item) => item.anchor === "shoulderL" && item.required));
     assert.ok(plan.review.some((item) => item.anchor === "wristL" && !item.required));
