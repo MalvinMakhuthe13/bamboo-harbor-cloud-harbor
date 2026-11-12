@@ -32,10 +32,13 @@ export function matrixToEuler(matrix: readonly number[] | null | undefined): Eul
   const r00 = matrix[0]!;
   const r10 = matrix[1]!;
   const r20 = matrix[2]!;
+  const r01 = matrix[4]!;
   const r11 = matrix[5]!;
   const r21 = matrix[6]!;
+  const r02 = matrix[8]!;
   const r12 = matrix[9]!;
   const r22 = matrix[10]!;
+
 
   const columnLengths = [
     Math.hypot(r00, r10, r20),
