@@ -301,7 +301,7 @@ out vec2 vScreen;
 out vec2 vMaskUv;
 void main() {
   vUv = aUv;
-  vScreen = vec2((aClip.x + 1.0) * 0.5, (1.0 - aClip.y) * 0.5);
+  vScreen = vec2(1.0 - (aClip.x + 1.0) * 0.5, (1.0 - aClip.y) * 0.5);
   vMaskUv = vec2(vScreen.x, 1.0 - vScreen.y);
   gl_Position = vec4(aClip, 0.0, 1.0);
 }
