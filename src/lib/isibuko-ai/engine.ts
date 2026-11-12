@@ -1056,6 +1056,7 @@ export function startEngine(opts: {
   let pageHidden = false;
   const onVisibility = () => {
     pageHidden = document.visibilityState === "hidden";
+    if (pageHidden) lastLoopAt = 0;
   };
   document.addEventListener("visibilitychange", onVisibility);
 
