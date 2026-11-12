@@ -55,7 +55,8 @@ export function buildDressMesh(anchors: DressAnchors, options: Options = {}): Ga
     : { x: 0, y: 1 };
   const down = normalize(bodyVector.x, bodyVector.y);
   const across = normalize(anchors.hipR.x - anchors.hipL.x, anchors.hipR.y - anchors.hipL.y);
-  const hemDistance = Math.max(torsoLength * 1.9, shoulderWidth * 1.55);
+  const trackedSkirtLength = kneeMid ? distance(hipMid, kneeMid) * 1.08 : torsoLength * 1.9;
+  const hemDistance = Math.max(trackedSkirtLength, shoulderWidth * 1.25);
   const hemCenter = { x: hipMid.x + down.x * hemDistance, y: hipMid.y + down.y * hemDistance };
   const hemHalf = Math.max(hipWidth * 0.5 * hemWidth * scale, shoulderWidth * 0.38);
   const topHalf = shoulderWidth * 0.53 * scale;
