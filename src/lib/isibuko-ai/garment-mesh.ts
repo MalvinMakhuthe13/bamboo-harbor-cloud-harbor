@@ -140,7 +140,7 @@ export function buildShirtMesh(
   const rows = Math.round(options.rows ?? DEFAULT_ROWS);
   const scale = options.scale ?? 1;
   const hemLength = options.hemLength ?? 0.16;
-  const sleeveLength = options.sleeveLength ?? 0.62;
+  const sleeveLength = options.sleeveLength ?? 1;
   if (
     !Number.isFinite(columns) || !Number.isFinite(rows) ||
     columns < 3 || columns > 25 || rows < 3 || rows > 25 ||
