@@ -33,6 +33,30 @@ describe("lower-body garment mesh", () => {
     assert.equal(Math.max(...mesh.vertices.map((v) => v.u)), 1);
   });
 
+  it("rotates the skirt hem with the tracked body axis when the wearer leans", () => {
+    const leaning = {
+      ...anchors,
+      kneeL: { x: 0.53, y: 0.72 },
+      kneeR: { x: 0.69, y: 0.72 },
+    };
+    const mesh = buildLowerBodyMesh("skirt", leaning);
+    assert.ok(mesh);
+    const lastRow = mesh.vertices.slice(-mesh.columns);
+    const hemCenterX = lastRow.reduce((sum, vertex) => sum + vertex.x, 0) / lastRow.length;
+    assert.ok(hemCenterX > 0.58, "hem should follow the right-leaning body axis");
+    assert.ok(lastRow.every((vertex) => vertex.y > 0.52), "hem should still extend down the body");
+  });
+
+  it("keeps a safe vertical skirt fallback when knee tracking is absent", () => {
+    const mesh = buildLowerBodyMesh("skirt", { hipL: anchors.hipL, hipR: anchors.hipR });
+    assert.ok(mesh);
+    const firstRow = mesh.vertices.slice(0, mesh.columns);
+    const lastRow = mesh.vertices.slice(-mesh.columns);
+    const firstCenterX = firstRow.reduce((sum, vertex) => sum + vertex.x, 0) / firstRow.length;
+    const lastCenterX = lastRow.reduce((sum, vertex) => sum + vertex.x, 0) / lastRow.length;
+    assert.ok(Math.abs(lastCenterX - firstCenterX) < 0.02);
+  });
+
   it("rejects missing or implausible lower-body tracking instead of guessing", () => {
     assert.equal(buildLowerBodyMesh("pants", { hipL: anchors.hipL, hipR: anchors.hipR }), null);
     assert.equal(buildLowerBodyMesh("pants", { ...anchors, kneeL: null }), null);
