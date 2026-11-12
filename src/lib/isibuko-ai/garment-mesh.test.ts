@@ -88,3 +88,27 @@ describe("body-constrained shirt mesh", () => {
     }
   });
 });
+
+
+describe("shirt mesh WebGL shader safety", () => {
+  it("samples the same mirrored camera coordinate system used by pose anchors", async () => {
+    const { GARMENT_MESH_VERT } = await import("./shaders.ts");
+    assert.match(GARMENT_MESH_VERT, /vScreen = vec2\(1\.0 - \(aClip\.x \+ 1\.0\) \* 0\.5, \(1\.0 - aClip\.y\) \* 0\.5\)/);
+    assert.match(GARMENT_MESH_VERT, /vMaskUv = vec2\(vScreen\.x, 1\.0 - vScreen\.y\)/);
+  });
+
+  it("discards face and hand regions and never paints background pixels", async () => {
+    const { GARMENT_MESH_FRAG } = await import("./shaders.ts");
+    assert.match(GARMENT_MESH_FRAG, /protectedFace\(vScreen\) \|\| nearHand\(vScreen\)/);
+    assert.match(GARMENT_MESH_FRAG, /bool body = cls > 1\.5 && cls < 2\.5/);
+    assert.match(GARMENT_MESH_FRAG, /bool clothes = cls > 3\.5 && cls < 4\.5/);
+    assert.match(GARMENT_MESH_FRAG, /bool other = cls > 4\.5 && cls < 5\.5/);
+    assert.match(GARMENT_MESH_FRAG, /if \(!\(body \|\| clothes \|\| other\)\) discard/);
+  });
+
+  it("samples the product texture and applies only a bounded camera-light response", async () => {
+    const { GARMENT_MESH_FRAG } = await import("./shaders.ts");
+    assert.match(GARMENT_MESH_FRAG, /texture\(uProduct, vUv\)/);
+    assert.match(GARMENT_MESH_FRAG, /clamp\(0\.8 \+ light \* 0\.42, 0\.68, 1\.2\)/);
+  });
+});
