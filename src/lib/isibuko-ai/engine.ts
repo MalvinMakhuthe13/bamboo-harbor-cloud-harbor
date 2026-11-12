@@ -297,6 +297,8 @@ export function startEngine(opts: {
   function clearSource() {
     closing = true;
     try {
+      lastLoopAt = 0;
+      frameBudget.reset();
       stopSource?.();
       stopSource = null;
       studioImg = null;
