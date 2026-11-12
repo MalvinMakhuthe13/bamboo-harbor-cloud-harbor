@@ -86,6 +86,7 @@ async function build(delegate) {
       baseOptions: { modelAssetPath: "/models/face_landmarker.task", delegate: delegate },
       runningMode: "VIDEO",
       numFaces: 1,
+      outputFacialTransformationMatrixes: true,
     });
   }
   if (want.pose) {
@@ -146,6 +147,8 @@ self.onmessage = async function (event) {
   try {
     if (job === "face" && face) {
       var fres = face.detectForVideo(bitmap, ts);
+      var transform = fres.facialTransformationMatrixes && fres.facialTransformationMatrixes[0];
+      var pose4 = transform && transform.data ? Array.from(transform.data) : null;
       self.postMessage({
         type: "result",
         job: job,
@@ -154,6 +157,7 @@ self.onmessage = async function (event) {
         height: bitmap.height,
         count: fres.faceLandmarks ? fres.faceLandmarks.length : 0,
         face: pack(fres.faceLandmarks && fres.faceLandmarks[0]),
+        pose4: pose4,
       });
     } else if (job === "pose" && pose) {
       var pres = pose.detectForVideo(bitmap, ts);
