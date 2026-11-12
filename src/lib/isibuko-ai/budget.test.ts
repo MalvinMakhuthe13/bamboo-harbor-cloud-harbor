@@ -22,7 +22,8 @@ describe("frame budget telemetry", () => {
     const budget = new FrameBudgetMonitor({ jankThresholdMs: 50 });
     budget.observe(16, 3);
     budget.observe(51, 4);
-    const snapshot = budget.observe(83.3, 6);
+    budget.observe(83.3, 6);
+    const snapshot = budget.snapshot();
 
     assert.equal(snapshot.jankFrames, 2);
     assert.equal(snapshot.longestFrameIntervalMs, 83.3);
