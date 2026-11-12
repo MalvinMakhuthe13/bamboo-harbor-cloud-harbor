@@ -83,7 +83,10 @@ describe("Isibuko shirt foundation", () => {
     const summary = commercialSummary();
     assert.equal(summary.installed, 0);
     assert.equal(summary.live, 0);
-    assert.ok(summary.clearedImage.includes("fashn-vton-1.5"));
+    assert.ok(!summary.clearedImage.includes("fashn-vton-1.5"));
+    const fashn = COMMERCIAL_PATHS.find((path) => path.id === "fashn-vton-1.5");
+    assert.equal(fashn?.commercial, "conditional");
+    assert.match(fashn?.whyNotInstalled ?? "", /legal review is required/);
     assert.ok(summary.clearedVideo.includes("wan2.1"));
     const leffa = COMMERCIAL_PATHS.find((path) => path.id === "leffa");
     assert.equal(leffa?.commercial, "not-cleared");
