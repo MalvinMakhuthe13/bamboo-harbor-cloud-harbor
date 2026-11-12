@@ -979,6 +979,7 @@ export function startEngine(opts: {
     readMotion(poseLm, now);
     const elbows = countJoints(poseLm, [13, 14]);
     const wrists = countJoints(poseLm, [15, 16]);
+    const budget = frameBudget.snapshot();
     onMetrics({
       fps,
       face: Boolean(faceLm),
@@ -990,20 +991,15 @@ export function startEngine(opts: {
       handMs: Math.round(times.hand),
       segmentMs: Math.round(times.segment),
       compositeMs: Math.round(times.composite),
-      ...(() => {
-        const budget = frameBudget.snapshot();
-        return {
-          frameIntervalMs: budget.frameIntervalMs,
-          frameWorkMs: budget.frameWorkMs,
-          meanFrameIntervalMs: budget.meanFrameIntervalMs,
-          p95FrameIntervalMs: budget.p95FrameIntervalMs,
-          meanFrameWorkMs: budget.meanFrameWorkMs,
-          jankFrames: budget.jankFrames,
-          longestFrameMs: budget.longestFrameMs,
-          budgetRung: budget.rung,
-          budgetReason: budget.reason,
-        };
-      })(),
+      frameIntervalMs: budget.frameIntervalMs,
+      frameWorkMs: budget.frameWorkMs,
+      meanFrameIntervalMs: budget.meanFrameIntervalMs,
+      p95FrameIntervalMs: budget.p95FrameIntervalMs,
+      meanFrameWorkMs: budget.meanFrameWorkMs,
+      jankFrames: budget.jankFrames,
+      longestFrameMs: budget.longestFrameMs,
+      budgetRung: budget.rung,
+      budgetReason: budget.reason,
       switchMs,
       delegate: faceReady || bodyReady || segReady ? delegateName : "loading",
       delegateNote,
