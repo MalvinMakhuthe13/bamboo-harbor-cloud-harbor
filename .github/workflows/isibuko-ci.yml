@@ -1,0 +1,48 @@
+name: Isibuko CI
+
+on:
+  pull_request:
+    branches:
+      - integration/isibuko-unified
+      - build/isibuko-full-force-2026-11-11
+  push:
+    branches:
+      - integration/isibuko-unified
+      - build/isibuko-full-force-2026-11-11
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isibuko-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Tests, types and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Check TypeScript
+        run: npm run typecheck
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Build application bundle
+        run: npm run build:dev

@@ -1,4 +1,6 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
+import { FrameBudgetMonitor } from "@/lib/isibuko-ai/budget";
+import { fuseHeadPose, HeadPoseSmoother, type HeadPose } from "@/lib/isibuko-ai/head-pose";
 import {
   braceletSprite,
   clothingQuad,
@@ -6,6 +8,7 @@ import {
   glassesSprite,
   hairFrame,
   hasSleeves,
+  isPlausibleClothingQuad,
   hatSprite,
   nailSegments,
   nailShapeFactors,
@@ -195,6 +198,7 @@ export function startEngine(opts: {
     polish: loc("uPolish"),
     nailHalf: loc("uNailHalf"),
     nailTip: loc("uNailTip"),
+    nailStart: loc("uNailStart"),
     backdrop: loc("uBackdrop"),
     hasProduct: loc("uHasProduct"),
   };
@@ -239,6 +243,9 @@ export function startEngine(opts: {
   const memory = new Map<string, Pt>();
   const nailBuf = new Float32Array(40);
   let faceLm: Lm[] | null = null;
+  let headPose: HeadPose | null = null;
+  let headPoseMs = 0;
+  const headPoseSmoother = new HeadPoseSmoother();
   let poseLm: Lm[] | null = null;
   let poseWorld: { x: number; y: number; z: number }[] | null = null;
   let handLms: Lm[][] = [];
@@ -249,6 +256,8 @@ export function startEngine(opts: {
   let fpsMark = performance.now();
   let fps = 0;
   let lastMetric = 0;
+  let lastLoopAt = 0;
+  const frameBudget = new FrameBudgetMonitor();
   const blit = document.createElement("canvas");
   const blitCtx = blit.getContext("2d", { alpha: false });
   const scratch = document.createElement("canvas");
@@ -292,11 +301,16 @@ export function startEngine(opts: {
   function clearSource() {
     closing = true;
     try {
+      lastLoopAt = 0;
+      frameBudget.reset();
       stopSource?.();
       stopSource = null;
       studioImg = null;
       stillUploaded = false;
       faceLm = null;
+      headPose = null;
+      headPoseMs = 0;
+      headPoseSmoother.reset();
       poseLm = null;
       poseWorld = null;
       handLms = [];
@@ -543,7 +557,7 @@ export function startEngine(opts: {
     const elR = poseLm && shR && seen(poseLm[14], 0.2) ? remember("elR", flip(poseLm[14]!)) : shR;
     const wrL = poseLm && elL && seen(poseLm[15], 0.2) ? remember("wrL", flip(poseLm[15]!)) : elL;
     const wrR = poseLm && elR && seen(poseLm[16], 0.2) ? remember("wrR", flip(poseLm[16]!)) : elR;
-    const clothing =
+    const proposedClothing =
       mode === "clothing" && shL && shR && hipL && hipR && category && category !== "wig" && category !== "hat"
         ? clothingQuad({
             shoulderL: shL,
@@ -557,6 +571,8 @@ export function startEngine(opts: {
             sleevesInPhoto: false,
           })
         : null;
+    // Never render a garment from stale, collapsed, or runaway pose landmarks.
+    const clothing = proposedClothing && isPlausibleClothingQuad(proposedClothing) ? proposedClothing : null;
     const chin = memory.get("chin") ?? null;
     if (clothing && chin && shL && shR && (category === "shirt" || category === "jacket" || category === "dress")) {
       const shoulderY = (shL.y + shR.y) / 2;
@@ -622,6 +638,7 @@ export function startEngine(opts: {
     const shape = nailShapeFactors(request.nail);
     gl.uniform1f(u.nailHalf, shape.half);
     gl.uniform1f(u.nailTip, shape.tip);
+    gl.uniform1f(u.nailStart, shape.start);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
@@ -649,7 +666,7 @@ export function startEngine(opts: {
       if (category === "hat") sprites.push(nudge(hatSprite(forehead, cheekL, cheekR, upright, aspect, scale, request.productId === "hat-cap")));
       if (category === "wig" && hasMask) {
         const opening = request.productId === "wig-bob" ? 0.37 : request.productId === "wig-braids" ? 0.11 : 0.12;
-        sprites.push(nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale, opening, 0.26)));
+        sprites.push(nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale, opening, 0.42)));
       }
       if (category === "earrings") {
         const midX = (cheekL.x + cheekR.x) / 2;
@@ -868,6 +885,7 @@ export function startEngine(opts: {
     job?: Job;
     ms?: number;
     face?: Lm[] | null;
+    pose4?: number[] | null;
     pose?: Lm[] | null;
     world?: { x: number; y: number; z: number }[] | null;
     hands?: Lm[][];
@@ -915,7 +933,16 @@ export function startEngine(opts: {
       if (face) {
         faceLm = face;
         faceMiss = 0;
-      } else if (++faceMiss > 8) faceLm = null;
+        const poseStarted = performance.now();
+        const estimate = fuseHeadPose(msg.pose4, face);
+        if (estimate) headPose = headPoseSmoother.update(estimate, now);
+        headPoseMs = performance.now() - poseStarted;
+      } else if (++faceMiss > 8) {
+        faceLm = null;
+        headPose = null;
+        headPoseMs = 0;
+        headPoseSmoother.reset();
+      }
     } else if (msg.job === "pose") {
       times.pose = ms;
       const pose = remapList(msg.pose, roi);
@@ -971,6 +998,7 @@ export function startEngine(opts: {
     readMotion(poseLm, now);
     const elbows = countJoints(poseLm, [13, 14]);
     const wrists = countJoints(poseLm, [15, 16]);
+    const budget = frameBudget.snapshot();
     onMetrics({
       fps,
       face: Boolean(faceLm),
@@ -982,6 +1010,18 @@ export function startEngine(opts: {
       handMs: Math.round(times.hand),
       segmentMs: Math.round(times.segment),
       compositeMs: Math.round(times.composite),
+      headPose,
+      headPoseMs: Math.round(headPoseMs * 10) / 10,
+      frameIntervalMs: budget.frameIntervalMs,
+      frameWorkMs: budget.frameWorkMs,
+      meanFrameIntervalMs: budget.meanFrameIntervalMs,
+      p95FrameIntervalMs: budget.p95FrameIntervalMs,
+      meanFrameWorkMs: budget.meanFrameWorkMs,
+      jankFrames: budget.jankFrames,
+      longestFrameIntervalMs: budget.longestFrameIntervalMs,
+      frameSamples: budget.sampleCount,
+      budgetRung: budget.rung,
+      budgetReason: budget.reason,
       switchMs,
       delegate: faceReady || bodyReady || segReady ? delegateName : "loading",
       delegateNote,
@@ -1038,18 +1078,28 @@ export function startEngine(opts: {
   let pageHidden = false;
   const onVisibility = () => {
     pageHidden = document.visibilityState === "hidden";
+    if (pageHidden) lastLoopAt = 0;
   };
   document.addEventListener("visibilitychange", onVisibility);
 
   function loop(_now: number) {
     if (disposed) return;
     raf = requestAnimationFrame(loop);
-    if (pageHidden) return;
+    if (pageHidden) {
+      lastLoopAt = 0;
+      return;
+    }
+    if (!frameSource()) {
+      lastLoopAt = 0;
+      return;
+    }
+    const frameStarted = performance.now();
+    const frameIntervalMs = lastLoopAt > 0 ? frameStarted - lastLoopAt : 0;
+    lastLoopAt = frameStarted;
     if (!drag.hold) {
       drag.x *= 0.86;
       drag.y *= 0.86;
     }
-    if (!frameSource()) return;
     resize();
     const request = getRequest();
     watchSwitch(request);
@@ -1062,6 +1112,7 @@ export function startEngine(opts: {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "The composite failed.");
     }
+    frameBudget.observe(frameIntervalMs, performance.now() - frameStarted);
     publish(request);
     if (source !== "off") {
       if (trackerFault) setStatus(trackerFault);

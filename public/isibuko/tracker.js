@@ -1,3 +1,5 @@
+/* global importScripts, Vision */
+
 /* Classic worker.
    MediaPipe's FilesetResolver points at /mediapipe/vision_wasm_internal.js and then
    calls importScripts. A module worker has no importScripts, so the library falls
@@ -65,10 +67,10 @@ function pack(lms) {
 }
 
 function closeAll() {
-  try { if (face) face.close(); } catch (e) {}
-  try { if (pose) pose.close(); } catch (e) {}
-  try { if (hands) hands.close(); } catch (e) {}
-  try { if (segmenter) segmenter.close(); } catch (e) {}
+  try { if (face) face.close(); } catch { /* A partially initialized tracker may not close cleanly. */ }
+  try { if (pose) pose.close(); } catch { /* A partially initialized tracker may not close cleanly. */ }
+  try { if (hands) hands.close(); } catch { /* A partially initialized tracker may not close cleanly. */ }
+  try { if (segmenter) segmenter.close(); } catch { /* A partially initialized tracker may not close cleanly. */ }
   face = pose = hands = segmenter = null;
 }
 
@@ -84,6 +86,7 @@ async function build(delegate) {
       baseOptions: { modelAssetPath: "/models/face_landmarker.task", delegate: delegate },
       runningMode: "VIDEO",
       numFaces: 1,
+      outputFacialTransformationMatrixes: true,
     });
   }
   if (want.pose) {
@@ -144,6 +147,8 @@ self.onmessage = async function (event) {
   try {
     if (job === "face" && face) {
       var fres = face.detectForVideo(bitmap, ts);
+      var transform = fres.facialTransformationMatrixes && fres.facialTransformationMatrixes[0];
+      var pose4 = transform && transform.data ? Array.from(transform.data) : null;
       self.postMessage({
         type: "result",
         job: job,
@@ -152,6 +157,7 @@ self.onmessage = async function (event) {
         height: bitmap.height,
         count: fres.faceLandmarks ? fres.faceLandmarks.length : 0,
         face: pack(fres.faceLandmarks && fres.faceLandmarks[0]),
+        pose4: pose4,
       });
     } else if (job === "pose" && pose) {
       var pres = pose.detectForVideo(bitmap, ts);

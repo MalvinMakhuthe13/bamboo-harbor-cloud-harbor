@@ -9,11 +9,22 @@ import {
   containPoint,
   glassesSprite,
   nailSegments,
+  wigSprite,
+  nailShapeFactors,
   hidesOriginalHair,
+  isPlausibleClothingQuad,
   regionMode,
   torsoUv,
 } from "./placement.ts";
 import { MODEL_REGISTRY, WEIGHT_BYTES } from "./registry.ts";
+import { COMPOSITE_FRAG } from "./shaders.ts";
+
+describe("shader edge definitions", () => {
+  it("uses defined ascending smoothstep edges for wig feathering", () => {
+    assert.ok(COMPOSITE_FRAG.includes("1.0 - smoothstep(0.78, 1.0, e)"));
+    assert.ok(!COMPOSITE_FRAG.includes("smoothstep(1.0, 0.78, e)"));
+  });
+});
 
 describe("appearance replacement policy", () => {
   it("never paints the protected face", () => {
@@ -123,6 +134,63 @@ describe("product conditioning", () => {
     assert.equal(regionMode("nails"), "none");
   });
 
+  it("rejects garment geometry that could create a frame-sized overlay", () => {
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: -0.4, y: 0.2 },
+        topR: { x: 1.4, y: 0.2 },
+        botL: { x: -0.5, y: 0.9 },
+        botR: { x: 1.5, y: 0.9 },
+      }),
+      false,
+    );
+  });
+
+  it("rejects collapsed and non-finite pose geometry", () => {
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: 0.5, y: 0.3 },
+        topR: { x: 0.5, y: 0.3 },
+        botL: { x: 0.5, y: 0.7 },
+        botR: { x: 0.5, y: 0.7 },
+      }),
+      false,
+    );
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: Number.NaN, y: 0.3 },
+        topR: { x: 0.6, y: 0.3 },
+        botL: { x: 0.4, y: 0.7 },
+        botR: { x: 0.6, y: 0.7 },
+      }),
+      false,
+    );
+  });
+
+  it("rejects a folded garment quad with crossed corners", () => {
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: 0.3, y: 0.3 },
+        topR: { x: 0.7, y: 0.3 },
+        botL: { x: 0.3, y: 0.7 },
+        botR: { x: 0.25, y: 0.45 },
+      }),
+      false,
+    );
+  });
+
+  it("accepts a normal upper-body garment quad", () => {
+    assert.equal(
+      isPlausibleClothingQuad({
+        topL: { x: 0.3, y: 0.3 },
+        topR: { x: 0.7, y: 0.3 },
+        botL: { x: 0.34, y: 0.72 },
+        botR: { x: 0.66, y: 0.72 },
+      }),
+      true,
+    );
+  });
+
   it("keeps the centre of a torso inside the garment", () => {
     const quad = clothingQuad({
       shoulderL: { x: 0.32, y: 0.34 },
@@ -181,6 +249,27 @@ describe("product conditioning", () => {
     const sprite = glassesSprite({ x: 0.4, y: 0.4 }, { x: 0.6, y: 0.4 }, 0.34, 1);
     assert.ok(Math.abs(sprite.w - 0.2 * 2.55) < 1e-6);
     assert.equal(sprite.cx, 0.5);
+  });
+
+  it("keeps polish inside the distal nail plate instead of extending past the fingertip", () => {
+    for (const shape of ["almond", "square", "stiletto"] as const) {
+      const factors = nailShapeFactors(shape);
+      assert.ok(factors.start >= 0.4 && factors.start < factors.tip);
+      assert.ok(factors.tip <= 1);
+      assert.ok(factors.half > 0 && factors.half <= 0.15);
+    }
+  });
+
+  it("sizes the wig plate to a plausible multiple of face width", () => {
+    const face = {
+      forehead: { x: 0.5, y: 0.3 },
+      chin: { x: 0.5, y: 0.7 },
+      cheekL: { x: 0.4, y: 0.5 },
+      cheekR: { x: 0.6, y: 0.5 },
+    };
+    const sprite = wigSprite(face.forehead, face.chin, face.cheekL, face.cheekR, 1.1, 1, 0.12, 0.42);
+    assert.ok(sprite.w / 0.2 < 2.3);
+    assert.ok(sprite.w / 0.2 > 2.0);
   });
 
   it("reads ten nail tips from two hands", () => {

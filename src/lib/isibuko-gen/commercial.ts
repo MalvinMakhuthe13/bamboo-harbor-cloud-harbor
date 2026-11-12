@@ -37,7 +37,7 @@ export const COMMERCIAL_PATHS: CommercialPath[] = [
     weightLicense: "Apache-2.0 on the Hugging Face model card for fashn-ai/fashn-vton-1.5.",
     trainingData:
       "The card does not publish a separate corpus licence. Apache-2.0 on the weights is not proof that every training photo was commercially licensed.",
-    commercial: "yes",
+    commercial: "conditional",
     live: false,
     installed: false,
     size: "972M parameters, about 1B on the card. Output 576×864. Weights about 2 GB.",
@@ -47,7 +47,7 @@ export const COMMERCIAL_PATHS: CommercialPath[] = [
     finetune: "Apache-2.0 allows adaptation. No Isibuko fine-tune exists, and none is started.",
     productConditioning: "Yes. Person image plus garment image, category tops. That matches a shirt still, not a video.",
     whyNotInstalled:
-      "Still image only. Try-on weights are Apache-2.0. The stock pipeline imports FASHN Human Parser, which the NVIDIA SegFormer licence limits to research or evaluation. A flat-lay segmentation-free route can skip that parser. It has not been run, and the weights are not downloaded.",
+      "Conditional candidate only. The try-on code and weights are Apache-2.0, and the flat-lay segmentation-free route can avoid the separately restricted FASHN Human Parser. However, the model card does not publish a separate licence/provenance statement for its 18M training pairs and 4M synthetic triplets. The parser-free route has not been executed, the weights are not downloaded, and legal review is required before commercial production.",
     source: "https://huggingface.co/fashn-ai/fashn-vton-1.5",
   },
   {
