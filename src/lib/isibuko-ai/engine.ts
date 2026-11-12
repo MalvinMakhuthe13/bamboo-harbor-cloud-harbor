@@ -997,7 +997,7 @@ export function startEngine(opts: {
       p95FrameIntervalMs: budget.p95FrameIntervalMs,
       meanFrameWorkMs: budget.meanFrameWorkMs,
       jankFrames: budget.jankFrames,
-      longestFrameMs: budget.longestFrameMs,
+      longestFrameIntervalMs: budget.longestFrameIntervalMs,
       budgetRung: budget.rung,
       budgetReason: budget.reason,
       switchMs,
