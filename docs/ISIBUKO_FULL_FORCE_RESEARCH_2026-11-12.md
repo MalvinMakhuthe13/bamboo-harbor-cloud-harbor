@@ -162,12 +162,14 @@ Rapier is the leading first prototype candidate for cloth physics because its pr
 
 That makes it a plausible browser-side experiment, not a proven phone solution. A real garment mesh, stable body colliders, collision tuning and performance measurements are still required.
 
+Rapier's JavaScript guide explicitly exposes 3D cloth constructors with structural, shear and bending edges, pinned particles, deformable surfaces, kinematic control and mesh skinning. The official JS bindings have moved into the main Rapier repository; the older standalone JavaScript repository is archived but points to the maintained TypeScript location. The binding repository is Apache-2.0.
+
 Prototype one shirt with a coarse mesh, a low particle count, pinned shoulder/neck/side anchors, body/arm colliders and controlled damping. Compare it against a non-physics mesh warp. If the solver drops frames or jitters on the target phone, keep the deterministic mesh warp for Live Fit and move higher-quality cloth simulation to Studio/offline.
 
 Sources:
-- https://rapier.rs/docs/
 - https://rapier.rs/docs/user_guides/javascript/soft_bodies/
 - https://rapier.rs/docs/user_guides/javascript/soft_body_creation_and_insertion/
+- https://github.com/dimforge/rapier/tree/master/typescript
 
 ### 5.3 WebGPU XPBD
 
@@ -243,7 +245,7 @@ Do not mistake a permissive code repository for permissively licensed model weig
 - **CatV2TON:** supports image and video evaluation, but the official materials are CC BY-NC-SA 4.0.
 - **MagicTryOn:** video diffusion and garment-preservation research, but its code, weights and demo are CC BY-NC-SA 4.0.
 - **LiveVVT:** the public repository states that code is being prepared; there is no usable released implementation yet.
-- **TCE-VTON (2026):** relevant temporal-consistency paper describing preprocessing, warping, video generation and human-feature injection. Treat as a research reference until its code, checkpoints and licence are independently verified.
+- **TCE-VTON (2026):** relevant temporal-consistency paper describing preprocessing, warping, video generation and human-feature injection. Its public repository currently lists model source, training code, general inference and trained checkpoints as release-plan items; no clear project licence was found. Treat as a paper/reference only until the complete implementation and licence are actually released and reviewed.
 
 The lesson is that video VTON is a separate problem from image VTON. It needs temporal attention/caching or explicit tracking and conditioning. Running independent still-image generations on consecutive camera frames will flicker and change garment details.
 
@@ -254,6 +256,7 @@ Sources:
 - https://github.com/vivoCameraResearch/Magic-TryOn
 - https://github.com/caoyushe/LiveVVT
 - https://www.sciencedirect.com/science/article/pii/S2468502X26000239
+- https://github.com/Ruanyx1823/TCE-VTON
 
 ## 7. Research: image-to-3D garment creation
 
@@ -265,6 +268,7 @@ Relevant work:
 - **GarmentCodeData:** large synthetic pattern/garment dataset; CC BY 4.0.
 - **Dress-1-to-3 (SIGGRAPH 2025):** specifically targets simulation-ready separated garments and sewing patterns from a single image. The paper is a strong research direction, but no production-ready commercial implementation was verified in this audit.
 - **GarmentCrafter (3DV 2026):** single-view garment reconstruction and novel-view generation. Its research is highly relevant, but code/weights/licensing must be confirmed before use.
+- **VTON 360 (CVPR 2025):** the most directly relevant any-view try-on research. It starts with a 3D human model and front/back garment images, renders multiple camera views, applies a 2D try-on network with multi-view spatial attention and camera-aware garment embeddings, then reconstructs a 3D result. This demonstrates why a true 360° experience needs multi-view garment information and 3D consistency. Its official pipeline uses SMPL-X normal maps and DensePose/THuman/MVHumanNet assets, whose non-commercial or research restrictions prevent treating the released stack as a production dependency.
 - **3D Magic Mirror (2026):** interesting single-image clothing reconstruction, but the official repository says academic research use only and asks commercial users to contact the authors.
 - **TRELLIS:** MIT code/model family for generic image-to-3D asset creation, but it is not a garment-pattern solver and requires substantial GPU resources. Its output must be checked for garment separability and simulation readiness.
 - **Stable Fast 3D:** community licence permits commercial use under a revenue threshold, but creates a licence constraint if the company grows beyond that threshold.
@@ -277,6 +281,8 @@ Sources:
 - https://github.com/layumi/3D-Magic-Mirror
 - https://github.com/microsoft/TRELLIS
 - https://huggingface.co/stabilityai/stable-fast-3d
+- https://github.com/scnuhealthy/VTON360
+- https://openaccess.thecvf.com/content/CVPR2025/html/He_VTON_360_High-Fidelity_Virtual_Try-On_from_Any_Viewing_Direction_CVPR_2025_paper.html
 
 ## 8. Competitive reference: Snap, Decart, Google and Adobe
 
@@ -284,13 +290,15 @@ Sources:
 
 Snap's official cloth-simulation try-on documentation describes a 3D body tracker, body mesh, cloth simulation, physics colliders and body-mesh occlusion. Its external-body-mesh feature deforms a garment mesh to the tracked body using proximity or UV matching without requiring conventional rigging.
 
+The most valuable implementation detail is that Snap does **not** simulate every garment vertex equally. Its dress and coat examples bind the body-hugging chest area to the tracked body mesh and let selected regions such as the hem move under cloth simulation. Vertex colours identify bound versus simulated regions. The guide explicitly warns that high polygon counts reduce performance and recommends low-poly garments for broader device support. This is the architecture Isibuko should copy conceptually: body-conforming structural regions plus selectively simulated loose fabric, not a fully free cloth sheet and not a flat sticker.
+
 This is the strongest public design reference for Live Fit. The code and tracking engine are not an open-source component we can simply copy. Camera Kit Web also warns that resource-heavy 3D body/hand tracking can reduce frame rate.
 
 ### Decart Lucy VTON 3.6
 
-Decart's current public API documentation describes a real-time WebRTC camera stream with a prompt and/or garment image, 720p output, and garment switching during the session. It lists standard real-time usage at 2 credits per second and fast mode at 4 credits per second.
+Decart's current public API documentation describes a real-time WebRTC camera stream with a prompt and/or garment image, 720p output, and garment switching during the session. Its published pricing is **US$0.02 per active real-time second at 720p** for Lucy VTON 3.6 and **US$0.04 per second in fast mode**. A 30-second session is therefore US$0.60 standard or US$1.20 fast, before any applicable taxes or currency conversion. New accounts receive free credits for testing.
 
-This is a hosted proprietary service and quality benchmark, not a free dependency. It confirms that the market is moving toward live-stream garment-conditioned video rather than static stickers.
+This is a hosted proprietary service and quality benchmark, not a free/open-source dependency. It confirms that the market is moving toward live-stream garment-conditioned video rather than static stickers. If Isibuko ever benchmarks it, use a short opt-in session and protect the permanent API key with short-lived client tokens.
 
 ### Google virtual try-on
 
@@ -315,7 +323,8 @@ Sources:
 - https://developers.snap.com/lens-studio/features/try-on/cloth-simulation-try-on
 - https://developers.snap.com/lens-studio/features/ar-tracking/body/external-mesh
 - https://www.developers.snap.com/camera-kit/integrate-sdk/web/guides/web-considerations
-- https://platform.decart.ai/models/lucy-vton
+- https://docs.platform.decart.ai/models/realtime/virtual-try-on
+- https://docs.platform.decart.ai/getting-started/pricing
 - https://blog.google/products-and-platforms/products/shopping/google-shopping-ai-mode-virtual-try-on-update/
 - https://news.adobe.com/news/2026/11/adobe-transforms-creative-cloud-tools
 - https://research.adobe.com/news/new-photoshop-feature-rotate-2d-objects-in-three-dimensions/
