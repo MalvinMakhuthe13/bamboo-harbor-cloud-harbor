@@ -24,6 +24,26 @@ describe("lower-body garment mesh", () => {
     assert.notDeepEqual(left.map((v) => [v.x, v.y]), right.map((v) => [v.x, v.y]));
   });
 
+  it("keeps trouser cross-sections perpendicular to a bent leg path", () => {
+    const bent = {
+      ...anchors,
+      kneeL: { x: 0.46, y: 0.72 },
+      ankleL: { x: 0.57, y: 0.94 },
+    };
+    const mesh = buildLowerBodyMesh("pants", bent);
+    assert.ok(mesh);
+    const leftPart = mesh.parts[0]!;
+    const row = 5;
+    const at = (r: number, c: number) =>
+      mesh.vertices[leftPart.vertexStart + r * mesh.columns + c]!;
+    const across = { x: at(row, mesh.columns - 1).x - at(row, 0).x, y: at(row, mesh.columns - 1).y - at(row, 0).y };
+    const tangent = { x: at(row + 1, 3).x - at(row - 1, 3).x, y: at(row + 1, 3).y - at(row - 1, 3).y };
+    const dot = across.x * tangent.x + across.y * tangent.y;
+    const magnitude = Math.hypot(across.x, across.y) * Math.hypot(tangent.x, tangent.y);
+    assert.ok(magnitude > 0);
+    assert.ok(Math.abs(dot / magnitude) < 0.2, "cross-section should remain perpendicular to the local leg tangent");
+  });
+
   it("creates one continuous waist-to-hem skirt panel using the full texture", () => {
     const mesh = buildLowerBodyMesh("skirt", anchors);
     assert.ok(mesh);
