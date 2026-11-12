@@ -28,7 +28,15 @@ export function CameraTest({
         <div>Shirt switches</div>
         {cell(live ? `${switches} during this session` : "—")}
         <div>Picture</div>
-        {cell(metrics ? `${metrics.fps} fps` : "—")}
+        {cell(metrics ? metrics.fps + " fps" : "—")}
+        <div>Frame interval</div>
+        {cell(metrics ? metrics.frameIntervalMs + " ms · p95 " + metrics.p95FrameIntervalMs + " ms" : "—")}
+        <div>Frame work</div>
+        {cell(metrics ? metrics.frameWorkMs + " ms · mean " + metrics.meanFrameWorkMs + " ms" : "—")}
+        <div>Jank / longest</div>
+        {cell(metrics ? metrics.jankFrames + " · " + metrics.longestFrameMs + " ms" : "—")}
+        <div>Budget</div>
+        {cell(metrics ? "R" + metrics.budgetRung + " · " + metrics.budgetReason : "—")}
         <div>Face</div>
         {cell(metrics ? `${metrics.face ? "found" : "missing"} · ${metrics.faceHz} Hz · ${metrics.faceMs} ms` : "waiting")}
         <div>Shoulders</div>
