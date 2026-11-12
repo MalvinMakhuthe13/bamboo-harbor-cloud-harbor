@@ -345,12 +345,16 @@ export function startEngine(opts: {
       studioImg = null;
       stillUploaded = false;
       faceLm = null;
+      faceMiss = 0;
       headPose = null;
       headPoseMs = 0;
       headPoseSmoother.reset();
       poseLm = null;
       poseWorld = null;
+      poseMiss = 0;
       handLms = [];
+      // Landmark smoothing must never leak across camera/source sessions.
+      memory.clear();
       hasMask = false;
       lastMaskAt = 0;
       shoulderPrev = null;
