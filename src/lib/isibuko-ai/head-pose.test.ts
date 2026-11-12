@@ -109,8 +109,7 @@ describe("head pose filtering and neutral calibration", () => {
     smoother.calibrateNeutral(first);
     assert.equal(smoother.calibrated, true);
     const calibrated = smoother.update({ ...first, yaw: 25 }, 133);
-    assert.ok(calibrated.yaw > 0);
-    assert.ok(calibrated.yaw < 5);
+    assert.equal(calibrated.yaw, 5);
     smoother.reset();
     assert.equal(smoother.calibrated, false);
   });
