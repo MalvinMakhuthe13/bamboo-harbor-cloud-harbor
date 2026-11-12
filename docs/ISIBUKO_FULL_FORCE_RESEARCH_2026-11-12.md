@@ -176,10 +176,27 @@ This is a particularly promising candidate for a first product-image-to-pattern 
 
 A 16 GB Kaggle T4 is a plausible place to benchmark the 2B base model plus the project adapter, but the actual peak VRAM, dependency compatibility and output quality have not been measured. A 4 GB RTX 3050 should not be assumed to run the full unquantized 4.43 GB base weights. This is the best low-cost asset-conversion experiment to investigate before attempting the 96.5 GB GarmentGPT repository.
 
+Candidate comparison:
+
+| Candidate | Public implementation/model status | First-pass decision |
+|---|---|---|
+| Design2GarmentCode | MIT code; local Qwen2-VL-2B path; external fine-tuned adapter has unverified rights | Best low-cost pattern-generation smoke test, conditional on adapter rights |
+| GarmentGPT | Apache-2.0 code/weights, but 96.5 GB Hugging Face model repository | Not practical for the free T4 test window |
+| ChatGarment | Apache-2.0 code; 7B LLaVA setup; dataset licence not established | Research benchmark only until weights/data rights and hardware are cleared |
+| AIpparel | MIT code/model card; 29.3 GB model repository; LLaVA 7B base | Too large for the first T4 test; data rights need review |
+| NGL-Prompter | 2026 training-free VLM + structured NGL schema; code/data announced for research use | Reproduce the schema-driven idea independently; do not reuse restricted code/data |
+
 Sources:
 - https://github.com/Style3D/design2garmentcode-impl
 - https://github.com/Style3D/design2garmentcode-impl/blob/main/requirements.txt
 - https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct
+- https://github.com/ChimerAI-MMLab/Garment-GPT
+- https://huggingface.co/ChimerAI/GarmentGPT
+- https://proceedings.iclr.cc/paper_files/paper/2026/hash/34b70ece5f8d273fd670a17e2248d034-Abstract-Conference.html
+- https://github.com/biansy000/ChatGarment
+- https://github.com/georgeNakayama/AIpparel-Code
+- https://huggingface.co/georgeNakayama/AIpparel
+- https://otaheri.github.io/publication/2026_ngl_prompter/
 
 ### 5.3 Rapier soft bodies
 
@@ -299,7 +316,7 @@ Relevant work:
 - **TRELLIS:** MIT code/model family for generic image-to-3D asset creation, but it is not a garment-pattern solver and requires substantial GPU resources. Its output must be checked for garment separability and simulation readiness.
 - **Stable Fast 3D:** community licence permits commercial use under a revenue threshold, but creates a licence constraint if the company grows beyond that threshold.
 
-**Decision:** evaluate Design2GarmentCode first as the lowest-cost offline pattern-generation experiment, subject to clearance of its fine-tuned adapter. GarmentGPT is a second research candidate, not the first smoke test: its Hugging Face repository is 96.5 GB in total, which is not suitable for a one-hour free T4 session. ChatGarment and AIpparel are useful academic references but use larger LLaVA-based models and training datasets whose separate commercial rights need review. Human-review any generated pattern and reconcile it against merchant measurements before approving it as a garment asset. Keep generic image-to-3D as a separate experiment, not a runtime requirement or source of exact physical fit.
+**Decision:** evaluate Design2GarmentCode first as the lowest-cost offline pattern-generation experiment, subject to clearance of its fine-tuned adapter. GarmentGPT is a second research candidate, not the first smoke test: its Hugging Face repository is 96.5 GB in total, which is not suitable for a one-hour free T4 session. The repository README still says the paper is coming soon, but an ICLR 2026 conference paper is now published. ChatGarment and AIpparel are useful academic references but use larger LLaVA-based models and training datasets whose separate commercial rights need review. AIpparel's published model repository is 29.3 GB and includes a LLaVA 1.5 7B base model; it is not a sensible first T4 experiment. ChatGarment's published inference setup uses a 7B LLaVA checkpoint and its run directory references a 4×H100 training run. Human-review any generated pattern and reconcile it against merchant measurements before approving it as a garment asset. Keep generic image-to-3D as a separate experiment, not a runtime requirement or source of exact physical fit.
 
 Sources:
 - https://dress-1-to-3.github.io/
