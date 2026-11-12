@@ -1,5 +1,6 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
 import { buildShirtMesh } from "@/lib/isibuko-ai/garment-mesh";
+import { buildLowerBodyMesh } from "@/lib/isibuko-ai/lower-body-mesh";
 import { getGarmentFitProfile, isGarmentCategory } from "@/lib/isibuko-ai/garment-profiles";
 import { FrameBudgetMonitor } from "@/lib/isibuko-ai/budget";
 import { fuseHeadPose, HeadPoseSmoother, type HeadPose } from "@/lib/isibuko-ai/head-pose";
@@ -623,8 +624,24 @@ export function startEngine(opts: {
             wristR: wrR ? { x: wrR.x + dragPt.x, y: wrR.y + dragPt.y } : null,
           }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
         : null;
-    const useShirtMesh = Boolean(shirtMesh && shirtMesh.parts.some((part) => part.kind === "torso"));
-    gl.uniform1i(u.mode, useShirtMesh ? 0 : modeId);
+    const kneeL = poseLm && seen(poseLm[25], 0.25) ? remember("knL", flip(poseLm[25]!)) : null;
+    const kneeR = poseLm && seen(poseLm[26], 0.25) ? remember("knR", flip(poseLm[26]!)) : null;
+    const ankleL = poseLm && seen(poseLm[27], 0.25) ? remember("anL", flip(poseLm[27]!)) : null;
+    const ankleR = poseLm && seen(poseLm[28], 0.25) ? remember("anR", flip(poseLm[28]!)) : null;
+    const lowerBodyMesh =
+      (category === "pants" || category === "skirt") && productImg && hasMask && hipL && hipR
+        ? buildLowerBodyMesh(category, {
+            hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
+            hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
+            kneeL: kneeL ? { x: kneeL.x + dragPt.x, y: kneeL.y + dragPt.y } : null,
+            kneeR: kneeR ? { x: kneeR.x + dragPt.x, y: kneeR.y + dragPt.y } : null,
+            ankleL: ankleL ? { x: ankleL.x + dragPt.x, y: ankleL.y + dragPt.y } : null,
+            ankleR: ankleR ? { x: ankleR.x + dragPt.x, y: ankleR.y + dragPt.y } : null,
+          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
+        : null;
+    const activeGarmentMesh = shirtMesh ?? lowerBodyMesh;
+    const useGarmentMesh = Boolean(activeGarmentMesh?.parts.length);
+    gl.uniform1i(u.mode, useGarmentMesh ? 0 : modeId);
     const chin = memory.get("chin") ?? null;
     if (clothing && chin && shL && shR && (category === "shirt" || category === "jacket" || category === "dress")) {
       const shoulderY = (shL.y + shR.y) / 2;
@@ -697,9 +714,9 @@ export function startEngine(opts: {
     // Phase 1 shirt path: draw a body-constrained mesh over the camera.
     // The legacy fragment-warp remains active whenever this mesh cannot be
     // built, the product image is absent, or segmentation is unavailable.
-    if (useShirtMesh && shirtMesh && productImg && hasMask) {
+    if (useGarmentMesh && activeGarmentMesh && productImg && hasMask) {
       const packed: number[] = [];
-      for (const vertex of shirtMesh.vertices) {
+      for (const vertex of activeGarmentMesh.vertices) {
         packed.push(1 - vertex.x * 2, 1 - vertex.y * 2, vertex.u, 1 - vertex.v);
       }
       gl.useProgram(garmentMeshProg);
@@ -731,8 +748,8 @@ export function startEngine(opts: {
       gl.bindBuffer(gl.ARRAY_BUFFER, garmentMeshBuf);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(packed), gl.DYNAMIC_DRAW);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, garmentMeshIndexBuf);
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(shirtMesh.indices), gl.DYNAMIC_DRAW);
-      gl.drawElements(gl.TRIANGLES, shirtMesh.indices.length, gl.UNSIGNED_SHORT, 0);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(activeGarmentMesh.indices), gl.DYNAMIC_DRAW);
+      gl.drawElements(gl.TRIANGLES, activeGarmentMesh.indices.length, gl.UNSIGNED_SHORT, 0);
       gl.disable(gl.BLEND);
     }
 
@@ -907,7 +924,7 @@ export function startEngine(opts: {
   function poseRoi(): NormRect {
     poseTick += 1;
     if (!poseLm || shouldRefreshFull(poseTick, 4)) return FULL_FRAME;
-    const ids = [0, 11, 12, 13, 14, 15, 16, 23, 24];
+    const ids = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
     return roiFromPoints(ids.map((id) => poseLm?.[id]), 0.55) ?? FULL_FRAME;
   }
 
