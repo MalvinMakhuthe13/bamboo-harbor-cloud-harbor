@@ -145,13 +145,14 @@ export class OneEuroAngleFilter {
     if (!Number.isFinite(value) || !Number.isFinite(atMs)) {
       return this.filtered ?? 0;
     }
-    if (this.filtered == null || this.previousRaw == null || this.previousAt == null || atMs <= this.previousAt) {
+    if (this.filtered == null || this.previousRaw == null || this.previousAt == null) {
       this.previousRaw = value;
       this.filtered = value;
       this.previousAt = atMs;
       this.filteredDerivative = 0;
       return value;
     }
+    if (atMs <= this.previousAt) return this.filtered;
 
     const dt = Math.max(1e-3, (atMs - this.previousAt) / 1000);
     const rawDelta = shortestAngleDelta(value, this.previousRaw);
