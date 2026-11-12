@@ -127,18 +127,40 @@ export function buildLowerBodyMesh(
   const mesh: LowerBodyMesh = { vertices: [], indices: [], parts: [], columns, rows };
 
   if (category === "skirt") {
-    const down = { x: 0, y: 1 };
-    const hemCenter = { x: waistMid.x, y: waistMid.y + Math.max(dist(hipL, hipR) * 2.3, 0.22) };
+    // Estimate the wearer's body-down axis from tracked knees; use vertical
+    // only when the knee midpoint is unavailable or implausibly close.
+    const kneeMid = finite(anchors.kneeL) && finite(anchors.kneeR)
+      ? mid(anchors.kneeL, anchors.kneeR)
+      : null;
+    const bodyVector = kneeMid
+      ? { x: kneeMid.x - waistMid.x, y: kneeMid.y - waistMid.y }
+      : { x: 0, y: 1 };
+    const bodyLength = Math.hypot(bodyVector.x, bodyVector.y);
+    const down = bodyLength > 0.04
+      ? { x: bodyVector.x / bodyLength, y: bodyVector.y / bodyLength }
+      : { x: 0, y: 1 };
+    // Keep the hem perpendicular to the body axis and orient it consistently
+    // from tracked left hip to right hip for stable texture coordinates.
+    let across = { x: -down.y, y: down.x };
+    const hipAxis = { x: hipR.x - hipL.x, y: hipR.y - hipL.y };
+    if (across.x * hipAxis.x + across.y * hipAxis.y < 0) {
+      across = { x: -across.x, y: -across.y };
+    }
+    const skirtLength = Math.max(dist(hipL, hipR) * 2.3, 0.22);
+    const hemCenter = { x: waistMid.x + down.x * skirtLength, y: waistMid.y + down.y * skirtLength };
     const hemHalf = Math.max(dist(hipL, hipR) * 0.58 * hemWidth, 0.055);
+    const hemL = { x: hemCenter.x - across.x * hemHalf, y: hemCenter.y - across.y * hemHalf };
+    const hemR = { x: hemCenter.x + across.x * hemHalf, y: hemCenter.y + across.y * hemHalf };
     const vertices: LowerBodyVertex[] = [];
     for (let r = 0; r < rows; r++) {
       const v = r / (rows - 1);
       const t = smooth(v);
-      const left = { x: mix(waistL.x, hemCenter.x - hemHalf, t), y: mix(waistL.y, hemCenter.y, t) };
-      const right = { x: mix(waistR.x, hemCenter.x + hemHalf, t), y: mix(waistR.y, hemCenter.y, t) };
+      const left = { x: mix(waistL.x, hemL.x, t), y: mix(waistL.y, hemL.y, t) };
+      const right = { x: mix(waistR.x, hemR.x, t), y: mix(waistR.y, hemR.y, t) };
       for (let c = 0; c < columns; c++) {
         const u = c / (columns - 1);
-        vertices.push({ x: mix(left.x, right.x, u), y: mix(left.y, right.y, u) + down.y * Math.sin(Math.PI * u) * Math.sin(Math.PI * v) * 0.012, u, v });
+        const fold = Math.sin(Math.PI * u) * Math.sin(Math.PI * v) * 0.012;
+        vertices.push({ x: mix(left.x, right.x, u) + across.x * fold, y: mix(left.y, right.y, u) + across.y * fold, u, v });
       }
     }
     appendGrid(mesh, "skirt", vertices, columns, rows);
