@@ -85,8 +85,17 @@ function buildPanel(
     // A single start-to-end normal makes bent legs look like flat strips.
     const before = centerAt(Math.max(0, v - 0.015));
     const after = centerAt(Math.min(1, v + 0.015));
-    const tangent = { x: after.x - before.x, y: after.y - before.y };
-    const tangentLength = Math.hypot(tangent.x, tangent.y) || 1;
+    let tangent = { x: after.x - before.x, y: after.y - before.y };
+    let tangentLength = Math.hypot(tangent.x, tangent.y);
+    // At a sharp reversal or collapsed tracking sample, use the local
+    // hip-knee or knee-ankle segment instead of producing a zero-width row.
+    if (tangentLength < 1e-4) {
+      const segment = v < 0.5
+        ? { x: middle.x - start.x, y: middle.y - start.y }
+        : { x: end.x - middle.x, y: end.y - middle.y };
+      tangent = Math.hypot(segment.x, segment.y) > 1e-4 ? segment : { x: 0, y: 1 };
+      tangentLength = Math.hypot(tangent.x, tangent.y);
+    }
     const normal = { x: -tangent.y / tangentLength, y: tangent.x / tangentLength };
     const half = v <= 0.5 ? mix(startHalf, midHalf, t * 2) : mix(midHalf, endHalf, (t - 0.5) * 2);
     for (let c = 0; c < columns; c++) {
