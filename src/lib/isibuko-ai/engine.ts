@@ -537,22 +537,7 @@ export function startEngine(opts: {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, maskTex);
     gl.uniform1i(gl.getUniformLocation(composite, "uMask"), 2);
-    const shirtMesh =
-      category === "shirt" && clothing && productImg && hasMask && shL && shR && hipL && hipR
-        ? buildShirtMesh({
-            shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
-            shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
-            hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
-            hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
-            elbowL: elL ? { x: elL.x + dragPt.x, y: elL.y + dragPt.y } : null,
-            elbowR: elR ? { x: elR.x + dragPt.x, y: elR.y + dragPt.y } : null,
-            wristL: wrL ? { x: wrL.x + dragPt.x, y: wrL.y + dragPt.y } : null,
-            wristR: wrR ? { x: wrR.x + dragPt.x, y: wrR.y + dragPt.y } : null,
-          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
-        : null;
-    const useShirtMesh = Boolean(shirtMesh && shirtMesh.parts.some((part) => part.kind === "torso"));
-
-    gl.uniform1i(u.mode, useShirtMesh ? 0 : modeId);
+    gl.uniform1i(u.mode, modeId);
     gl.uniform1f(u.hasMask, hasMask ? 1 : 0);
     gl.uniform1f(u.cover, 1);
     gl.uniform1f(u.full, category === "pants" || category === "dress" || category === "skirt" ? 1 : 0);
@@ -622,6 +607,21 @@ export function startEngine(opts: {
         : null;
     // Never render a garment from stale, collapsed, or runaway pose landmarks.
     const clothing = proposedClothing && isPlausibleClothingQuad(proposedClothing) ? proposedClothing : null;
+    const shirtMesh =
+      category === "shirt" && clothing && productImg && hasMask && shL && shR && hipL && hipR
+        ? buildShirtMesh({
+            shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
+            shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
+            hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
+            hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
+            elbowL: elL ? { x: elL.x + dragPt.x, y: elL.y + dragPt.y } : null,
+            elbowR: elR ? { x: elR.x + dragPt.x, y: elR.y + dragPt.y } : null,
+            wristL: wrL ? { x: wrL.x + dragPt.x, y: wrL.y + dragPt.y } : null,
+            wristR: wrR ? { x: wrR.x + dragPt.x, y: wrR.y + dragPt.y } : null,
+          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
+        : null;
+    const useShirtMesh = Boolean(shirtMesh && shirtMesh.parts.some((part) => part.kind === "torso"));
+    gl.uniform1i(u.mode, useShirtMesh ? 0 : modeId);
     const chin = memory.get("chin") ?? null;
     if (clothing && chin && shL && shR && (category === "shirt" || category === "jacket" || category === "dress")) {
       const shoulderY = (shL.y + shR.y) / 2;
@@ -672,25 +672,6 @@ export function startEngine(opts: {
     gl.uniform2f(u.hand1, palms[1]?.x ?? -2, palms[1]?.y ?? -2);
     gl.uniform1f(u.handR, handR);
 
-    nailBuf.fill(0);
-    const segments = category === "nails" ? nailSegments(handLms.map((hand) => hand.map((lm) => flip(lm)))) : [];
-    segments.forEach((seg, i) => {
-      nailBuf[i * 4] = seg.tip.x;
-      nailBuf[i * 4 + 1] = seg.tip.y;
-      nailBuf[i * 4 + 2] = seg.base.x;
-      nailBuf[i * 4 + 3] = seg.base.y;
-    });
-    gl.uniform4fv(u.nails, nailBuf);
-    gl.uniform1i(u.nailCount, segments.length);
-    const polish = tint ?? [0.9, 0.72, 0.74];
-    gl.uniform3f(u.polish, polish[0], polish[1], polish[2]);
-    const shape = nailShapeFactors(request.nail);
-    gl.uniform1f(u.nailHalf, shape.half);
-    gl.uniform1f(u.nailTip, shape.tip);
-    gl.uniform1f(u.nailStart, shape.start);
-
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
     // Phase 1 shirt path: draw a body-constrained mesh over the camera.
     // The legacy fragment-warp remains active whenever this mesh cannot be
     // built, the product image is absent, or segmentation is unavailable.
@@ -731,6 +712,25 @@ export function startEngine(opts: {
       gl.drawElements(gl.TRIANGLES, shirtMesh.indices.length, gl.UNSIGNED_SHORT, 0);
       gl.disable(gl.BLEND);
     }
+
+    nailBuf.fill(0);
+    const segments = category === "nails" ? nailSegments(handLms.map((hand) => hand.map((lm) => flip(lm)))) : [];
+    segments.forEach((seg, i) => {
+      nailBuf[i * 4] = seg.tip.x;
+      nailBuf[i * 4 + 1] = seg.tip.y;
+      nailBuf[i * 4 + 2] = seg.base.x;
+      nailBuf[i * 4 + 3] = seg.base.y;
+    });
+    gl.uniform4fv(u.nails, nailBuf);
+    gl.uniform1i(u.nailCount, segments.length);
+    const polish = tint ?? [0.9, 0.72, 0.74];
+    gl.uniform3f(u.polish, polish[0], polish[1], polish[2]);
+    const shape = nailShapeFactors(request.nail);
+    gl.uniform1f(u.nailHalf, shape.half);
+    gl.uniform1f(u.nailTip, shape.tip);
+    gl.uniform1f(u.nailStart, shape.start);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     const sprites: Sprite[] = [];
     const aspect = productImg && productImg.naturalWidth ? productImg.naturalHeight / productImg.naturalWidth : 1;
