@@ -99,6 +99,17 @@ export type LiveMetrics = {
   handMs: number;
   segmentMs: number;
   compositeMs: number;
+  /** Latest interval between active render-loop frames. */
+  frameIntervalMs: number;
+  /** JavaScript work duration for the latest active render-loop frame. */
+  frameWorkMs: number;
+  meanFrameIntervalMs: number;
+  p95FrameIntervalMs: number;
+  meanFrameWorkMs: number;
+  jankFrames: number;
+  longestFrameMs: number;
+  budgetRung: 0 | 1 | 2 | 3;
+  budgetReason: string;
   /** Milliseconds from a product, colour, or size change until that photograph is bound. Null before any change. Zero means the change landed in the same frame. */
   switchMs: number | null;
   /** How often a new face, pose, hand, or mask result arrives. */
