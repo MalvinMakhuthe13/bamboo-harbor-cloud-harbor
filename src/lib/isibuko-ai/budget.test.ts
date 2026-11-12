@@ -6,7 +6,8 @@ describe("frame budget telemetry", () => {
   it("records frame interval, work time and rolling statistics without changing quality", () => {
     const budget = new FrameBudgetMonitor({ windowSize: 4 });
     budget.observe(16.7, 4.2);
-    const snapshot = budget.observe(20, 5);
+    budget.observe(20, 5);
+    const snapshot = budget.snapshot();
 
     assert.equal(snapshot.frameIntervalMs, 20);
     assert.equal(snapshot.frameWorkMs, 5);
@@ -41,7 +42,8 @@ describe("frame budget telemetry", () => {
 
   it("sanitises invalid measurements and resets session statistics", () => {
     const budget = new FrameBudgetMonitor();
-    const invalid = budget.observe(Number.NaN, Number.POSITIVE_INFINITY);
+    budget.observe(Number.NaN, Number.POSITIVE_INFINITY);
+    const invalid = budget.snapshot();
     assert.equal(invalid.frameIntervalMs, 0);
     assert.equal(invalid.frameWorkMs, 0);
     assert.equal(invalid.sampleCount, 0);
