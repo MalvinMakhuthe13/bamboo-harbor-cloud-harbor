@@ -678,7 +678,7 @@ export function startEngine(opts: {
     if (useShirtMesh && shirtMesh && productImg && hasMask) {
       const packed: number[] = [];
       for (const vertex of shirtMesh.vertices) {
-        packed.push(vertex.x * 2 - 1, 1 - vertex.y * 2, vertex.u, 1 - vertex.v);
+        packed.push(1 - vertex.x * 2, 1 - vertex.y * 2, vertex.u, 1 - vertex.v);
       }
       gl.useProgram(garmentMeshProg);
       gl.enable(gl.BLEND);
