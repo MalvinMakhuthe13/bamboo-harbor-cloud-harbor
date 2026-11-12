@@ -1,3 +1,5 @@
+import type { HeadPose } from "./head-pose.ts";
+
 export type Category =
   | "wig"
   | "hat"
@@ -99,6 +101,9 @@ export type LiveMetrics = {
   handMs: number;
   segmentMs: number;
   compositeMs: number;
+  /** Smoothed head orientation in degrees, relative to the neutral calibration when set. */
+  headPose: HeadPose | null;
+  headPoseMs: number;
   /** Latest interval between active render-loop frames. */
   frameIntervalMs: number;
   /** JavaScript work duration for the latest active render-loop frame. */
