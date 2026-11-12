@@ -172,6 +172,7 @@ export function startEngine(opts: {
     mask: gl.getUniformLocation(garmentMeshProg, "uMask"),
     camera: gl.getUniformLocation(garmentMeshProg, "uCamera"),
     hasMask: gl.getUniformLocation(garmentMeshProg, "uHasMask"),
+    hasFace: gl.getUniformLocation(garmentMeshProg, "uHasFace"),
     invResolution: gl.getUniformLocation(garmentMeshProg, "uInvResolution"),
     hand0: gl.getUniformLocation(garmentMeshProg, "uHand0"),
     hand1: gl.getUniformLocation(garmentMeshProg, "uHand1"),
@@ -712,6 +713,7 @@ export function startEngine(opts: {
       gl.bindTexture(gl.TEXTURE_2D, camTex);
       gl.uniform1i(garmentUniform.camera, 2);
       gl.uniform1f(garmentUniform.hasMask, 1);
+      gl.uniform1f(garmentUniform.hasFace, facePts ? 1 : 0);
       gl.uniform2f(garmentUniform.invResolution, 1 / Math.max(1, canvas.width), 1 / Math.max(1, canvas.height));
       gl.uniform2f(garmentUniform.hand0, palms[0]?.x ?? -2, palms[0]?.y ?? -2);
       gl.uniform2f(garmentUniform.hand1, palms[1]?.x ?? -2, palms[1]?.y ?? -2);
