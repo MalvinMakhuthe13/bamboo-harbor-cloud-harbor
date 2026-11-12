@@ -29,6 +29,7 @@ describe("body-constrained shirt mesh renderer", () => {
     assert.ok(GARMENT_MESH_FRAG.includes("bool body = cls > 1.5 && cls < 2.5"));
     assert.ok(GARMENT_MESH_FRAG.includes("bool clothes = cls > 3.5 && cls < 4.5"));
     assert.ok(GARMENT_MESH_FRAG.includes("protectedFace(vScreen) || nearHand(vScreen)"));
+    assert.ok(GARMENT_MESH_FRAG.includes("if (uHasFace < 0.5) return false;"));
     assert.ok(GARMENT_MESH_FRAG.includes("if (!(body || clothes || other)) discard"));
   });
 
