@@ -1,5 +1,6 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
 import { buildShirtMesh } from "@/lib/isibuko-ai/garment-mesh";
+import { buildDressMesh } from "@/lib/isibuko-ai/dress-mesh";
 import { buildLowerBodyMesh } from "@/lib/isibuko-ai/lower-body-mesh";
 import { getWigFittingParameters } from "@/lib/isibuko-ai/anchors";
 import { getGarmentFitProfile, isGarmentCategory } from "@/lib/isibuko-ai/garment-profiles";
@@ -647,7 +648,18 @@ export function startEngine(opts: {
             ankleR: ankleR ? { x: ankleR.x + dragPt.x, y: ankleR.y + dragPt.y } : null,
           }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
         : null;
-    const activeGarmentMesh = shirtMesh ?? lowerBodyMesh;
+    const dressMesh =
+      category === "dress" && productImg && maskFresh && shL && shR && hipL && hipR
+        ? buildDressMesh({
+            shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
+            shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
+            hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
+            hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
+            kneeL: kneeL ? { x: kneeL.x + dragPt.x, y: kneeL.y + dragPt.y } : null,
+            kneeR: kneeR ? { x: kneeR.x + dragPt.x, y: kneeR.y + dragPt.y } : null,
+          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
+        : null;
+    const activeGarmentMesh = shirtMesh ?? dressMesh ?? lowerBodyMesh;
     const useGarmentMesh = Boolean(activeGarmentMesh?.parts.length);
     gl.uniform1i(u.mode, useGarmentMesh ? 0 : modeId);
     const chin = memory.get("chin") ?? null;
