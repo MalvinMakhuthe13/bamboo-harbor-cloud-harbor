@@ -30,15 +30,17 @@ describe("versioned product fitting anchors", () => {
 
 describe("product alpha geometry analysis", () => {
   it("returns normalized bounds and a candidate central transparent opening", () => {
-    const width = 5, height = 5;
+    const width = 9, height = 9;
     const pixels = new Uint8Array(width * height * 4);
     for (let i = 0; i < width * height; i++) pixels[i * 4 + 3] = 255;
-    pixels[(2 * width + 2) * 4 + 3] = 0;
+    for (let x = 3; x <= 5; x++) pixels[(4 * width + x) * 4 + 3] = 0;
     const result = analyzeProductAlpha(pixels, width, height);
     assert.ok(result);
     assert.deepEqual(result.bounds, { left: 0, top: 0, right: 1, bottom: 1 });
     assert.ok(result.centralOpeningCandidate);
-    assert.equal(result.centralOpeningCandidate.width, 0.2);
+    assert.equal(result.centralOpeningCandidate.width, 3 / 9);
+    assert.equal(result.silhouette.length, 16);
+    assert.ok(result.silhouette.every((sample) => sample.left >= 0 && sample.right <= 1 && sample.width > 0));
     assert.ok(result.confidence >= 0 && result.confidence <= 1);
   });
 
@@ -46,8 +48,20 @@ describe("product alpha geometry analysis", () => {
     const result = analyzeProductAlpha(new Uint8Array(4 * 4 * 4), 4, 4);
     assert.deepEqual(result, {
       version: "isibuko.anchors/1", bounds: null, alphaCoverage: 0, confidence: 0,
-      centralOpeningCandidate: null,
+      silhouette: [], centralOpeningCandidate: null,
     });
+  });
+
+
+  it("does not mistake a side cut-out for a central opening", () => {
+    const width = 12, height = 8;
+    const pixels = new Uint8Array(width * height * 4);
+    for (let i = 0; i < width * height; i++) pixels[i * 4 + 3] = 255;
+    for (let x = 1; x <= 3; x++) pixels[(4 * width + x) * 4 + 3] = 0;
+    const result = analyzeProductAlpha(pixels, width, height);
+    assert.ok(result);
+    assert.equal(result.centralOpeningCandidate, null);
+    assert.ok(result.silhouette.length > 0);
   });
 
   it("rejects malformed image buffers and dimensions", () => {
