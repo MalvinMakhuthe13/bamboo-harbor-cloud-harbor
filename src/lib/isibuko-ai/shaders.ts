@@ -291,3 +291,88 @@ void main() {
   o = vec4(rgb, s.a);
 }
 `;
+
+
+export const GARMENT_MESH_VERT = `#version 300 es
+layout(location=0) in vec2 aClip;
+layout(location=1) in vec2 aUv;
+out vec2 vUv;
+out vec2 vScreen;
+out vec2 vMaskUv;
+void main() {
+  vUv = aUv;
+  vScreen = vec2((aClip.x + 1.0) * 0.5, (1.0 - aClip.y) * 0.5);
+  vMaskUv = vec2(vScreen.x, 1.0 - vScreen.y);
+  gl_Position = vec4(aClip, 0.0, 1.0);
+}
+`;
+
+export const GARMENT_MESH_FRAG = `#version 300 es
+precision highp float;
+in vec2 vUv;
+in vec2 vScreen;
+in vec2 vMaskUv;
+out vec4 o;
+uniform sampler2D uProduct;
+uniform sampler2D uMask;
+uniform sampler2D uCamera;
+uniform float uHasMask;
+uniform vec2 uInvResolution;
+uniform vec2 uHand0;
+uniform vec2 uHand1;
+uniform float uHandR;
+uniform float uHasHands;
+uniform vec2 uProtectC;
+uniform vec2 uProtectHalf;
+uniform float uProtectCos;
+uniform float uProtectSin;
+uniform vec3 uTint;
+uniform float uTintOn;
+
+float clsAt(vec2 uv) {
+  return texture(uMask, uv).r * 255.0;
+}
+bool nearHand(vec2 p) {
+  if (uHasHands < 0.5) return false;
+  return distance(p, uHand0) < uHandR || distance(p, uHand1) < uHandR;
+}
+bool protectedFace(vec2 p) {
+  vec2 d = p - uProtectC;
+  float x = d.x * uProtectCos + d.y * uProtectSin;
+  float y = -d.x * uProtectSin + d.y * uProtectCos;
+  vec2 n = vec2(x / max(uProtectHalf.x, 1e-4), y / max(uProtectHalf.y, 1e-4));
+  return dot(n, n) <= 1.0;
+}
+vec3 shade(vec3 product, vec3 camera) {
+  float light = dot(camera, vec3(0.2126, 0.7152, 0.0722));
+  vec3 tinted = product;
+  if (uTintOn > 0.5) {
+    float sourceLuma = dot(product, vec3(0.2126, 0.7152, 0.0722));
+    tinted = uTint * (0.38 + sourceLuma * 1.12);
+  }
+  return tinted * clamp(0.8 + light * 0.42, 0.68, 1.2);
+}
+void main() {
+  if (uHasMask < 0.5 || protectedFace(vScreen) || nearHand(vScreen)) discard;
+  float cls = clsAt(vMaskUv);
+  bool body = cls > 1.5 && cls < 2.5;
+  bool clothes = cls > 3.5 && cls < 4.5;
+  bool other = cls > 4.5 && cls < 5.5;
+  if (!(body || clothes || other)) discard;
+
+  vec4 product = texture(uProduct, vUv);
+  if (product.a < 0.12) discard;
+  float green = product.g - max(product.r, product.b);
+  if (green > 0.22 && product.g > 0.25) discard;
+
+  float edge = 1.0;
+  if (clsAt(vMaskUv + vec2(uInvResolution.x * 2.0, 0.0)) < 0.5) edge = min(edge, 0.5);
+  if (clsAt(vMaskUv - vec2(uInvResolution.x * 2.0, 0.0)) < 0.5) edge = min(edge, 0.5);
+  if (clsAt(vMaskUv + vec2(0.0, uInvResolution.y * 2.0)) < 0.5) edge = min(edge, 0.5);
+  if (clsAt(vMaskUv - vec2(0.0, uInvResolution.y * 2.0)) < 0.5) edge = min(edge, 0.5);
+
+  vec3 camera = texture(uCamera, vMaskUv).rgb;
+  vec3 rgb = shade(product.rgb, camera);
+  o = vec4(rgb, product.a * edge);
+}
+`;
