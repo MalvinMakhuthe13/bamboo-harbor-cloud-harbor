@@ -128,11 +128,15 @@ export class OneEuroAngleFilter {
   private filteredDerivative = 0;
   private previousAt: number | null = null;
 
-  constructor(
-    private readonly minCutoff = 1,
-    private readonly beta = 0.02,
-    private readonly derivativeCutoff = 1,
-  ) {}
+  private readonly minCutoff: number;
+  private readonly beta: number;
+  private readonly derivativeCutoff: number;
+
+  constructor(minCutoff = 1, beta = 0.02, derivativeCutoff = 1) {
+    this.minCutoff = minCutoff;
+    this.beta = beta;
+    this.derivativeCutoff = derivativeCutoff;
+  }
 
   filter(value: number, atMs: number): number {
     if (!Number.isFinite(value) || !Number.isFinite(atMs)) {
