@@ -62,6 +62,8 @@ export type Product = {
   merchantUrl?: string;
   /** Merchant's own words. Not inferred from the photograph. */
   fabric?: string;
+  /** Versioned, reviewed fitting metadata derived from the product asset. */
+  fittingAnchors?: ProductFittingAnchors;
 };
 
 export type TryEvent = {
@@ -157,6 +159,7 @@ export type FrameRequest = {
   sizeScale: number;
   nail: NailShape;
   heightCm: number;
+  fittingAnchors?: ProductFittingAnchors;
 };
 
 export type Pt = { x: number; y: number };
