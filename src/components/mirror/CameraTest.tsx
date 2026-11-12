@@ -36,7 +36,7 @@ export function CameraTest({
         <div>Jank (&gt;50 ms) / longest gap</div>
         {cell(metrics ? metrics.jankFrames + " · " + metrics.longestFrameIntervalMs + " ms" : "—")}
         <div>Budget</div>
-        {cell(metrics ? (metrics.budgetRung == null ? metrics.budgetReason : "R" + metrics.budgetRung) : "—")}
+        {cell(metrics ? (metrics.budgetRung == null ? metrics.budgetReason + " · " + metrics.frameSamples + " frames" : "R" + metrics.budgetRung) : "—")}
         <div>Face</div>
         {cell(metrics ? `${metrics.face ? "found" : "missing"} · ${metrics.faceHz} Hz · ${metrics.faceMs} ms` : "waiting")}
         <div>Shoulders</div>
