@@ -672,6 +672,25 @@ export function startEngine(opts: {
     gl.uniform2f(u.hand1, palms[1]?.x ?? -2, palms[1]?.y ?? -2);
     gl.uniform1f(u.handR, handR);
 
+    nailBuf.fill(0);
+    const segments = category === "nails" ? nailSegments(handLms.map((hand) => hand.map((lm) => flip(lm)))) : [];
+    segments.forEach((seg, i) => {
+      nailBuf[i * 4] = seg.tip.x;
+      nailBuf[i * 4 + 1] = seg.tip.y;
+      nailBuf[i * 4 + 2] = seg.base.x;
+      nailBuf[i * 4 + 3] = seg.base.y;
+    });
+    gl.uniform4fv(u.nails, nailBuf);
+    gl.uniform1i(u.nailCount, segments.length);
+    const polish = tint ?? [0.9, 0.72, 0.74];
+    gl.uniform3f(u.polish, polish[0], polish[1], polish[2]);
+    const shape = nailShapeFactors(request.nail);
+    gl.uniform1f(u.nailHalf, shape.half);
+    gl.uniform1f(u.nailTip, shape.tip);
+    gl.uniform1f(u.nailStart, shape.start);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
     // Phase 1 shirt path: draw a body-constrained mesh over the camera.
     // The legacy fragment-warp remains active whenever this mesh cannot be
     // built, the product image is absent, or segmentation is unavailable.
@@ -712,25 +731,6 @@ export function startEngine(opts: {
       gl.drawElements(gl.TRIANGLES, shirtMesh.indices.length, gl.UNSIGNED_SHORT, 0);
       gl.disable(gl.BLEND);
     }
-
-    nailBuf.fill(0);
-    const segments = category === "nails" ? nailSegments(handLms.map((hand) => hand.map((lm) => flip(lm)))) : [];
-    segments.forEach((seg, i) => {
-      nailBuf[i * 4] = seg.tip.x;
-      nailBuf[i * 4 + 1] = seg.tip.y;
-      nailBuf[i * 4 + 2] = seg.base.x;
-      nailBuf[i * 4 + 3] = seg.base.y;
-    });
-    gl.uniform4fv(u.nails, nailBuf);
-    gl.uniform1i(u.nailCount, segments.length);
-    const polish = tint ?? [0.9, 0.72, 0.74];
-    gl.uniform3f(u.polish, polish[0], polish[1], polish[2]);
-    const shape = nailShapeFactors(request.nail);
-    gl.uniform1f(u.nailHalf, shape.half);
-    gl.uniform1f(u.nailTip, shape.tip);
-    gl.uniform1f(u.nailStart, shape.start);
-
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     const sprites: Sprite[] = [];
     const aspect = productImg && productImg.naturalWidth ? productImg.naturalHeight / productImg.naturalWidth : 1;
