@@ -1,6 +1,6 @@
 import type { Category } from "@/lib/isibuko-ai/types";
 import type { AlphaGeometry } from "@/lib/isibuko-ai/anchors";
-import { getGarmentFitProfile } from "@/lib/isibuko-ai/garment-profiles";
+import { getGarmentFitProfile } from "./garment-profiles.ts";
 
 export type NormalizedRect = { left: number; top: number; right: number; bottom: number };
 export type GarmentUvRegion = { part: "torso" | "sleeve-left" | "sleeve-right" | "full" | "leg-left" | "leg-right"; rect: NormalizedRect };
