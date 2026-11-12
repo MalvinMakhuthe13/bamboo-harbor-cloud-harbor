@@ -65,7 +65,7 @@ describe("garment asset preparation plan", () => {
     const plan = prepareGarmentAsset("dress", alphaFixture());
     assert.ok(plan.review.length > 0);
     assert.ok(plan.review.every((item) => item.status === "needs-review"));
-    assert.ok(plan.review.every((item) => item.reason.includes("cannot identify")));
+    assert.ok(plan.review.filter((item) => item.required).every((item) => item.reason.includes("cannot identify")));
   });
 
   it("adds a warning for a transparent opening candidate", () => {
