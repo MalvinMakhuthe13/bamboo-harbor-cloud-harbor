@@ -2,11 +2,21 @@ import type { ProductFittingAnchors } from "@/lib/isibuko-ai/types";
 
 export type WigFittingParameters = { opening: number; holeFrac: number };
 export type AlphaBounds = { left: number; top: number; right: number; bottom: number };
+export type AlphaSilhouetteSample = {
+  y: number;
+  left: number;
+  right: number;
+  center: number;
+  width: number;
+};
 export type AlphaGeometry = {
   version: "isibuko.anchors/1";
   bounds: AlphaBounds | null;
   alphaCoverage: number;
   confidence: number;
+  /** Normalized left/right silhouette samples; these describe pixels, not garment semantics. */
+  silhouette: AlphaSilhouetteSample[];
+  /** A transparent run crossing the image centre and bounded by opaque pixels on both sides. */
   centralOpeningCandidate: { top: number; bottom: number; width: number } | null;
 };
 
@@ -65,24 +75,46 @@ export function analyzeProductAlpha(
   }
   if (opaque === 0) return {
     version: "isibuko.anchors/1", bounds: null, alphaCoverage: 0, confidence: 0,
-    centralOpeningCandidate: null,
+    silhouette: [], centralOpeningCandidate: null,
   };
 
   const bounds = { left: minX / width, top: minY / height, right: (maxX + 1) / width, bottom: (maxY + 1) / height };
   const alphaCoverage = opaque / (width * height);
+  const silhouette: AlphaSilhouetteSample[] = [];
+  const sampleCount = 16;
+  for (let sample = 0; sample < sampleCount; sample++) {
+    const y = Math.min(maxY, minY + Math.floor((sample + 0.5) / sampleCount * (maxY - minY + 1)));
+    let rowLeft = -1;
+    let rowRight = -1;
+    for (let x = minX; x <= maxX; x++) {
+      if (!isOpaque(x, y)) continue;
+      if (rowLeft < 0) rowLeft = x;
+      rowRight = x;
+    }
+    if (rowLeft < 0 || rowRight < rowLeft) continue;
+    silhouette.push({
+      y: y / height,
+      left: rowLeft / width,
+      right: (rowRight + 1) / width,
+      center: ((rowLeft + rowRight + 1) * 0.5) / width,
+      width: (rowRight - rowLeft + 1) / width,
+    });
+  }
+
   const row = Math.floor((minY + maxY) / 2);
   const center = Math.floor((minX + maxX) / 2);
-  let leftEdge = center, rightEdge = center;
-  while (leftEdge > minX && !isOpaque(leftEdge, row)) leftEdge--;
-  while (rightEdge < maxX && !isOpaque(rightEdge, row)) rightEdge++;
-  let gapStart = -1, gapEnd = -1;
-  for (let x = minX; x <= maxX; x++) {
-    if (!isOpaque(x, row)) {
-      if (gapStart < 0) gapStart = x;
-      gapEnd = x;
-    } else if (gapStart >= 0) break;
+  // Only report a central opening if the transparent run actually crosses
+  // the image centre and opaque pixels bound it on both sides. Side cut-outs
+  // and isolated transparent pixels must not become wig-lace guesses.
+  let gapStart = center;
+  let gapEnd = center;
+  if (!isOpaque(center, row)) {
+    while (gapStart > minX && !isOpaque(gapStart - 1, row)) gapStart--;
+    while (gapEnd < maxX && !isOpaque(gapEnd + 1, row)) gapEnd++;
   }
-  const gapWidth = gapStart >= 0 ? gapEnd - gapStart + 1 : 0;
+  const boundedOpening = gapStart > minX && gapEnd < maxX &&
+    isOpaque(gapStart - 1, row) && isOpaque(gapEnd + 1, row);
+  const gapWidth = boundedOpening ? gapEnd - gapStart + 1 : 0;
   const candidate = gapWidth >= Math.max(2, Math.round(width * 0.04))
     ? { top: row / height, bottom: (row + 1) / height, width: gapWidth / width }
     : null;
@@ -90,7 +122,8 @@ export function analyzeProductAlpha(
     version: "isibuko.anchors/1",
     bounds,
     alphaCoverage,
-    confidence: Math.min(1, Math.max(0, (alphaCoverage > 0.02 && alphaCoverage < 0.98) ? 0.65 : 0.35)),
+    confidence: Math.min(1, Math.max(0, (alphaCoverage > 0.02 && alphaCoverage < 0.98 && silhouette.length >= 8) ? 0.65 : 0.35)),
+    silhouette,
     centralOpeningCandidate: candidate,
   };
 }
