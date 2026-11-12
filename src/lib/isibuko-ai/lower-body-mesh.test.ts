@@ -24,6 +24,28 @@ describe("lower-body garment mesh", () => {
     assert.notDeepEqual(left.map((v) => [v.x, v.y]), right.map((v) => [v.x, v.y]));
   });
 
+  it("keeps crossed trouser legs independent and preserves each leg's texture region", () => {
+    const crossed = {
+      ...anchors,
+      kneeL: { x: 0.62, y: 0.72 },
+      kneeR: { x: 0.38, y: 0.72 },
+      ankleL: { x: 0.66, y: 0.94 },
+      ankleR: { x: 0.34, y: 0.94 },
+    };
+    const mesh = buildLowerBodyMesh("pants", crossed);
+    assert.ok(mesh);
+    assert.deepEqual(mesh.parts.map((part) => part.kind), ["pant-leg-left", "pant-leg-right"]);
+    const [leftPart, rightPart] = mesh.parts;
+    assert.ok(leftPart && rightPart);
+    const left = mesh.vertices.slice(leftPart.vertexStart, leftPart.vertexStart + leftPart.vertexCount);
+    const right = mesh.vertices.slice(rightPart.vertexStart, rightPart.vertexStart + rightPart.vertexCount);
+    assert.ok(left.every((vertex) => vertex.u >= 0.02 && vertex.u <= 0.48));
+    assert.ok(right.every((vertex) => vertex.u >= 0.52 && vertex.u <= 0.98));
+    assert.ok(mesh.vertices.every((vertex) => [vertex.x, vertex.y, vertex.u, vertex.v].every(Number.isFinite)));
+    assert.ok(mesh.indices.every((index) => Number.isInteger(index) && index >= 0 && index < mesh.vertices.length));
+    assert.notDeepEqual(left.map((vertex) => [vertex.x, vertex.y]), right.map((vertex) => [vertex.x, vertex.y]));
+  });
+
   it("keeps trouser cross-sections perpendicular to a bent leg path", () => {
     const bent = {
       ...anchors,
