@@ -5,6 +5,7 @@ on:
     branches:
       - integration/isibuko-unified
       - build/isibuko-full-force-2026-11-11
+      - fix/isibuko-wig-nail-fit-full-force-2026-11-12
   push:
     branches:
       - integration/isibuko-unified
