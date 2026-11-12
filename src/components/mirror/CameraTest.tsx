@@ -39,6 +39,10 @@ export function CameraTest({
         {cell(metrics ? (metrics.budgetRung == null ? metrics.budgetReason + " · " + metrics.frameSamples + " frames" : "R" + metrics.budgetRung) : "—")}
         <div>Face</div>
         {cell(metrics ? `${metrics.face ? "found" : "missing"} · ${metrics.faceHz} Hz · ${metrics.faceMs} ms` : "waiting")}
+        <div>Head pose</div>
+        {cell(metrics?.headPose ? "yaw " + metrics.headPose.yaw.toFixed(1) + "° · pitch " + metrics.headPose.pitch.toFixed(1) + "° · roll " + metrics.headPose.roll.toFixed(1) + "°" : "waiting")}
+        <div>Pose source / confidence</div>
+        {cell(metrics?.headPose ? metrics.headPose.source + " · " + Math.round(metrics.headPose.confidence * 100) + "% · " + metrics.headPoseMs + " ms" : "—")}
         <div>Shoulders</div>
         {cell(metrics ? (metrics.shoulders ? "both" : "not both") : "waiting")}
         <div>Elbows</div>
