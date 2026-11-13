@@ -52,6 +52,18 @@ export function maskIsFresh(now: number, lastMaskAt: number, interval: number): 
   return lastMaskAt > 0 && now - lastMaskAt < interval;
 }
 
+/**
+ * How long a drawn mask may stay up. The old 700 ms cutoff expired while the
+ * next segmentation pass was still running, so a still shirt blinked off.
+ * A studio photograph cannot move, so its mask is held longer than a live camera.
+ */
+export function maskHoldMs(segmentInterval: number, lastSegmentMs: number, still: boolean): number {
+  const interval = Number.isFinite(segmentInterval) && segmentInterval > 0 ? segmentInterval : 320;
+  const inference = Number.isFinite(lastSegmentMs) && lastSegmentMs > 0 ? lastSegmentMs : 0;
+  const moving = Math.max(interval * 2, inference + interval, 2500);
+  return still ? Math.max(moving, 8000) : moving;
+}
+
 export function roiFromPoints(
   points: Array<{ x: number; y: number } | null | undefined>,
   pad: number,

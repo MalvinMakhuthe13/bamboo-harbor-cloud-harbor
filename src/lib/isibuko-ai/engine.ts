@@ -1,5 +1,5 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
-import { buildShirtMesh } from "@/lib/isibuko-ai/garment-mesh";
+import { buildShirtMesh, garmentClip } from "@/lib/isibuko-ai/garment-mesh";
 import { buildDressMesh } from "@/lib/isibuko-ai/dress-mesh";
 import { buildLowerBodyMesh } from "@/lib/isibuko-ai/lower-body-mesh";
 import { getWigFittingParameters } from "@/lib/isibuko-ai/anchors";
@@ -18,6 +18,8 @@ import {
   hangingSleeve,
   hasSleeves,
   isPlausibleClothingQuad,
+  collarY,
+  necklineFromMask,
   hatSprite,
   nailSegments,
   nailShapeFactors,
@@ -43,6 +45,7 @@ import {
   inferenceEdge,
   isFullFrame,
   maskIsFresh,
+  maskHoldMs,
   pixelCrop,
   remapList,
   roiFromPoints,
@@ -297,6 +300,7 @@ export function startEngine(opts: {
   let spriteUrl = "";
   let loadingUrl = "";
   let hasMask = false;
+  let maskNeckY: number | null = null;
   const memory = new Map<string, Pt>();
   const nailBuf = new Float32Array(40);
   let faceLm: Lm[] | null = null;
@@ -376,6 +380,7 @@ export function startEngine(opts: {
       // Landmark smoothing must never leak across camera/source sessions.
       memory.clear();
       hasMask = false;
+      maskNeckY = null;
       lastMaskAt = 0;
       shoulderPrev = null;
       motion = "unknown";
@@ -536,10 +541,11 @@ export function startEngine(opts: {
 
   function draw(request: FrameRequest) {
     const t0 = performance.now();
-    // Segmentation is refreshed asynchronously; never draw a fitted garment
-    // against an old silhouette when the segment worker stalls or loses input.
-    const maskFresh = hasMask && lastMaskAt > 0 && t0 - lastMaskAt < 700;
     const category = request.category;
+    // Keep the last silhouette until the next pass can replace it. A 700 ms
+    // cutoff expired while segmentation was still running, so the shirt blinked off.
+    const segmentGap = cadenceMs(category, times.segment).segment;
+    const maskFresh = hasMask && maskIsFresh(t0, lastMaskAt, maskHoldMs(segmentGap, times.segment, source === "studio"));
     const mode = regionMode(category);
     const modeId = mode === "clothing" ? 1 : mode === "hair" ? 2 : 0;
     const tint = request.tint;
@@ -668,9 +674,13 @@ export function startEngine(opts: {
     const shirtMesh =
       category === "shirt" && clothing && productImg && maskFresh && shL && shR && hipL && hipR
         ? (() => {
+            const chinY = memory.get("chin")?.y;
+            // The clothes mask is the neckline. 0.72 is only the fallback when that mask is missing,
+            // because pulling 0.72 of the way from the chin to an already-correct neckline floats the collar.
+            const neckTarget = maskNeckY ?? (chinY != null ? collarY(chinY, (shL.y + shR.y) / 2) : null);
             const mesh = buildShirtMesh({
-              shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
-              shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
+              shoulderL: { x: shL.x + dragPt.x, y: (neckTarget != null ? Math.min(shL.y, neckTarget) : shL.y) + dragPt.y },
+              shoulderR: { x: shR.x + dragPt.x, y: (neckTarget != null ? Math.min(shR.y, neckTarget) : shR.y) + dragPt.y },
               hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
               hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
               elbowL: elL ? { x: elL.x + dragPt.x, y: elL.y + dragPt.y } : null,
@@ -717,7 +727,7 @@ export function startEngine(opts: {
     const chin = memory.get("chin") ?? null;
     if (clothing && chin && shL && shR && (category === "shirt" || category === "jacket" || category === "dress")) {
       const shoulderY = (shL.y + shR.y) / 2;
-      const neckY = chin.y + Math.max(0.015, (shoulderY - chin.y) * 0.16);
+      const neckY = maskNeckY ?? collarY(chin.y, shoulderY);
       const dy = neckY - (clothing.topL.y + clothing.topR.y) / 2;
       clothing.topL = { ...clothing.topL, y: clothing.topL.y + dy };
       clothing.topR = { ...clothing.topR, y: clothing.topR.y + dy };
@@ -816,7 +826,8 @@ export function startEngine(opts: {
     if (useGarmentMesh && activeGarmentMesh && productImg && maskFresh) {
       const packed: number[] = [];
       for (const vertex of activeGarmentMesh.vertices) {
-        packed.push(1 - vertex.x * 2, 1 - vertex.y * 2, vertex.u, 1 - vertex.v);
+        const clip = garmentClip(vertex.x, vertex.y);
+        packed.push(clip.x, clip.y, vertex.u, 1 - vertex.v);
       }
       gl.useProgram(garmentMeshProg);
       gl.enable(gl.BLEND);
@@ -957,7 +968,7 @@ export function startEngine(opts: {
         face: faceLm,
         pose: poseLm,
         hands: handLms,
-        silhouetteFresh: hasMask && lastMaskAt > 0 && performance.now() - lastMaskAt < 700,
+        silhouetteFresh: hasMask && maskIsFresh(performance.now(), lastMaskAt, maskHoldMs(cadenceMs(request.category, times.segment).segment, times.segment, source === "studio")),
       });
     } catch {
       // A feasibility log must not stop the camera or the photographic composite.
@@ -1103,6 +1114,7 @@ export function startEngine(opts: {
     gl.bindTexture(gl.TEXTURE_2D, maskTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
     hasMask = true;
+    maskNeckY = necklineFromMask(data, width, height);
   }
 
   function applyResult(msg: {

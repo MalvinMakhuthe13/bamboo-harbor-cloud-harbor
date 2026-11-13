@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildShirtMesh } from "./garment-mesh.ts";
+import { buildShirtMesh, garmentClip } from "./garment-mesh.ts";
 
 const anchors = {
   shoulderL: { x: 0.34, y: 0.32 },
@@ -42,8 +42,8 @@ describe("body-constrained shirt mesh", () => {
     const right = mesh!.parts.find((part) => part.kind === "sleeve-right")!;
     const leftU = mesh!.vertices.slice(left.vertexStart, left.vertexStart + left.vertexCount).map((vertex) => vertex.u);
     const rightU = mesh!.vertices.slice(right.vertexStart, right.vertexStart + right.vertexCount).map((vertex) => vertex.u);
-    assert.ok(Math.max(...leftU) <= 0.28);
-    assert.ok(Math.min(...rightU) >= 0.72);
+    assert.ok(Math.min(...leftU) >= 0.36 && Math.max(...leftU) <= 0.46);
+    assert.ok(Math.min(...rightU) >= 0.54 && Math.max(...rightU) <= 0.64);
   });
 
   it("does not create sleeve geometry when elbow or wrist tracking is absent", () => {
@@ -90,11 +90,21 @@ describe("body-constrained shirt mesh", () => {
 });
 
 
+describe("shirt mesh clip", () => {
+  it("uses the same screen mapping as accessory sprites", () => {
+    assert.deepEqual(garmentClip(0, 0), { x: -1, y: 1 });
+    assert.deepEqual(garmentClip(1, 1), { x: 1, y: -1 });
+    const mid = garmentClip(0.25, 0.4);
+    assert.equal(mid.x, -0.5);
+    assert.ok(Math.abs(mid.y - 0.2) < 1e-9);
+  });
+});
+
 describe("shirt mesh WebGL shader safety", () => {
   it("samples the same mirrored camera coordinate system used by pose anchors", async () => {
     const { GARMENT_MESH_VERT } = await import("./shaders.ts");
-    assert.match(GARMENT_MESH_VERT, /vScreen = vec2\(1\.0 - \(aClip\.x \+ 1\.0\) \* 0\.5, \(1\.0 - aClip\.y\) \* 0\.5\)/);
-    assert.match(GARMENT_MESH_VERT, /vMaskUv = vec2\(vScreen\.x, 1\.0 - vScreen\.y\)/);
+    assert.match(GARMENT_MESH_VERT, /vScreen = vec2\(\(aClip\.x \+ 1\.0\) \* 0\.5, \(1\.0 - aClip\.y\) \* 0\.5\)/);
+    assert.match(GARMENT_MESH_VERT, /vMaskUv = vec2\(1\.0 - vScreen\.x, 1\.0 - vScreen\.y\)/);
   });
 
   it("discards face and hand regions and never paints background pixels", async () => {
@@ -103,12 +113,13 @@ describe("shirt mesh WebGL shader safety", () => {
     assert.match(GARMENT_MESH_FRAG, /bool body = cls > 1\.5 && cls < 2\.5/);
     assert.match(GARMENT_MESH_FRAG, /bool clothes = cls > 3\.5 && cls < 4\.5/);
     assert.match(GARMENT_MESH_FRAG, /bool other = cls > 4\.5 && cls < 5\.5/);
-    assert.match(GARMENT_MESH_FRAG, /if \(!\(body \|\| clothes \|\| other\)\) discard/);
+    assert.match(GARMENT_MESH_FRAG, /bool cloth = clothes \|\| other/);
+    assert.match(GARMENT_MESH_FRAG, /if \(!\(cloth \|\| fringe\)\) discard/);
   });
 
   it("samples the product texture and applies only a bounded camera-light response", async () => {
     const { GARMENT_MESH_FRAG } = await import("./shaders.ts");
     assert.match(GARMENT_MESH_FRAG, /texture\(uProduct, vUv\)/);
-    assert.match(GARMENT_MESH_FRAG, /clamp\(0\.8 \+ light \* 0\.42, 0\.68, 1\.2\)/);
+    assert.match(GARMENT_MESH_FRAG, /mix\(1\.0, clamp\(ratio, 0\.82, 1\.12\), 0\.45\)/);
   });
 });

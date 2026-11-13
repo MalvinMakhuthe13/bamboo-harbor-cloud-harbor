@@ -363,8 +363,10 @@ out vec2 vScreen;
 out vec2 vMaskUv;
 void main() {
   vUv = aUv;
-  vScreen = vec2(1.0 - (aClip.x + 1.0) * 0.5, (1.0 - aClip.y) * 0.5);
-  vMaskUv = vec2(vScreen.x, 1.0 - vScreen.y);
+  // aClip matches accessory sprites: x' * 2 - 1, 1 - y * 2. vScreen is that mirrored-camera point.
+  // The mask and camera textures are not mirrored, so sample them at (1 - x', 1 - y).
+  vScreen = vec2((aClip.x + 1.0) * 0.5, (1.0 - aClip.y) * 0.5);
+  vMaskUv = vec2(1.0 - vScreen.x, 1.0 - vScreen.y);
   gl_Position = vec4(aClip, 0.0, 1.0);
 }
 `;
@@ -395,6 +397,10 @@ uniform float uTintOn;
 float clsAt(vec2 uv) {
   return texture(uMask, uv).r * 255.0;
 }
+bool clothAt(vec2 uv) {
+  float c = clsAt(uv);
+  return c > 3.5 && c < 5.5;
+}
 bool nearHand(vec2 p) {
   if (uHasHands < 0.5) return false;
   return distance(p, uHand0) < uHandR || distance(p, uHand1) < uHandR;
@@ -408,13 +414,21 @@ bool protectedFace(vec2 p) {
   return dot(n, n) <= 1.0;
 }
 vec3 shade(vec3 product, vec3 camera) {
-  float light = dot(camera, vec3(0.2126, 0.7152, 0.0722));
   vec3 tinted = product;
   if (uTintOn > 0.5) {
     float sourceLuma = dot(product, vec3(0.2126, 0.7152, 0.0722));
     tinted = uTint * (0.38 + sourceLuma * 1.12);
   }
-  return tinted * clamp(0.8 + light * 0.42, 0.68, 1.2);
+  float l = dot(camera, vec3(0.2126, 0.7152, 0.0722));
+  vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+  float around = dot(texture(uCamera, vMaskUv + vec2(0.012, 0.0)).rgb, luma);
+  around += dot(texture(uCamera, vMaskUv - vec2(0.012, 0.0)).rgb, luma);
+  around += dot(texture(uCamera, vMaskUv + vec2(0.0, 0.014)).rgb, luma);
+  around += dot(texture(uCamera, vMaskUv - vec2(0.0, 0.014)).rgb, luma);
+  around = (around + l) / 5.0;
+  float ratio = l / max(around, 0.05);
+  float scale = mix(1.0, clamp(ratio, 0.82, 1.12), 0.45);
+  return tinted * scale;
 }
 void main() {
   if (uHasMask < 0.5 || protectedFace(vScreen) || nearHand(vScreen)) discard;
@@ -422,7 +436,14 @@ void main() {
   bool body = cls > 1.5 && cls < 2.5;
   bool clothes = cls > 3.5 && cls < 4.5;
   bool other = cls > 4.5 && cls < 5.5;
-  if (!(body || clothes || other)) discard;
+  bool cloth = clothes || other;
+  bool fringe = false;
+  if (!cloth && body) {
+    vec2 px = max(uInvResolution, vec2(0.008));
+    fringe = clothAt(vMaskUv + vec2(px.x, 0.0)) || clothAt(vMaskUv - vec2(px.x, 0.0))
+      || clothAt(vMaskUv + vec2(0.0, px.y)) || clothAt(vMaskUv - vec2(0.0, px.y));
+  }
+  if (!(cloth || fringe)) discard;
 
   vec4 product = texture(uProduct, vUv);
   if (product.a < 0.12) discard;

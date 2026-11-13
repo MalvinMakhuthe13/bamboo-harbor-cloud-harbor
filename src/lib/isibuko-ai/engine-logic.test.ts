@@ -14,6 +14,8 @@ import {
   nailSegments,
   wigSprite,
   nailShapeFactors,
+  necklineFromMask,
+  collarY,
   hidesOriginalHair,
   isPlausibleClothingQuad,
   regionMode,
@@ -29,8 +31,8 @@ import { COMPOSITE_FRAG, GARMENT_MESH_FRAG, GARMENT_MESH_VERT } from "./shaders.
 
 describe("body-constrained shirt mesh renderer", () => {
   it("uses mirrored camera-space coordinates for the mesh", () => {
-    assert.ok(GARMENT_MESH_VERT.includes("1.0 - (aClip.x + 1.0) * 0.5"));
-    assert.ok(GARMENT_MESH_VERT.includes("vMaskUv = vec2(vScreen.x, 1.0 - vScreen.y)"));
+    assert.ok(GARMENT_MESH_VERT.includes("vScreen = vec2((aClip.x + 1.0) * 0.5, (1.0 - aClip.y) * 0.5)"));
+    assert.ok(GARMENT_MESH_VERT.includes("vMaskUv = vec2(1.0 - vScreen.x, 1.0 - vScreen.y)"));
   });
 
   it("uses the segmentation mask to keep background, hair and face in front", () => {
@@ -38,7 +40,8 @@ describe("body-constrained shirt mesh renderer", () => {
     assert.ok(GARMENT_MESH_FRAG.includes("bool clothes = cls > 3.5 && cls < 4.5"));
     assert.ok(GARMENT_MESH_FRAG.includes("protectedFace(vScreen) || nearHand(vScreen)"));
     assert.ok(GARMENT_MESH_FRAG.includes("if (uHasFace < 0.5) return false;"));
-    assert.ok(GARMENT_MESH_FRAG.includes("if (!(body || clothes || other)) discard"));
+    assert.ok(GARMENT_MESH_FRAG.includes("bool cloth = clothes || other"));
+    assert.ok(GARMENT_MESH_FRAG.includes("if (!(cloth || fringe)) discard"));
   });
 
   it("keeps the product's transparent background and green-screen key", () => {
@@ -335,6 +338,21 @@ describe("product conditioning", () => {
     const moved = stableSide(left, right, { x: 0.36, y: 0.42 }, { x: 0.64, y: 0.48 });
     assert.equal(moved.swapped, false);
     assert.equal(moved.left.x, 0.36);
+  });
+
+  it("reads the neckline from the top of the clothes mask, not a low pose joint", () => {
+    const width = 20;
+    const height = 20;
+    const data = new Uint8Array(width * height);
+    for (let y = 12; y < height; y++) {
+      for (let x = 0; x < width; x++) data[y * width + x] = 4;
+    }
+    const neck = necklineFromMask(data, width, height);
+    assert.ok(neck != null);
+    assert.ok(Math.abs((neck ?? 0) - 12 / 20) < 1e-6);
+    assert.equal(necklineFromMask(new Uint8Array(width * height), width, height), null);
+    assert.ok(Math.abs(collarY(0.4, 0.6) - 0.544) < 1e-6);
+    assert.equal(collarY(0.5, 0.42), 0.42);
   });
 
   it("wears the front of the shirt and leaves the throat clear", () => {

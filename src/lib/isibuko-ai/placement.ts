@@ -244,6 +244,36 @@ export function armIsHanging(shoulder: Pt, elbow: Pt | null, span: number): bool
   return dist(shoulder, elbow) < Math.max(span, 0.05) * 0.22;
 }
 
+/**
+ * Top of the clothes class in the centre of the frame, as a fraction of height.
+ * BlazePose drops the shoulders when the hips are out of frame. The worn shirt's
+ * own mask is the neckline. Returns null when there is not enough cloth to trust.
+ */
+export function necklineFromMask(data: Uint8Array, width: number, height: number): number | null {
+  if (width < 8 || height < 8 || data.length < width * height) return null;
+  const x0 = Math.floor(width * 0.32);
+  const x1 = Math.ceil(width * 0.68);
+  const tops: number[] = [];
+  for (let x = x0; x < x1; x++) {
+    for (let y = 0; y < height; y++) {
+      const cls = data[y * width + x] ?? 0;
+      if (cls === 4 || cls === 5) {
+        tops.push(y / height);
+        break;
+      }
+    }
+  }
+  if (tops.length < (x1 - x0) * 0.45) return null;
+  tops.sort((a, b) => a - b);
+  return tops[Math.floor(tops.length * 0.15)]!;
+}
+
+/** Collar between the chin and the top of the clothes already being worn. 0.72 sits on the neckline, not the throat. */
+export function collarY(chinY: number, clothesTopY: number): number {
+  if (!(clothesTopY > chinY)) return clothesTopY;
+  return chinY + (clothesTopY - chinY) * 0.72;
+}
+
 /** A sleeve for an arm that hangs beside the body, outside the shirt the person already has on. */
 export function hangingSleeve(shoulder: Pt, hip: Pt, outward: number): { elbow: Pt; wrist: Pt } {
   const drop = Math.max(hip.y - shoulder.y, 0.18);

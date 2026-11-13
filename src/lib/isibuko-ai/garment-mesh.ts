@@ -48,6 +48,11 @@ const EPSILON = 1e-5;
 const DEFAULT_COLUMNS = 9;
 const DEFAULT_ROWS = 9;
 
+/** Clip space for a mirrored-camera point. Same mapping as accessory sprites. */
+export function garmentClip(x: number, y: number): { x: number; y: number } {
+  return { x: x * 2 - 1, y: 1 - y * 2 };
+}
+
 function finitePoint(point: Pt | null | undefined): point is Pt {
   return Boolean(point && Number.isFinite(point.x) && Number.isFinite(point.y));
 }
@@ -127,8 +132,9 @@ function addPart(
  * simulation: first validate stable topology and tracking, then add selective
  * physics to loose hem vertices in a separate experiment.
  *
- * UVs preserve the existing catalogue-photo convention: central 60% for the
- * torso, left 26% and right 26% for sleeve strips.
+ * UVs use the front panel of the catalogue photo: central 60% for the torso,
+ * and two narrow strips of the same cloth for the sleeves. The flat-lay
+ * sleeve edges are not mapped onto the arms.
  */
 export function buildShirtMesh(
   anchors: ShirtAnchorSet,
@@ -238,7 +244,7 @@ function addSleeve(
   const rows = 5;
   const columns = 3;
   const points = [shoulder, elbow, wrist];
-  const widths = [shoulderWidth * 0.19, shoulderWidth * 0.16, shoulderWidth * 0.115];
+  const widths = [shoulderWidth * 0.11, shoulderWidth * 0.09, shoulderWidth * 0.065];
   const vertices: GarmentVertex[] = [];
   for (let row = 0; row < rows; row++) {
     const t = (row / (rows - 1)) * sleeveLength;
@@ -252,10 +258,14 @@ function addSleeve(
     for (let column = 0; column < columns; column++) {
       const across = column / (columns - 1) * 2 - 1;
       const side = across * halfWidth;
-      const sourceU = left ? mix(0.02, 0.28, column / (columns - 1)) : mix(0.72, 0.98, column / (columns - 1));
+      let x = center.x + normal.x * side;
+      const y = center.y + normal.y * side;
+      if (left) x = Math.min(x, shoulder.x);
+      else x = Math.max(x, shoulder.x);
+      const sourceU = left ? mix(0.36, 0.46, column / (columns - 1)) : mix(0.54, 0.64, column / (columns - 1));
       vertices.push({
-        x: center.x + normal.x * side,
-        y: center.y + normal.y * side,
+        x,
+        y,
         u: sourceU,
         v: mix(0.14, 0.82, t),
       });

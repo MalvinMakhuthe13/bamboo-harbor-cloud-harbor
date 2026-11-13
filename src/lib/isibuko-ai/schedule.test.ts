@@ -6,6 +6,7 @@ import {
   due,
   inferenceEdge,
   isFullFrame,
+  maskHoldMs,
   maskIsFresh,
   pixelCrop,
   remapPoint,
@@ -31,6 +32,9 @@ describe("tracker schedule", () => {
     assert.equal(due(1100, 900, 160, false), true);
     assert.equal(maskIsFresh(500, 400, 320), true);
     assert.equal(maskIsFresh(800, 400, 320), false);
+    assert.ok(maskHoldMs(320, 200, false) >= 2500);
+    assert.ok(maskHoldMs(1100, 900, false) >= 2000);
+    assert.ok(maskHoldMs(320, 200, true) >= 8000);
     assert.equal(shouldRefreshFull(4, 4), true);
     assert.equal(shouldRefreshFull(3, 4), false);
   });
