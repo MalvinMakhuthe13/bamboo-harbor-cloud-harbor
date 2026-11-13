@@ -217,6 +217,15 @@ export function hangingSleeve(shoulder: Pt, hip: Pt, outward: number): { elbow: 
     wrist: { x: shoulder.x + outward * 1.15, y: shoulder.y + drop * 0.98 },
   };
 }
+
+/** The product keeps its colour. Creases come from the shirt already on the body. */
+export function wornLight(product: number, camera: number, around: number): number {
+  const wrinkle = (camera - around) * 7;
+  const form = (around - 0.62) * 0.9;
+  const scale = Math.min(1.3, Math.max(0.5, 0.9 + wrinkle + form));
+  return product * scale;
+}
+
 export function torsoTurn(shL: Pt, shR: Pt, nose: Pt | null): number {
   if (!nose) return 0;
   const span = Math.max(dist(shL, shR), 0.05);

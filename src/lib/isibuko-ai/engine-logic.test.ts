@@ -17,6 +17,7 @@ import {
   spriteShowsCamera,
   stableSide,
   torsoTurn,
+  wornLight,
   torsoUv,
   wornFrontTex,
 } from "./placement.ts";
@@ -261,6 +262,10 @@ describe("product conditioning", () => {
     const hung = hangingSleeve({ x: 0.3, y: 0.35 }, { x: 0.34, y: 0.8 }, -0.08);
     assert.ok(hung.wrist.y > hung.elbow.y);
     assert.ok(hung.elbow.x < 0.3);
+    const flat = wornLight(0.8, 0.7, 0.7);
+    const crease = wornLight(0.8, 0.55, 0.7);
+    assert.ok(crease < flat);
+    assert.ok(wornLight(0.8, 0.85, 0.7) > flat);
   });
 
   it("keeps the centre of a torso inside the garment", () => {

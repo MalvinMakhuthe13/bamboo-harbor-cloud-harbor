@@ -60,9 +60,21 @@ vec3 lumaTint(vec3 rgb) {
   return uTint * (0.38 + l * 1.12);
 }
 
-vec3 shade(vec3 prod, vec3 cam) {
-  float l = dot(cam, vec3(0.2126, 0.7152, 0.0722));
-  return prod * clamp(0.8 + l * 0.42, 0.68, 1.2);
+float lum(vec3 c) {
+  return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+vec3 shade(vec3 prod, vec3 cam, vec2 camUv, float wrap) {
+  float l = lum(cam);
+  float around = lum(texture(uCam, camUv + vec2(0.016, 0.0)).rgb);
+  around += lum(texture(uCam, camUv - vec2(0.016, 0.0)).rgb);
+  around += lum(texture(uCam, camUv + vec2(0.0, 0.02)).rgb);
+  around += lum(texture(uCam, camUv - vec2(0.0, 0.02)).rgb);
+  around = (around + l) / 5.0;
+  float wrinkle = (l - around) * 7.0;
+  float form = (around - 0.62) * 0.9;
+  float scale = clamp(0.9 + wrinkle + form, 0.5, 1.3);
+  return prod * scale * wrap;
 }
 
 float clsAt(vec2 camUv) {
@@ -235,9 +247,9 @@ void main() {
         if (clsAt(camUv - vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);
         if (clsAt(camUv + vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
         if (clsAt(camUv - vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
-        float slide = clamp(uYaw, -1.0, 1.0);
-        float worn = 1.0 - abs(slide) * 0.16 * smoothstep(-0.2, 0.85, sampleUv.x > 0.0 ? (uv.x - 0.5) * slide * 8.0 : 0.0);
-        vec3 lit = shade(lumaTint(prod.rgb), cam.rgb) * worn;
+        float side = clamp(abs(uv.x - 0.5) / 0.2, 0.0, 1.0);
+        float wrap = torsoCloth ? mix(1.0, 0.76, side * side) : 0.9;
+        vec3 lit = shade(lumaTint(prod.rgb), cam.rgb, camUv, wrap);
         rgb = mix(rgb, lit, prod.a * edge);
       }
     }
