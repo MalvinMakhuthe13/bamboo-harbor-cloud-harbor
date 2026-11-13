@@ -97,7 +97,7 @@ bool inEllipse(vec2 p, vec2 c, vec2 halfExt, float csn, float sn) {
   return nx * nx + ny * ny <= 1.0;
 }
 
-vec2 torsoSample(vec2 p) {
+vec2 torsoSample(vec2 p, float allowOutside) {
   vec2 top = (uTopL + uTopR) * 0.5;
   vec2 bot = (uBotL + uBotR) * 0.5;
   vec2 axis = bot - top;
@@ -113,10 +113,12 @@ vec2 torsoSample(vec2 p) {
   float halfW = mix(halfT, halfB, clamped);
   vec2 midP = top + n * (len * clamped);
   float u = dot(p - midP, side) / max(halfW, 1e-4);
-  if (v < 0.0 || v > 1.0 || abs(u) > 0.96) return vec2(-1.0);
-  // The open collar in the product photo is the inside of the neck. Leave that
-  // throat as the person, and map only the front panel below it. A turn slides
-  // along that front panel. It never reaches the sleeves or the back.
+  bool outside = v < 0.0 || v > 1.0 || abs(u) > 0.96;
+  if (outside && allowOutside < 0.5) return vec2(-1.0);
+  if (outside) {
+    v = clamp(v, 0.0, 1.0);
+    u = clamp(u, -0.96, 0.96);
+  }
   if (v < 0.08 && abs(u) < 0.12) return vec2(-1.0);
   float slide = clamp(uYaw, -0.85, 0.85);
   float across = clamp(u * 0.55 - slide * 0.18, -0.5, 0.5);
@@ -129,7 +131,7 @@ vec2 torsoSample(vec2 p) {
   return vec2(tu, 1.0 - tv);
 }
 
-vec3 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign) {
+vec3 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign, float force) {
   vec2 a0 = sh;
   vec2 b0 = el;
   vec2 a1 = el;
@@ -162,7 +164,7 @@ vec3 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign) {
     across = dot(p - q, vec2(-dir.y, dir.x));
     along = (len0 + t * len1) / total;
   }
-  if (best > uArmW) return vec3(-1.0, -1.0, 1e3);
+  if (best > uArmW && force < 0.5) return vec3(-1.0, -1.0, 1e3);
   float uLocal = clamp(across / max(uArmW, 1e-4) * 0.5 + 0.5, 0.0, 1.0);
   float tu = sideSign < 0.0 ? mix(0.02, 0.28, uLocal) : mix(0.72, 0.98, uLocal);
   float tv = mix(0.2, 0.9, along);
@@ -218,12 +220,12 @@ void main() {
   bool hand = nearHand(p);
 
   if (uMode == 1 && uHasMask > 0.5 && !protect && !hand) {
-    vec2 sampleUv = torsoSample(p);
+    vec2 sampleUv = torsoSample(p, 0.0);
     vec3 armL = vec3(-1.0, -1.0, 1e3);
     vec3 armR = vec3(-1.0, -1.0, 1e3);
     if (uHasArms > 0.5) {
-      armL = armSample(p, uShL, uElbowL, uWristL, -1.0);
-      armR = armSample(p, uShR, uElbowR, uWristR, 1.0);
+      armL = armSample(p, uShL, uElbowL, uWristL, -1.0, 0.0);
+      armR = armSample(p, uShR, uElbowR, uWristR, 1.0, 0.0);
       if (uFrontArm > 0.5) armL.z *= 0.72;
       if (uFrontArm < -0.5) armR.z *= 0.72;
     }
@@ -232,21 +234,29 @@ void main() {
     // two sides do not trade places when the arms cross.
     bool torsoCloth = sampleUv.x >= 0.0 && !inArm && !hair && !face && (clothes || body);
     bool sleeveCloth = inArm && clothes && !hair && !face;
-    if (torsoCloth || sleeveCloth) {
+    // Clothes the panel missed still belong to the new shirt. Leaving them shows the old one.
+    bool missed = clothes && !torsoCloth && !sleeveCloth && !hair && !face;
+    if (torsoCloth || sleeveCloth || missed) {
       vec2 sleeveUv = armL.z <= armR.z ? armL.xy : armR.xy;
-      vec2 uv = torsoCloth ? sampleUv : sleeveUv;
+      vec2 uv = missed ? torsoSample(p, 1.0) : (torsoCloth ? sampleUv : sleeveUv);
+      if (missed && uHasArms > 0.5) {
+        float midX = (uShL.x + uShR.x) * 0.5;
+        if (abs(p.x - midX) > length(uShR - uShL) * 0.42) {
+          vec3 forced = p.x < midX
+            ? armSample(p, uShL, uElbowL, uWristL, -1.0, 1.0)
+            : armSample(p, uShR, uElbowR, uWristR, 1.0, 1.0);
+          if (forced.x >= 0.0) uv = forced.xy;
+        }
+      }
       vec4 prod = texture(uProd, uv);
       float green = prod.g - max(prod.r, prod.b);
       if (green > 0.22 && prod.g > 0.25) prod.a = 0.0;
       float peak = max(prod.r, max(prod.g, prod.b));
       float sat = peak - min(prod.r, min(prod.g, prod.b));
-      if (peak < 0.09 && sat < 0.06) prod.a = 0.0;
+      if (peak < 0.09 && sat < 0.06) prod = texture(uProd, mix(uv, vec2(0.5, 0.42), 0.7));
       if (prod.a > 0.2) {
-        float edge = 1.0;
-        if (clsAt(camUv + vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);
-        if (clsAt(camUv - vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);
-        if (clsAt(camUv + vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
-        if (clsAt(camUv - vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
+        // A clothes pixel is fully replaced. Fading it brings the old shirt back as a pale rim.
+        float edge = clothes ? 1.0 : 0.92;
         float side = clamp(abs(uv.x - 0.5) / 0.2, 0.0, 1.0);
         float wrap = torsoCloth ? mix(1.0, 0.76, side * side) : 0.9;
         vec3 lit = shade(lumaTint(prod.rgb), cam.rgb, camUv, wrap);

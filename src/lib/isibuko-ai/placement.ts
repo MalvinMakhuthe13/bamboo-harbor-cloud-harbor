@@ -168,7 +168,7 @@ export function hugQuad(quad: Quad, category: "shirt" | "jacket" | "dress" | "pa
   const bot = mid(quad.botL, quad.botR);
   // A shirt has to cover the shoulder caps of the clothes already being worn.
   // Pulling it inside the joints leaves those sleeves showing.
-  const topIn = category === "shirt" || category === "jacket" ? -0.12 : category === "pants" ? 0.06 : category === "skirt" ? 0.16 : 0.02;
+  const topIn = category === "shirt" || category === "jacket" ? -0.22 : category === "pants" ? 0.06 : category === "skirt" ? 0.16 : 0.02;
   const botIn = category === "shirt" || category === "jacket" ? 0.02 : category === "dress" || category === "skirt" ? 0.04 : category === "pants" ? 0.12 : 0.08;
   return {
     topL: toward(quad.topL, top, topIn),
