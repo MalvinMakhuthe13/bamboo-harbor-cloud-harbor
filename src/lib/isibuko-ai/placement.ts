@@ -158,6 +158,33 @@ export function clothingQuad(opts: {
   return { topL, topR, botL, botR };
 }
 
+/**
+ * The shoulders take the new pose first. The hem catches up over the next frames,
+ * and it cannot drift farther than a fraction of the torso. This is the product
+ * photograph following the body. It does not generate new cloth.
+ */
+export function followQuad(prev: Quad | null, next: Quad, lead = 0.72, trail = 0.34, maxLag = 0.16): Quad {
+  if (!prev) return next;
+  const torso = Math.max(dist(next.topL, next.botL), dist(next.topR, next.botR), dist(mid(next.topL, next.topR), mid(next.botL, next.botR)), 0.08);
+  const limit = torso * maxLag;
+  const step = (from: Pt, to: Pt, alpha: number, cap: number): Pt => {
+    const x = from.x + (to.x - from.x) * alpha;
+    const y = from.y + (to.y - from.y) * alpha;
+    const dx = x - to.x;
+    const dy = y - to.y;
+    const d = Math.hypot(dx, dy);
+    if (d <= cap || d < 1e-6) return { x, y };
+    const s = cap / d;
+    return { x: to.x + dx * s, y: to.y + dy * s };
+  };
+  return {
+    topL: step(prev.topL, next.topL, lead, limit * 0.35),
+    topR: step(prev.topR, next.topR, lead, limit * 0.35),
+    botL: step(prev.botL, next.botL, trail, limit),
+    botR: step(prev.botR, next.botR, trail, limit),
+  };
+}
+
 /** u across the torso (−1…1) and v down the torso (0…1). Null when outside. */
 export function torsoUv(p: Pt, quad: Quad): { u: number; v: number } | null {
   const top = mid(quad.topL, quad.topR);

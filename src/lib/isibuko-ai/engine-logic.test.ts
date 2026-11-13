@@ -7,6 +7,7 @@ import {
   armsAreRaised,
   clothingQuad,
   containPoint,
+  followQuad,
   glassesSprite,
   nailSegments,
   hidesOriginalHair,
@@ -181,6 +182,35 @@ describe("product conditioning", () => {
     assert.equal(regionMode("bracelet"), "none");
     assert.equal(regionMode("glasses"), "none");
     assert.equal(regionMode("nails"), "none");
+  });
+
+  it("lets the hem follow the shoulders instead of jumping with them", () => {
+    const still = clothingQuad({
+      shoulderL: { x: 0.32, y: 0.34 },
+      shoulderR: { x: 0.68, y: 0.34 },
+      hipL: { x: 0.36, y: 0.72 },
+      hipR: { x: 0.64, y: 0.72 },
+      category: "shirt",
+      scale: 1,
+      sleevesInPhoto: false,
+    });
+    const turned = clothingQuad({
+      shoulderL: { x: 0.42, y: 0.34 },
+      shoulderR: { x: 0.78, y: 0.34 },
+      hipL: { x: 0.46, y: 0.72 },
+      hipR: { x: 0.74, y: 0.72 },
+      category: "shirt",
+      scale: 1,
+      sleevesInPhoto: false,
+    });
+    const followed = followQuad(still, turned);
+    const shoulderGap = Math.abs(followed.topL.x - turned.topL.x);
+    const hemGap = Math.abs(followed.botL.x - turned.botL.x);
+    assert.ok(hemGap > shoulderGap);
+    assert.ok(hemGap < 0.2);
+    const settled = followQuad(turned, turned);
+    assert.equal(settled.botL.x, turned.botL.x);
+    assert.equal(settled.topR.y, turned.topR.y);
   });
 
   it("keeps the centre of a torso inside the garment", () => {

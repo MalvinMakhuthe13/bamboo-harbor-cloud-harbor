@@ -3,6 +3,7 @@ import {
   braceletSprite,
   clothingQuad,
   earringSprite,
+  followQuad,
   glassesSprite,
   hairFrame,
   hasSleeves,
@@ -449,6 +450,8 @@ export function startEngine(opts: {
       });
   }
 
+  let worn: ReturnType<typeof clothingQuad> | null = null;
+  let wornId = "";
   let switchKey = "";
   let switchStarted = 0;
   let switchMs: number | null = null;
@@ -575,11 +578,18 @@ export function startEngine(opts: {
     }
     const shift = mode === "clothing" ? dragPt : { x: 0, y: 0 };
     const move = (p: Pt): Pt => ({ x: p.x + shift.x, y: p.y + shift.y });
-    if (clothing && shL && shR) {
-      vec(u.topL, move(clothing.topL));
-      vec(u.topR, move(clothing.topR));
-      vec(u.botL, move(clothing.botL));
-      vec(u.botR, move(clothing.botR));
+    const productKey = request.productId ?? request.image ?? "";
+    if (productKey !== wornId) {
+      worn = null;
+      wornId = productKey;
+    }
+    const followed = clothing ? followQuad(worn, clothing) : null;
+    if (followed) worn = followed;
+    if (followed && shL && shR) {
+      vec(u.topL, move(followed.topL));
+      vec(u.topR, move(followed.topR));
+      vec(u.botL, move(followed.botL));
+      vec(u.botR, move(followed.botR));
       vec(u.shL, move(shL));
       vec(u.shR, move(shR));
       vec(u.elL, move(elL ?? shL));
