@@ -11,6 +11,7 @@ import {
   nailSegments,
   hidesOriginalHair,
   regionMode,
+  spriteShowsCamera,
   torsoUv,
 } from "./placement.ts";
 import { MODEL_REGISTRY, WEIGHT_BYTES } from "./registry.ts";
@@ -103,6 +104,65 @@ describe("appearance replacement policy", () => {
       }),
       false,
     );
+  });
+
+  it("keeps a bare arm in front of the garment and still replaces cloth", () => {
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.body,
+        inGarment: true,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: false,
+        onArm: true,
+      }),
+      false,
+    );
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.clothes,
+        inGarment: false,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: false,
+        onArm: true,
+      }),
+      true,
+    );
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.other,
+        inGarment: true,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: false,
+        onArm: false,
+      }),
+      false,
+    );
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.body,
+        inGarment: true,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: false,
+        onArm: false,
+      }),
+      true,
+    );
+  });
+
+  it("lets the face and a hand cover a wig, hat, or necklace plate", () => {
+    assert.equal(spriteShowsCamera({ category: "wig", cls: CLASS.face, nearHand: false, hasMask: true }), true);
+    assert.equal(spriteShowsCamera({ category: "hat", cls: CLASS.hair, nearHand: true, hasMask: true }), true);
+    assert.equal(spriteShowsCamera({ category: "necklace", cls: CLASS.body, nearHand: false, hasMask: true }), false);
+    assert.equal(spriteShowsCamera({ category: "glasses", cls: CLASS.face, nearHand: true, hasMask: true }), false);
+    assert.equal(spriteShowsCamera({ category: "wig", cls: CLASS.face, nearHand: false, hasMask: false }), false);
   });
 
   it("clears original hair outside the protected face and leaves the face", () => {

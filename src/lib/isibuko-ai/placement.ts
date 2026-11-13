@@ -29,18 +29,30 @@ export function allowsRegionPaint(opts: {
   inHairEllipse: boolean;
   inProtectedFace: boolean;
   nearHand: boolean;
+  /** Body-skin inside a shoulder-to-wrist arm, including where that arm crosses the torso. */
+  onArm?: boolean;
 }): boolean {
   if (opts.mode === "none") return false;
   if (opts.inProtectedFace) return false;
   // A tracked hand stays the camera, including where it crosses a garment.
   if (opts.mode === "clothing" && opts.nearHand) return false;
   if (opts.mode === "clothing") {
-    if (!opts.inGarment) return false;
-    if (opts.cls === CLASS.background || opts.cls === CLASS.hair || opts.cls === CLASS.face) return false;
-    return opts.cls === CLASS.clothes || opts.cls === CLASS.body || opts.cls === CLASS.other;
+    if (!opts.inGarment && !opts.onArm) return false;
+    if (opts.cls === CLASS.background || opts.cls === CLASS.hair || opts.cls === CLASS.face || opts.cls === CLASS.other) return false;
+    // A bare arm stays the person's arm. Cloth already on that arm can take the product sleeve.
+    if (opts.onArm) return opts.cls === CLASS.clothes;
+    return opts.cls === CLASS.clothes || opts.cls === CLASS.body;
   }
   if (!opts.inHairEllipse) return false;
   return true;
+}
+
+/** A cut-out plate must not cover the face or a hand that is in front of it. */
+export function spriteShowsCamera(opts: { category: Category | null; cls: number; nearHand: boolean; hasMask: boolean }): boolean {
+  if (!opts.hasMask) return false;
+  if (opts.category !== "wig" && opts.category !== "hat" && opts.category !== "necklace") return false;
+  if (opts.nearHand) return true;
+  return opts.cls === CLASS.face;
 }
 
 /** Segmented hair outside the protected face is cleared so the wig plate is the hair, not a sticker on top of it. */

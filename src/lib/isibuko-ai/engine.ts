@@ -201,6 +201,14 @@ export function startEngine(opts: {
   const spriteTint = gl.getUniformLocation(spriteProg, "uTint");
   const spriteTintOn = gl.getUniformLocation(spriteProg, "uTintOn");
   const spriteLens = gl.getUniformLocation(spriteProg, "uLens");
+  const spriteMask = gl.getUniformLocation(spriteProg, "uMask");
+  const spriteHasMask = gl.getUniformLocation(spriteProg, "uHasMask");
+  const spriteOcclude = gl.getUniformLocation(spriteProg, "uOcclude");
+  const spriteResolution = gl.getUniformLocation(spriteProg, "uResolution");
+  const spriteHand0 = gl.getUniformLocation(spriteProg, "uHand0");
+  const spriteHand1 = gl.getUniformLocation(spriteProg, "uHand1");
+  const spriteHandR = gl.getUniformLocation(spriteProg, "uHandR");
+  const spriteHasHands = gl.getUniformLocation(spriteProg, "uHasHands");
 
   const originalError = console.error;
   console.error = (...args: unknown[]) => {
@@ -693,6 +701,16 @@ export function startEngine(opts: {
       gl.uniform3f(spriteTint, tint?.[0] ?? 1, tint?.[1] ?? 1, tint?.[2] ?? 1);
       gl.uniform1f(spriteTintOn, tint ? 1 : 0);
       gl.uniform1f(spriteLens, category === "glasses" ? 1 : 0);
+      gl.uniform2f(spriteResolution, canvas.width, canvas.height);
+      gl.uniform1f(spriteHasMask, hasMask ? 1 : 0);
+      gl.uniform1f(spriteOcclude, category === "wig" || category === "hat" || category === "necklace" ? 1 : 0);
+      gl.uniform1f(spriteHasHands, palms.length ? 1 : 0);
+      gl.uniform2f(spriteHand0, palms[0]?.x ?? -2, palms[0]?.y ?? -2);
+      gl.uniform2f(spriteHand1, palms[1]?.x ?? -2, palms[1]?.y ?? -2);
+      gl.uniform1f(spriteHandR, handR);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, maskTex);
+      gl.uniform1i(spriteMask, 2);
       gl.bindVertexArray(spriteVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, spriteBuf);
       const arr = new Float32Array(data);
@@ -840,7 +858,11 @@ export function startEngine(opts: {
   function pumpSeg() {
     if (segInflight || !segReady || disposed || !frameSource()) return;
     const category = getRequest().category;
-    const needs = regionMode(category) === "clothing" || regionMode(category) === "hair";
+    const needs =
+      regionMode(category) === "clothing" ||
+      regionMode(category) === "hair" ||
+      category === "hat" ||
+      category === "necklace";
     if (!needs) return;
     const now = performance.now();
     const gap = cadenceMs(category, times.segment).segment;

@@ -192,8 +192,6 @@ void main() {
   bool hair = cls > 0.5 && cls < 1.5;
   bool body = cls > 1.5 && cls < 2.5;
   bool clothes = cls > 3.5 && cls < 4.5;
-  bool other = cls > 4.5 && cls < 5.5;
-  bool bg = cls >= 0.0 && cls < 0.5;
   bool protect = inEllipse(p, uProtectC, uProtectHalf, uHairCos, uHairSin);
   bool hand = nearHand(p);
 
@@ -205,11 +203,14 @@ void main() {
       armL = armSample(p, uShL, uElbowL, uWristL, -1.0);
       armR = armSample(p, uShR, uElbowR, uWristR, 1.0);
     }
-    bool paintable = (clothes || body || other) && !hair && !face && !bg;
-    bool onSleeve = (armL.x >= 0.0 || armR.x >= 0.0) && paintable;
-    bool onTorso = sampleUv.x >= 0.0 && paintable;
-    if (onTorso || onSleeve) {
-      vec2 uv = onTorso ? sampleUv : (armL.x >= 0.0 ? armL : armR);
+    bool inArm = uHasArms > 0.5 && (armL.x >= 0.0 || armR.x >= 0.0);
+    // Clothes can take the product. Bare skin can too, but only on the torso.
+    // Skin inside an arm stays the camera, so a forearm crossing the body hides the garment.
+    // Hair, face, background and accessories are never cloth.
+    bool torsoCloth = sampleUv.x >= 0.0 && !inArm && !hair && !face && (clothes || body);
+    bool sleeveCloth = inArm && clothes && !hair && !face;
+    if (torsoCloth || sleeveCloth) {
+      vec2 uv = torsoCloth ? sampleUv : (armL.x >= 0.0 ? armL : armR);
       vec4 prod = texture(uProd, uv);
       float green = prod.g - max(prod.r, prod.b);
       if (green > 0.22 && prod.g > 0.25) prod.a = 0.0;
@@ -266,12 +267,34 @@ void main() {
 export const SPRITE_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uSprite;
+uniform sampler2D uMask;
 uniform vec3 uTint;
 uniform float uTintOn;
 uniform float uLens;
+uniform float uHasMask;
+uniform float uOcclude;
+uniform vec2 uResolution;
+uniform vec2 uHand0;
+uniform vec2 uHand1;
+uniform float uHandR;
+uniform float uHasHands;
 in vec2 vUv;
 out vec4 o;
+
+float clsAt(vec2 camUv) {
+  return texture(uMask, camUv).r * 255.0;
+}
+
 void main() {
+  vec2 fragUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
+  vec2 p = vec2(1.0 - fragUv.x, 1.0 - fragUv.y);
+  vec2 camUv = vec2(p.x, fragUv.y);
+  bool nearHand = uHasHands > 0.5 && (distance(p, uHand0) < uHandR || distance(p, uHand1) < uHandR);
+  if (uOcclude > 0.5 && uHasMask > 0.5) {
+    float cls = clsAt(camUv);
+    bool face = cls > 2.5 && cls < 3.5;
+    if (face || nearHand) discard;
+  }
   vec4 s = texture(uSprite, vUv);
   float green = s.g - max(s.r, s.b);
   if (green > 0.05 && s.g > 0.12) s.a *= clamp(1.0 - green * 10.0, 0.0, 1.0);
