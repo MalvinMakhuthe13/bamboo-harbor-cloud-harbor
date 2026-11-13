@@ -1,5 +1,13 @@
-import { publicHttpUrl, assertProductImage } from "./privacy.ts";
-import type { Category, Product, SizeRow, Swatch } from "./types.ts";
+import { publicHttpUrl, assertProductImage, dataUrlMime, parseProductDataUrl } from "./privacy.ts";
+import { validateProductFittingAnchors } from "./anchors.ts";
+import type {
+  Category,
+  Product,
+  ProductAnchorPoint,
+  ProductFittingAnchors,
+  SizeRow,
+  Swatch,
+} from "./types.ts";
 
 export const CUSTOM_CAP = 24;
 
@@ -17,7 +25,8 @@ const lower: SizeRow[] = [
 
 export function sizeChart(category: Category): SizeRow[] {
   if (category === "pants" || category === "skirt") return lower.map((row) => ({ ...row }));
-  if (category === "shirt" || category === "jacket" || category === "dress") return shirt.map((row) => ({ ...row }));
+  if (category === "shirt" || category === "jacket" || category === "dress")
+    return shirt.map((row) => ({ ...row }));
   if (category === "wig" || category === "hat") return [{ label: "Average", head: [54, 57] }];
   if (category === "glasses") return [{ label: "Medium", face: [13, 14.4] }];
   if (category === "watch" || category === "bracelet") return [{ label: "M", wrist: [15.5, 17.5] }];
@@ -34,14 +43,17 @@ export function hexTint(hex: string): [number, number, number] | null {
 
 export function tintToHex(tint: [number, number, number] | null | undefined): string {
   if (!tint) return "";
-  const byte = (value: number) => Math.round(Math.min(1, Math.max(0, value)) * 255).toString(16).padStart(2, "0");
+  const byte = (value: number) =>
+    Math.round(Math.min(1, Math.max(0, value)) * 255)
+      .toString(16)
+      .padStart(2, "0");
   return `#${byte(tint[0])}${byte(tint[1])}${byte(tint[2])}`;
 }
 
 export type ProductDraft = {
   name: string;
   category: Category;
-  priceZar: number;
+  priceZar?: number | null;
   fabric: string;
   colourName: string;
   colourHex: string;
@@ -49,22 +61,36 @@ export type ProductDraft = {
   image: string | null;
   imageType: string | null;
   imageBytes: number;
+  fittingAnchors?: ProductFittingAnchors | null;
 };
 
 export function canAddCustom(count: number, replacing: boolean): boolean {
   return replacing || count < CUSTOM_CAP;
 }
 
-export function buildCustomProduct(draft: ProductDraft, id: string): { ok: true; product: Product } | { ok: false; errors: string[] } {
+export function buildCustomProduct(
+  draft: ProductDraft,
+  id: string,
+): { ok: true; product: Product } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const name = draft.name.trim();
   if (name.length < 2) errors.push("Name the piece.");
-  if (!Number.isFinite(draft.priceZar) || draft.priceZar < 0 || draft.priceZar > 1_000_000) errors.push("Price must be a rand amount.");
+  if (
+    draft.priceZar !== undefined &&
+    draft.priceZar !== null &&
+    (!Number.isFinite(draft.priceZar) || draft.priceZar < 0 || draft.priceZar > 1_000_000)
+  ) {
+    errors.push("Price must be a rand amount.");
+  }
   if (draft.image) {
-    const image = assertProductImage({ type: draft.imageType ?? "", size: draft.imageBytes });
+    const declaredType = (draft.imageType ?? "").toLowerCase();
+    const image = assertProductImage({ type: declaredType, size: draft.imageBytes });
     if (!image.ok) errors.push(image.reason);
-    if (!draft.image.startsWith("data:image/jpeg") && !draft.image.startsWith("data:image/png") && !draft.image.startsWith("data:image/webp")) {
+    const urlMime = dataUrlMime(draft.image);
+    if (!urlMime) {
       errors.push("The photograph must stay a local JPEG, PNG, or WebP.");
+    } else if (declaredType && urlMime !== declaredType) {
+      errors.push(`The photograph MIME type (${urlMime}) does not match ${declaredType}.`);
     }
   } else if (draft.category !== "nails") {
     errors.push("Add a photograph. A name alone is not a garment.");
@@ -83,21 +109,87 @@ export function buildCustomProduct(draft: ProductDraft, id: string): { ok: true;
   }
   if (errors.length) return { ok: false, errors };
   const fabric = draft.fabric.trim();
+  const validAnchors =
+    draft.fittingAnchors && validateProductFittingAnchors(draft.fittingAnchors)
+      ? draft.fittingAnchors
+      : undefined;
+  const priceZar =
+    draft.priceZar !== undefined && draft.priceZar !== null
+      ? Math.round(draft.priceZar)
+      : undefined;
+  const originNote = priceZar !== undefined ? "Added in the studio." : "Added locally.";
   return {
     ok: true,
     product: {
       id,
       name,
       category: draft.category,
-      blurb: fabric ? `${fabric}. Added in the studio. The photograph is not a measurement.` : "Added in the studio. The photograph is not a measurement.",
+      blurb: fabric
+        ? `${fabric}. ${originNote} The photograph is not a measurement.`
+        : `${originNote} The photograph is not a measurement.`,
       image: draft.image,
-      priceZar: Math.round(draft.priceZar),
+      ...(priceZar !== undefined ? { priceZar } : {}),
       sizes: sizeChart(draft.category),
       swatches,
       nail: "almond",
       custom: true,
       merchantUrl,
       fabric: fabric || undefined,
+      fittingAnchors: validAnchors,
     },
+  };
+}
+
+function cloneFittingAnchors(
+  anchors: ProductFittingAnchors | undefined,
+): ProductFittingAnchors | null {
+  if (!anchors || !validateProductFittingAnchors(anchors)) return null;
+  const points: Record<string, ProductAnchorPoint> | undefined = anchors.points
+    ? Object.fromEntries(
+        Object.entries(anchors.points).map(([key, pt]) => [
+          key,
+          {
+            x: pt.x,
+            y: pt.y,
+            ...(pt.confidence !== undefined ? { confidence: pt.confidence } : {}),
+          },
+        ]),
+      )
+    : undefined;
+  return {
+    version: "isibuko.anchors/1",
+    ...(points ? { points } : {}),
+    ...(anchors.parameters ? { parameters: { ...anchors.parameters } } : {}),
+  };
+}
+
+export function productToEditDraft(product: Product): ProductDraft & {
+  priceZar: number | null;
+  fittingAnchors: ProductFittingAnchors | null;
+} {
+  let imageType: string | null = null;
+  let imageBytes = 0;
+  if (product.image) {
+    const parsed = parseProductDataUrl(product.image);
+    if (parsed.ok) {
+      imageType = parsed.mime;
+      imageBytes = parsed.size;
+    } else {
+      imageType = dataUrlMime(product.image);
+      imageBytes = 0;
+    }
+  }
+  return {
+    name: product.name,
+    category: product.category,
+    priceZar: product.priceZar ?? null,
+    fabric: product.fabric ?? "",
+    colourName: product.swatches[1]?.name ?? "",
+    colourHex: tintToHex(product.swatches[1]?.tint),
+    merchantUrl: product.merchantUrl ?? "",
+    image: product.image,
+    imageType,
+    imageBytes,
+    fittingAnchors: cloneFittingAnchors(product.fittingAnchors),
   };
 }

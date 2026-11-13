@@ -44,6 +44,8 @@ import {
   type NormRect,
 } from "@/lib/isibuko-ai/schedule";
 import type { FrameRequest, LiveMetrics, Pt } from "@/lib/isibuko-ai/types";
+import { applyShirtGarmentUv } from "@/lib/isibuko-ai/garment-uv";
+
 
 
 export type Drag = { x: number; y: number; hold: boolean };
@@ -620,19 +622,27 @@ export function startEngine(opts: {
         : null;
     // Never render a garment from stale, collapsed, or runaway pose landmarks.
     const clothing = proposedClothing && isPlausibleClothingQuad(proposedClothing) ? proposedClothing : null;
+    
     const shirtMesh =
       category === "shirt" && clothing && productImg && maskFresh && shL && shR && hipL && hipR
-        ? buildShirtMesh({
-            shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
-            shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
-            hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
-            hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
-            elbowL: elL ? { x: elL.x + dragPt.x, y: elL.y + dragPt.y } : null,
-            elbowR: elR ? { x: elR.x + dragPt.x, y: elR.y + dragPt.y } : null,
-            wristL: wrL ? { x: wrL.x + dragPt.x, y: wrL.y + dragPt.y } : null,
-            wristR: wrR ? { x: wrR.x + dragPt.x, y: wrR.y + dragPt.y } : null,
-          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
+        ? (() => {
+            const mesh = buildShirtMesh({
+              shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
+              shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
+              hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
+              hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
+              elbowL: elL ? { x: elL.x + dragPt.x, y: elL.y + dragPt.y } : null,
+              elbowR: elR ? { x: elR.x + dragPt.x, y: elR.y + dragPt.y } : null,
+              wristL: wrL ? { x: wrL.x + dragPt.x, y: wrL.y + dragPt.y } : null,
+              wristR: wrR ? { x: wrR.x + dragPt.x, y: wrR.y + dragPt.y } : null,
+            }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) });
+
+            return mesh
+              ? applyShirtGarmentUv(mesh, request.fittingAnchors)
+              : null;
+          })()
         : null;
+
     const kneeL = poseLm && seen(poseLm[25], 0.25) ? remember("knL", flip(poseLm[25]!)) : null;
     const kneeR = poseLm && seen(poseLm[26], 0.25) ? remember("knR", flip(poseLm[26]!)) : null;
     const ankleL = poseLm && seen(poseLm[27], 0.25) ? remember("anL", flip(poseLm[27]!)) : null;

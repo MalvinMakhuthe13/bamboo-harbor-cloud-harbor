@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnnotateRouteImport } from './routes/annotate'
+import { Route as AssetEditorRouteImport } from './routes/asset-editor'
 import { Route as BenchRouteImport } from './routes/bench'
 import { Route as LabRouteImport } from './routes/lab'
 import { Route as MirrorRouteImport } from './routes/mirror'
@@ -27,6 +28,11 @@ const IndexRoute = IndexRouteImport.update({
 const AnnotateRoute = AnnotateRouteImport.update({
   id: '/annotate',
   path: '/annotate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssetEditorRoute = AssetEditorRouteImport.update({
+  id: '/asset-editor',
+  path: '/asset-editor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BenchRoute = BenchRouteImport.update({
@@ -68,6 +74,7 @@ const WardrobeRoute = WardrobeRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/annotate': typeof AnnotateRoute
+  '/asset-editor': typeof AssetEditorRoute
   '/bench': typeof BenchRoute
   '/lab': typeof LabRoute
   '/mirror': typeof MirrorRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/annotate': typeof AnnotateRoute
+  '/asset-editor': typeof AssetEditorRoute
   '/bench': typeof BenchRoute
   '/lab': typeof LabRoute
   '/mirror': typeof MirrorRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/annotate': typeof AnnotateRoute
+  '/asset-editor': typeof AssetEditorRoute
   '/bench': typeof BenchRoute
   '/lab': typeof LabRoute
   '/mirror': typeof MirrorRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/annotate'
+    | '/asset-editor'
     | '/bench'
     | '/lab'
     | '/mirror'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/annotate'
+    | '/asset-editor'
     | '/bench'
     | '/lab'
     | '/mirror'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/annotate'
+    | '/asset-editor'
     | '/bench'
     | '/lab'
     | '/mirror'
@@ -138,6 +150,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnnotateRoute: typeof AnnotateRoute
+  AssetEditorRoute: typeof AssetEditorRoute
   BenchRoute: typeof BenchRoute
   LabRoute: typeof LabRoute
   MirrorRoute: typeof MirrorRoute
@@ -161,6 +174,13 @@ declare module '@tanstack/react-router' {
       path: '/annotate'
       fullPath: '/annotate'
       preLoaderRoute: typeof AnnotateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/asset-editor': {
+      id: '/asset-editor'
+      path: '/asset-editor'
+      fullPath: '/asset-editor'
+      preLoaderRoute: typeof AssetEditorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bench': {
@@ -218,6 +238,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnnotateRoute: AnnotateRoute,
+  AssetEditorRoute: AssetEditorRoute,
   BenchRoute: BenchRoute,
   LabRoute: LabRoute,
   MirrorRoute: MirrorRoute,

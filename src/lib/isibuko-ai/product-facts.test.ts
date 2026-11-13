@@ -197,7 +197,7 @@ describe("product facts", () => {
     const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../routes/mirror.tsx"), "utf8");
     assert.match(source, /const \[productFacts, setProductFacts\] = useState\(false\)/);
     assert.match(source, /image: active\.image/);
-    assert.match(source, /const fit = useMemo\(\(\) => \(metrics \? matchSize\(active\.sizes, metrics\.body\) : null\)/);
+    assert.match(source, /const fit = useMemo\(\s*\(\) => \(metrics \? matchSize\(active\.sizes, metrics\.body\) : null\)/);
     assert.match(source, /aria-live="polite"/);
     assert.doesNotMatch(source, /requestRef\.current = \{[^}]*facts/s);
   });

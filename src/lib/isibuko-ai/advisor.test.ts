@@ -309,7 +309,7 @@ describe("Isibuko AI advisor", () => {
 
   it("leaves the photographic size suggestion on the original matchSize call", () => {
     const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../routes/mirror.tsx"), "utf8");
-    assert.match(source, /const fit = useMemo\(\(\) => \(metrics \? matchSize\(active\.sizes, metrics\.body\) : null\)/);
+    assert.match(source, /const fit = useMemo\(\s*\(\) => \(metrics \? matchSize\(active\.sizes, metrics\.body\) : null\)/);
     assert.match(source, /const \[fitHelp, setFitHelp\] = useState\(false\)/);
     assert.match(source, /aria-live="polite"/);
   });

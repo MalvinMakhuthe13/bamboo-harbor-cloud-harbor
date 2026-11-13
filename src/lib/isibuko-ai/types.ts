@@ -54,7 +54,7 @@ export type Product = {
   blurb: string;
   /** Cut-out product photograph. Null for polish, which tints the real nail. */
   image: string | null;
-  priceZar: number;
+  priceZar?: number | null;
   sizes: SizeRow[];
   swatches: Swatch[];
   nail: NailShape;

@@ -1,65 +1,149 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DEFAULT_PRODUCTS } from "@/lib/isibuko-ai/catalog";
-import type { Product, TryEvent, Wardrobe } from "@/lib/isibuko-ai/types";
+import type { Wardrobe } from "@/lib/isibuko-ai/types";
+import {
+  WARDROBE_EVENT,
+  WardrobePersistenceError,
+  commitWardrobeChange,
+  commitWardrobeChangeWithReport,
+  emptyWardrobe,
+  hydrateWardrobeDetailed,
+  type WardrobeCommitReport,
+  type WardrobeHydrationDiagnostics,
+} from "@/lib/isibuko-ai/wardrobe-storage";
 
-const KEY = "isibuko.live.v1";
-const EVENT = "isibuko-live-change";
-
-function cloneProducts(): Product[] {
-  return DEFAULT_PRODUCTS.map((product) => ({
-    ...product,
-    sizes: product.sizes.map((row) => ({ ...row })),
-    swatches: product.swatches.map((swatch) => ({ ...swatch, tint: swatch.tint ? [...swatch.tint] as [number, number, number] : null })),
-  }));
-}
-
-export function emptyWardrobe(): Wardrobe {
-  return { v: 1, products: cloneProducts(), events: [], heightCm: 170 };
-}
-
-export function loadWardrobe(): Wardrobe {
-  if (typeof window === "undefined") return emptyWardrobe();
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return emptyWardrobe();
-    const parsed = JSON.parse(raw) as Partial<Wardrobe>;
-    if (parsed.v !== 1 || !Array.isArray(parsed.products)) return emptyWardrobe();
-    const custom = (parsed.products as Product[]).filter((item) => item.custom && item.id && item.name && item.category);
-    return {
-      v: 1,
-      products: [...cloneProducts(), ...custom],
-      events: Array.isArray(parsed.events) ? (parsed.events as TryEvent[]).slice(0, 80) : [],
-      heightCm: typeof parsed.heightCm === "number" ? parsed.heightCm : 170,
-    };
-  } catch {
-    return emptyWardrobe();
-  }
-}
+type HydrationState = {
+  status: "loading" | "ready" | "error";
+  error: Error | null;
+};
 
 export function useWardrobe() {
-  const [stored, setStored] = useState<Wardrobe | null>(null);
+  const [data, setData] = useState<Wardrobe>(() => emptyWardrobe());
+  const [hydration, setHydration] = useState<HydrationState>({
+    status: "loading",
+    error: null,
+  });
+  const [diagnostics, setDiagnostics] = useState<WardrobeHydrationDiagnostics | null>(null);
+
+  const sequence = useRef(0);
+  const active = useRef(true);
+  const commitDepth = useRef(0);
+
+  const refresh = useCallback(async () => {
+    const currentSequence = ++sequence.current;
+
+    setHydration((current) => ({
+      status: current.status === "ready" ? "ready" : "loading",
+      error: null,
+    }));
+
+    try {
+      const result = await hydrateWardrobeDetailed();
+
+      if (!active.current || currentSequence !== sequence.current) return;
+
+      setData(result.wardrobe);
+      setDiagnostics(result.diagnostics);
+      setHydration({ status: "ready", error: null });
+    } catch (cause) {
+      if (!active.current || currentSequence !== sequence.current) return;
+
+      const error =
+        cause instanceof Error ? cause : new Error("The saved wardrobe could not be loaded.");
+
+      setHydration({ status: "error", error });
+    }
+  }, []);
+
   useEffect(() => {
-    setStored(loadWardrobe());
-    const sync = () => setStored(loadWardrobe());
-    window.addEventListener(EVENT, sync);
+    active.current = true;
+    void refresh();
+
+    const sync = () => {
+      // The current hook applies its own committed result directly.
+      // Avoid starting a redundant hydration during its own save.
+      if (commitDepth.current > 0) return;
+      void refresh();
+    };
+
+    window.addEventListener(WARDROBE_EVENT, sync);
     window.addEventListener("storage", sync);
+
     return () => {
-      window.removeEventListener(EVENT, sync);
+      active.current = false;
+      sequence.current += 1;
+      window.removeEventListener(WARDROBE_EVENT, sync);
       window.removeEventListener("storage", sync);
     };
+  }, [refresh]);
+
+  const applyCommittedWardrobe = useCallback((wardrobe: Wardrobe, currentSequence: number) => {
+    if (!active.current || currentSequence !== sequence.current) return;
+
+    setData(wardrobe);
+    setDiagnostics(null);
+    setHydration({ status: "ready", error: null });
   }, []);
-  const fallback = useRef<Wardrobe | null>(null);
-  if (!fallback.current) fallback.current = emptyWardrobe();
-  const data = stored ?? fallback.current;
-  const commit = useCallback((fn: (current: Wardrobe) => Wardrobe) => {
-    const next = fn(loadWardrobe());
-    const custom = next.products.filter((item) => item.custom);
-    window.localStorage.setItem(
-      KEY,
-      JSON.stringify({ v: 1, products: custom, events: next.events.slice(0, 80), heightCm: next.heightCm }),
-    );
-    window.dispatchEvent(new Event(EVENT));
-    setStored(loadWardrobe());
+
+  const setCommitError = useCallback((cause: unknown, currentSequence: number) => {
+    if (!active.current || currentSequence !== sequence.current) return;
+
+    const error =
+      cause instanceof Error
+        ? cause
+        : new WardrobePersistenceError("write-failed", "The wardrobe could not be saved.");
+
+    setHydration((current) => ({
+      status: current.status === "ready" ? "ready" : "error",
+      error,
+    }));
   }, []);
-  return { data, ready: stored != null, commit };
+
+  const commitWithReport = useCallback(
+    async (fn: (current: Wardrobe) => Wardrobe): Promise<WardrobeCommitReport> => {
+      const currentSequence = ++sequence.current;
+      commitDepth.current += 1;
+
+      try {
+        const result = await commitWardrobeChangeWithReport(fn);
+
+        applyCommittedWardrobe(result.wardrobe, currentSequence);
+
+        return result.report;
+      } catch (cause) {
+        setCommitError(cause, currentSequence);
+        throw cause;
+      } finally {
+        commitDepth.current = Math.max(0, commitDepth.current - 1);
+      }
+    },
+    [applyCommittedWardrobe, setCommitError],
+  );
+
+  const commit = useCallback(
+    async (fn: (current: Wardrobe) => Wardrobe): Promise<void> => {
+      const currentSequence = ++sequence.current;
+      commitDepth.current += 1;
+
+      try {
+        const wardrobe = await commitWardrobeChange(fn);
+        applyCommittedWardrobe(wardrobe, currentSequence);
+      } catch (cause) {
+        setCommitError(cause, currentSequence);
+        throw cause;
+      } finally {
+        commitDepth.current = Math.max(0, commitDepth.current - 1);
+      }
+    },
+    [applyCommittedWardrobe, setCommitError],
+  );
+
+  return {
+    data,
+    ready: hydration.status === "ready",
+    loading: hydration.status === "loading",
+    error: hydration.error,
+    diagnostics,
+    commit,
+    commitWithReport,
+  };
 }

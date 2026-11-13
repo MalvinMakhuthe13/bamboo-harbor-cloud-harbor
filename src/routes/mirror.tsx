@@ -6,11 +6,27 @@ import { Nav } from "@/components/site/Nav";
 import { CATEGORY_LABEL, CATEGORY_ORDER, findProduct, productsIn } from "@/lib/isibuko-ai/catalog";
 import { conditionProduct } from "@/lib/isibuko-ai/condition";
 import type { Drag } from "@/lib/isibuko-ai/engine";
-import { localFitProvider, requestFit, type AdvisorRefusal, type FitAdvice } from "@/lib/isibuko-ai/advisor";
-import { catalogueReader, factText, FIELD_LABEL, ORIGIN_LABEL } from "@/lib/isibuko-ai/product-facts";
+import {
+  localFitProvider,
+  requestFit,
+  type AdvisorRefusal,
+  type FitAdvice,
+} from "@/lib/isibuko-ai/advisor";
+import {
+  catalogueReader,
+  factText,
+  FIELD_LABEL,
+  ORIGIN_LABEL,
+} from "@/lib/isibuko-ai/product-facts";
 import { matchSize, sizeScaleFor } from "@/lib/isibuko-ai/fit";
 import { useWardrobe } from "@/lib/isibuko-ai/store";
-import type { Category, FrameRequest, LiveMetrics, Product, TryEvent } from "@/lib/isibuko-ai/types";
+import type {
+  Category,
+  FrameRequest,
+  LiveMetrics,
+  Product,
+  TryEvent,
+} from "@/lib/isibuko-ai/types";
 
 type Search = { product?: string };
 
@@ -42,7 +58,10 @@ function MirrorPage() {
   const controlsRef = useRef<{ setDelegate: (delegate: "CPU" | "GPU") => void } | null>(null);
   const active = findProduct(data.products, productId);
   const swatch = active.swatches.find((item) => item.id === swatchId) ?? active.swatches[0];
-  const fit = useMemo(() => (metrics ? matchSize(active.sizes, metrics.body) : null), [active.sizes, metrics]);
+  const fit = useMemo(
+    () => (metrics ? matchSize(active.sizes, metrics.body) : null),
+    [active.sizes, metrics],
+  );
   const chestCm = metrics?.body.chestCm ?? null;
   const waistCm = metrics?.body.waistCm ?? null;
   const shoulderCm = metrics?.body.shoulderCm ?? null;
@@ -68,7 +87,19 @@ function MirrorPage() {
       if (!controller.signal.aborted) setAdvice(result);
     });
     return () => controller.abort();
-  }, [fitHelp, active.id, active.category, active.sizes, chestCm, waistCm, shoulderCm, headCircCm, wristCm, faceWidthCm, hipCm]);
+  }, [
+    fitHelp,
+    active.id,
+    active.category,
+    active.sizes,
+    chestCm,
+    waistCm,
+    shoulderCm,
+    headCircCm,
+    wristCm,
+    faceWidthCm,
+    hipCm,
+  ]);
 
   const photographPresent = Boolean(active.image);
   const productFactRead = useMemo(() => {
@@ -83,7 +114,17 @@ function MirrorPage() {
       swatchName: swatch?.name ?? null,
       sizeCount: active.sizes.length,
     });
-  }, [productFacts, active.id, active.name, active.category, active.custom, active.fabric, photographPresent, swatch?.name, active.sizes.length]);
+  }, [
+    productFacts,
+    active.id,
+    active.name,
+    active.category,
+    active.custom,
+    active.fabric,
+    photographPresent,
+    swatch?.name,
+    active.sizes.length,
+  ]);
 
   const requestRef = useRef<FrameRequest>({
     productId: active.id,
@@ -127,7 +168,10 @@ function MirrorPage() {
   function choose(category: Category) {
     const next = productsIn(data.products, category)[0];
     if (next) selectProduct(next);
-    else setEmptyNote(`${CATEGORY_LABEL[category]} has no house piece. Add a photograph in the wardrobe. A photograph is not a measurement, and the camera is not restarted.`);
+    else
+      setEmptyNote(
+        `${CATEGORY_LABEL[category]} has no house piece. Add a photograph in the wardrobe. A photograph is not a measurement, and the camera is not restarted.`,
+      );
   }
 
   const condition = conditionProduct(active, swatch?.tint ?? null);
@@ -147,7 +191,13 @@ function MirrorPage() {
     <main className="flex h-dvh flex-col bg-ink text-paper">
       <Nav tone="ink" />
       <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_22rem]">
-        <Stage requestRef={requestRef} dragRef={dragRef} controlsRef={controlsRef} onMetrics={setMetrics} onStatus={setStatus} />
+        <Stage
+          requestRef={requestRef}
+          dragRef={dragRef}
+          controlsRef={controlsRef}
+          onMetrics={setMetrics}
+          onStatus={setStatus}
+        />
         <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto border-t border-line bg-ink-2 px-4 py-4 md:border-t-0 md:border-l">
           <p className="text-sm text-brass-2">{status}</p>
           <div className="flex flex-wrap gap-2">
@@ -180,7 +230,11 @@ function MirrorPage() {
           <div>
             <h1 className="font-display text-3xl">{active.name}</h1>
             <p className="mt-2 text-sm text-muted">{active.blurb}</p>
-            <p className="mt-2 text-sm text-brass-2">R {active.priceZar.toLocaleString("en-ZA")}</p>
+            {active.priceZar != null && (
+              <p className="mt-2 text-sm text-brass-2">
+                R {active.priceZar.toLocaleString("en-ZA")}
+              </p>
+            )}
           </div>
           {active.swatches.length > 1 && (
             <div className="flex flex-wrap gap-2">
@@ -242,13 +296,19 @@ function MirrorPage() {
             {productFacts && productFactRead && (
               <div className="text-sm text-brass-2">
                 <p>No model looked at the photograph. These facts come from the product record.</p>
-                <p>Merchant-supplied facts were entered by the merchant. They are not an independent check.</p>
-                <p>Rule-derived facts come from Isibuko's category rules, not from the photograph.</p>
+                <p>
+                  Merchant-supplied facts were entered by the merchant. They are not an independent
+                  check.
+                </p>
+                <p>
+                  Rule-derived facts come from Isibuko's category rules, not from the photograph.
+                </p>
                 {productFactRead.ok ? (
                   <ul className="mt-2 space-y-1">
                     {productFactRead.facts.map((fact) => (
                       <li key={fact.field}>
-                        {FIELD_LABEL[fact.field] ?? fact.field}: {factText(fact)}. {ORIGIN_LABEL[fact.origin]}
+                        {FIELD_LABEL[fact.field] ?? fact.field}: {factText(fact)}.{" "}
+                        {ORIGIN_LABEL[fact.origin]}
                       </li>
                     ))}
                   </ul>
@@ -269,7 +329,26 @@ function MirrorPage() {
               onChange={(event) => {
                 const next = Number(event.target.value);
                 setHeight(next);
-                commit((current) => ({ ...current, heightCm: next }));
+              }}
+              onBlur={async () => {
+                if (!Number.isFinite(height) || height < 120 || height > 220) {
+                  setStatus("Enter a height between 120 and 220 cm.");
+                  return;
+                }
+
+                try {
+                  await commit((current) => ({
+                    ...current,
+                    heightCm: height,
+                  }));
+                  setStatus("Height saved.");
+                } catch (error) {
+                  setStatus(
+                    error instanceof Error
+                      ? `Height could not be saved: ${error.message}`
+                      : "Height could not be saved.",
+                  );
+                }
               }}
             />
           </label>
@@ -305,7 +384,11 @@ function MirrorPage() {
                 else setHeld(active.id);
               }}
             >
-              {held && held !== active.id ? "Back to held piece" : held ? "Held" : "Hold to compare"}
+              {held && held !== active.id
+                ? "Back to held piece"
+                : held
+                  ? "Held"
+                  : "Hold to compare"}
             </button>
           </div>
           {handoff && (
@@ -314,9 +397,14 @@ function MirrorPage() {
               <p className="mt-2 text-sm text-muted">
                 Isibuko does not take payment. This is the selection a merchant page would receive.
               </p>
-              <pre className="mt-3 overflow-x-auto text-sm text-brass-2">{JSON.stringify(payload, null, 2)}</pre>
+              <pre className="mt-3 overflow-x-auto text-sm text-brass-2">
+                {JSON.stringify(payload, null, 2)}
+              </pre>
               {active.merchantUrl && (
-                <a className="mt-3 inline-flex min-h-11 items-center text-sm text-paper underline" href={active.merchantUrl}>
+                <a
+                  className="mt-3 inline-flex min-h-11 items-center text-sm text-paper underline"
+                  href={active.merchantUrl}
+                >
                   Open merchant page
                 </a>
               )}
@@ -327,7 +415,11 @@ function MirrorPage() {
             switches={switches}
             onDelegate={(delegate) => controlsRef.current?.setDelegate(delegate)}
           />
-          <p className="text-sm text-muted">Changing product, colour, or size does not stop the camera. The studio photo is only a labelled test. Picture fps is the display. The hertz numbers are how often each model returns, and they are allowed to be slower than the picture.</p>
+          <p className="text-sm text-muted">
+            Changing product, colour, or size does not stop the camera. The studio photo is only a
+            labelled test. Picture fps is the display. The hertz numbers are how often each model
+            returns, and they are allowed to be slower than the picture.
+          </p>
         </aside>
       </div>
     </main>
