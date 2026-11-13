@@ -99,7 +99,7 @@ vec2 torsoSample(vec2 p) {
   float halfW = mix(halfT, halfB, clamped);
   vec2 midP = top + n * (len * clamped);
   float u = dot(p - midP, side) / max(halfW, 1e-4);
-  if (v < 0.0 || v > 1.04 || abs(u) > 1.02) return vec2(-1.0);
+  if (v < 0.0 || v > 1.0 || abs(u) > 0.96) return vec2(-1.0);
   float tu = uFullTex > 0.5
     ? mix(0.04, 0.96, u * 0.5 + 0.5)
     : mix(0.2, 0.8, u * 0.5 + 0.5);

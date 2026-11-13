@@ -5,6 +5,7 @@ import {
   earringSprite,
   followQuad,
   glassesSprite,
+  hugQuad,
   hairFrame,
   hasSleeves,
   hatSprite,
@@ -583,7 +584,8 @@ export function startEngine(opts: {
       worn = null;
       wornId = productKey;
     }
-    const followed = clothing ? followQuad(worn, clothing) : null;
+    const fitted = clothing ? hugQuad(clothing, category as "shirt" | "jacket" | "dress" | "pants" | "skirt") : null;
+    const followed = fitted ? followQuad(worn, fitted) : null;
     if (followed) worn = followed;
     if (followed && shL && shR) {
       vec(u.topL, move(followed.topL));
@@ -598,7 +600,7 @@ export function startEngine(opts: {
       vec(u.wrR, move(wrR ?? elR ?? shR));
       const span = Math.hypot(shR.x - shL.x, shR.y - shL.y);
       const arm = Math.hypot((elL ?? shL).x - shL.x, (elL ?? shL).y - shL.y);
-      gl.uniform1f(u.armW, Math.max(arm * 0.42, span * 0.2));
+      gl.uniform1f(u.armW, Math.max(arm * 0.28, span * 0.12));
       gl.uniform1f(u.hasArms, hasSleeves(category) && elL && wrL && elR && wrR ? 1 : 0);
     } else {
       gl.uniform1f(u.hasArms, 0);

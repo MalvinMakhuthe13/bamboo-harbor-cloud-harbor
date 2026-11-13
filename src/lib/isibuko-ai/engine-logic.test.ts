@@ -9,6 +9,7 @@ import {
   containPoint,
   followQuad,
   glassesSprite,
+  hugQuad,
   nailSegments,
   hidesOriginalHair,
   regionMode,
@@ -211,6 +212,24 @@ describe("product conditioning", () => {
     const settled = followQuad(turned, turned);
     assert.equal(settled.botL.x, turned.botL.x);
     assert.equal(settled.topR.y, turned.topR.y);
+  });
+
+  it("pulls a shirt onto the torso instead of leaving it wide", () => {
+    const quad = clothingQuad({
+      shoulderL: { x: 0.3, y: 0.34 },
+      shoulderR: { x: 0.7, y: 0.34 },
+      hipL: { x: 0.34, y: 0.74 },
+      hipR: { x: 0.66, y: 0.74 },
+      category: "shirt",
+      scale: 1,
+      sleevesInPhoto: false,
+    });
+    const hugged = hugQuad(quad, "shirt");
+    const width = (q: { topL: { x: number }; topR: { x: number }; botL: { x: number }; botR: { x: number } }, hem: boolean) =>
+      hem ? Math.abs(q.botR.x - q.botL.x) : Math.abs(q.topR.x - q.topL.x);
+    assert.ok(width(hugged, false) < width(quad, false));
+    assert.ok(width(hugged, true) < width(hugged, false));
+    assert.ok(Math.abs((hugged.topL.x + hugged.topR.x) / 2 - (quad.topL.x + quad.topR.x) / 2) < 0.001);
   });
 
   it("keeps the centre of a torso inside the garment", () => {

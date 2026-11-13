@@ -158,12 +158,30 @@ export function clothingQuad(opts: {
   return { topL, topR, botL, botR };
 }
 
+/** Pulls the product photograph onto the torso. Shoulders sit inside the arm, and a shirt narrows toward the waist. */
+export function hugQuad(quad: Quad, category: "shirt" | "jacket" | "dress" | "pants" | "skirt"): Quad {
+  const toward = (from: Pt, to: Pt, amount: number): Pt => ({
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount,
+  });
+  const top = mid(quad.topL, quad.topR);
+  const bot = mid(quad.botL, quad.botR);
+  const topIn = category === "pants" ? 0.06 : category === "skirt" ? 0.16 : 0.1;
+  const botIn = category === "dress" || category === "skirt" ? 0.04 : category === "pants" ? 0.12 : 0.22;
+  return {
+    topL: toward(quad.topL, top, topIn),
+    topR: toward(quad.topR, top, topIn),
+    botL: toward(quad.botL, bot, botIn),
+    botR: toward(quad.botR, bot, botIn),
+  };
+}
+
 /**
  * The shoulders take the new pose first. The hem catches up over the next frames,
  * and it cannot drift farther than a fraction of the torso. This is the product
  * photograph following the body. It does not generate new cloth.
  */
-export function followQuad(prev: Quad | null, next: Quad, lead = 0.72, trail = 0.34, maxLag = 0.16): Quad {
+export function followQuad(prev: Quad | null, next: Quad, lead = 0.84, trail = 0.62, maxLag = 0.07): Quad {
   if (!prev) return next;
   const torso = Math.max(dist(next.topL, next.botL), dist(next.topR, next.botR), dist(mid(next.topL, next.topR), mid(next.botL, next.botR)), 0.08);
   const limit = torso * maxLag;
@@ -201,7 +219,7 @@ export function torsoUv(p: Pt, quad: Quad): { u: number; v: number } | null {
   const halfW = halfT + (halfB - halfT) * clamped;
   const midP = { x: top.x + n.x * len * clamped, y: top.y + n.y * len * clamped };
   const u = ((p.x - midP.x) * side.x + (p.y - midP.y) * side.y) / Math.max(halfW, 1e-4);
-  if (v < 0.0 || v > 1.04 || Math.abs(u) > 1.02) return null;
+  if (v < 0.0 || v > 1.0 || Math.abs(u) > 0.96) return null;
   return { u, v };
 }
 
