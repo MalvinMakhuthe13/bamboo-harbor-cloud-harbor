@@ -176,6 +176,40 @@ export function hugQuad(quad: Quad, category: "shirt" | "jacket" | "dress" | "pa
   };
 }
 
+/** Keeps the left limb on the left. A one-frame detector swap is rejected. */
+export function stableSide(prevL: Pt | null, prevR: Pt | null, nextL: Pt, nextR: Pt): { left: Pt; right: Pt; swapped: boolean } {
+  if (!prevL || !prevR) return { left: nextL, right: nextR, swapped: false };
+  const direct = dist(prevL, nextL) + dist(prevR, nextR);
+  const crossed = dist(prevL, nextR) + dist(prevR, nextL);
+  if (crossed + 0.02 < direct) return { left: nextR, right: nextL, swapped: true };
+  return { left: nextL, right: nextR, swapped: false };
+}
+
+/**
+ * Where the front of a flat-lay garment lands. `across` is -1..1 on the chest,
+ * `down` is 0 at the shoulders. The collar opening is not placed on the throat.
+ * A turn slides along the front panel and stops before the sleeves or the back.
+ */
+export function wornFrontTex(across: number, down: number, yaw: number): { u: number; v: number } | null {
+  if (down < 0 || down > 1 || Math.abs(across) > 0.96) return null;
+  if (down < 0.14 && Math.abs(across) < 0.22) return null;
+  const slide = Math.max(-0.85, Math.min(0.85, yaw));
+  const side = Math.max(-0.5, Math.min(0.5, across * 0.55 - slide * 0.18));
+  let u = 0.36 + (side + 0.5) * (0.64 - 0.36);
+  u += Math.sin(down * 24 + across * 5) * 0.012 * Math.abs(slide);
+  u = Math.max(0.36, Math.min(0.64, u));
+  const v = down < 0.14 ? 0.02 + (down / 0.14) * 0.08 : 0.2 + ((down - 0.14) / 0.86) * 0.74;
+  return { u, v };
+}
+
+/** Nose relative to the shoulder line. Positive turns toward the right shoulder. */
+export function torsoTurn(shL: Pt, shR: Pt, nose: Pt | null): number {
+  if (!nose) return 0;
+  const span = Math.max(dist(shL, shR), 0.05);
+  const mid = (shL.x + shR.x) / 2;
+  return Math.max(-1, Math.min(1, (nose.x - mid) / (span * 0.5)));
+}
+
 /**
  * The shoulders take the new pose first. The hem catches up over the next frames,
  * and it cannot drift farther than a fraction of the torso. This is the product

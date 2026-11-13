@@ -31,6 +31,8 @@ uniform vec2 uWristL;
 uniform vec2 uElbowR;
 uniform vec2 uWristR;
 uniform float uArmW;
+uniform float uYaw;
+uniform float uFrontArm;
 uniform vec2 uHairC;
 uniform vec2 uHairHalf;
 uniform float uHairCos;
@@ -100,14 +102,22 @@ vec2 torsoSample(vec2 p) {
   vec2 midP = top + n * (len * clamped);
   float u = dot(p - midP, side) / max(halfW, 1e-4);
   if (v < 0.0 || v > 1.0 || abs(u) > 0.96) return vec2(-1.0);
-  float tu = uFullTex > 0.5
-    ? mix(0.04, 0.96, u * 0.5 + 0.5)
-    : mix(0.2, 0.8, u * 0.5 + 0.5);
-  float tv = mix(0.02, 0.98, clamp(v, 0.0, 1.0));
+  // The open collar in the product photo is the inside of the neck. Leave that
+  // throat as the person, and map only the front panel below it. A turn slides
+  // along that front panel. It never reaches the sleeves or the back.
+  if (v < 0.14 && abs(u) < 0.22) return vec2(-1.0);
+  float slide = clamp(uYaw, -0.85, 0.85);
+  float across = clamp(u * 0.55 - slide * 0.18, -0.5, 0.5);
+  float tu = mix(0.36, 0.64, across + 0.5);
+  tu += sin(v * 24.0 + u * 5.0) * 0.012 * abs(slide);
+  tu = clamp(tu, 0.36, 0.64);
+  float bodyV = mix(0.2, 0.94, clamp((v - 0.14) / 0.86, 0.0, 1.0));
+  float collarV = mix(0.02, 0.1, clamp(v / 0.14, 0.0, 1.0));
+  float tv = v < 0.14 ? collarV : bodyV;
   return vec2(tu, 1.0 - tv);
 }
 
-vec2 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign) {
+vec3 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign) {
   vec2 a0 = sh;
   vec2 b0 = el;
   vec2 a1 = el;
@@ -140,11 +150,11 @@ vec2 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign) {
     across = dot(p - q, vec2(-dir.y, dir.x));
     along = (len0 + t * len1) / total;
   }
-  if (best > uArmW) return vec2(-1.0);
+  if (best > uArmW) return vec3(-1.0, -1.0, 1e3);
   float uLocal = clamp(across / max(uArmW, 1e-4) * 0.5 + 0.5, 0.0, 1.0);
   float tu = sideSign < 0.0 ? mix(0.02, 0.28, uLocal) : mix(0.72, 0.98, uLocal);
-  float tv = mix(0.14, 0.82, along);
-  return vec2(tu, 1.0 - tv);
+  float tv = mix(0.2, 0.9, along);
+  return vec3(tu, 1.0 - tv, best);
 }
 
 vec2 hairSample(vec2 p, out float edge) {
@@ -197,20 +207,22 @@ void main() {
 
   if (uMode == 1 && uHasMask > 0.5 && !protect && !hand) {
     vec2 sampleUv = torsoSample(p);
-    vec2 armL = vec2(-1.0);
-    vec2 armR = vec2(-1.0);
+    vec3 armL = vec3(-1.0, -1.0, 1e3);
+    vec3 armR = vec3(-1.0, -1.0, 1e3);
     if (uHasArms > 0.5) {
       armL = armSample(p, uShL, uElbowL, uWristL, -1.0);
       armR = armSample(p, uShR, uElbowR, uWristR, 1.0);
+      if (uFrontArm > 0.5) armL.z *= 0.72;
+      if (uFrontArm < -0.5) armR.z *= 0.72;
     }
-    bool inArm = uHasArms > 0.5 && (armL.x >= 0.0 || armR.x >= 0.0);
-    // Clothes can take the product. Bare skin can too, but only on the torso.
-    // Skin inside an arm stays the camera, so a forearm crossing the body hides the garment.
-    // Hair, face, background and accessories are never cloth.
+    bool inArm = uHasArms > 0.5 && min(armL.z, armR.z) < 100.0;
+    // The front panel is worn on the torso. A sleeve uses the nearer arm, so the
+    // two sides do not trade places when the arms cross.
     bool torsoCloth = sampleUv.x >= 0.0 && !inArm && !hair && !face && (clothes || body);
     bool sleeveCloth = inArm && clothes && !hair && !face;
     if (torsoCloth || sleeveCloth) {
-      vec2 uv = torsoCloth ? sampleUv : (armL.x >= 0.0 ? armL : armR);
+      vec2 sleeveUv = armL.z <= armR.z ? armL.xy : armR.xy;
+      vec2 uv = torsoCloth ? sampleUv : sleeveUv;
       vec4 prod = texture(uProd, uv);
       float green = prod.g - max(prod.r, prod.b);
       if (green > 0.22 && prod.g > 0.25) prod.a = 0.0;
@@ -220,7 +232,9 @@ void main() {
         if (clsAt(camUv - vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);
         if (clsAt(camUv + vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
         if (clsAt(camUv - vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
-        vec3 lit = shade(lumaTint(prod.rgb), cam.rgb);
+        float slide = clamp(uYaw, -1.0, 1.0);
+        float worn = 1.0 - abs(slide) * 0.16 * smoothstep(-0.2, 0.85, sampleUv.x > 0.0 ? (uv.x - 0.5) * slide * 8.0 : 0.0);
+        vec3 lit = shade(lumaTint(prod.rgb), cam.rgb) * worn;
         rgb = mix(rgb, lit, prod.a * edge);
       }
     }

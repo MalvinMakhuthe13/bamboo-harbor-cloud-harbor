@@ -14,7 +14,10 @@ import {
   hidesOriginalHair,
   regionMode,
   spriteShowsCamera,
+  stableSide,
+  torsoTurn,
   torsoUv,
+  wornFrontTex,
 } from "./placement.ts";
 import { MODEL_REGISTRY, WEIGHT_BYTES } from "./registry.ts";
 
@@ -230,6 +233,30 @@ describe("product conditioning", () => {
     assert.ok(width(hugged, false) < width(quad, false));
     assert.ok(width(hugged, true) < width(hugged, false));
     assert.ok(Math.abs((hugged.topL.x + hugged.topR.x) / 2 - (quad.topL.x + quad.topR.x) / 2) < 0.001);
+  });
+
+  it("keeps each arm on its own side when the detector swaps them", () => {
+    const left = { x: 0.32, y: 0.4 };
+    const right = { x: 0.68, y: 0.4 };
+    const swapped = stableSide(left, right, right, left);
+    assert.equal(swapped.swapped, true);
+    assert.equal(swapped.left.x, left.x);
+    assert.equal(swapped.right.x, right.x);
+    const moved = stableSide(left, right, { x: 0.36, y: 0.42 }, { x: 0.64, y: 0.48 });
+    assert.equal(moved.swapped, false);
+    assert.equal(moved.left.x, 0.36);
+  });
+
+  it("wears the front of the shirt and leaves the throat clear", () => {
+    const centre = wornFrontTex(0, 0.5, 0);
+    assert.ok(centre);
+    assert.ok(Math.abs(centre.u - 0.5) < 0.04);
+    assert.ok(centre.v > 0.18 && centre.v < 0.95);
+    assert.equal(wornFrontTex(0, 0.05, 0), null);
+    const turned = wornFrontTex(0, 0.5, 1);
+    assert.ok(turned);
+    assert.ok(turned.u > 0.36 && turned.u < 0.64);
+    assert.ok(torsoTurn({ x: 0.3, y: 0.4 }, { x: 0.7, y: 0.4 }, { x: 0.62, y: 0.3 }) > 0);
   });
 
   it("keeps the centre of a torso inside the garment", () => {
