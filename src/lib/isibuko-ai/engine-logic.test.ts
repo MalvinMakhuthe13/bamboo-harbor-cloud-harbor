@@ -7,14 +7,22 @@ import {
   armsAreRaised,
   clothingQuad,
   containPoint,
+  followQuad,
   glassesSprite,
+  hangingSleeve,
+  hugQuad,
   nailSegments,
   wigSprite,
   nailShapeFactors,
   hidesOriginalHair,
   isPlausibleClothingQuad,
   regionMode,
+  spriteShowsCamera,
+  stableSide,
+  torsoTurn,
+  wornLight,
   torsoUv,
+  wornFrontTex,
 } from "./placement.ts";
 import { MODEL_REGISTRY, WEIGHT_BYTES } from "./registry.ts";
 import { COMPOSITE_FRAG, GARMENT_MESH_FRAG, GARMENT_MESH_VERT } from "./shaders.ts";
@@ -136,6 +144,65 @@ describe("appearance replacement policy", () => {
     );
   });
 
+  it("keeps a bare arm in front of the garment and still replaces cloth", () => {
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.body,
+        inGarment: true,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: false,
+        onArm: true,
+      }),
+      false,
+    );
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.clothes,
+        inGarment: false,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: false,
+        onArm: true,
+      }),
+      true,
+    );
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.other,
+        inGarment: true,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: false,
+        onArm: false,
+      }),
+      false,
+    );
+    assert.equal(
+      allowsRegionPaint({
+        mode: "clothing",
+        cls: CLASS.body,
+        inGarment: true,
+        inHairEllipse: false,
+        inProtectedFace: false,
+        nearHand: false,
+        onArm: false,
+      }),
+      true,
+    );
+  });
+
+  it("lets the face and a hand cover a wig, hat, or necklace plate", () => {
+    assert.equal(spriteShowsCamera({ category: "wig", cls: CLASS.face, nearHand: false, hasMask: true }), true);
+    assert.equal(spriteShowsCamera({ category: "hat", cls: CLASS.hair, nearHand: true, hasMask: true }), true);
+    assert.equal(spriteShowsCamera({ category: "necklace", cls: CLASS.body, nearHand: false, hasMask: true }), false);
+    assert.equal(spriteShowsCamera({ category: "glasses", cls: CLASS.face, nearHand: true, hasMask: true }), false);
+    assert.equal(spriteShowsCamera({ category: "wig", cls: CLASS.face, nearHand: false, hasMask: false }), false);
+  });
+
   it("clears original hair outside the protected face and leaves the face", () => {
     assert.equal(hidesOriginalHair({ cls: CLASS.hair, inProtectedFace: false }), true);
     assert.equal(hidesOriginalHair({ cls: CLASS.hair, inProtectedFace: true }), false);
@@ -209,6 +276,84 @@ describe("product conditioning", () => {
       }),
       true,
     );
+  });
+
+  it("lets the hem follow the shoulders instead of jumping with them", () => {
+    const still = clothingQuad({
+      shoulderL: { x: 0.32, y: 0.34 },
+      shoulderR: { x: 0.68, y: 0.34 },
+      hipL: { x: 0.36, y: 0.72 },
+      hipR: { x: 0.64, y: 0.72 },
+      category: "shirt",
+      scale: 1,
+      sleevesInPhoto: false,
+    });
+    const turned = clothingQuad({
+      shoulderL: { x: 0.42, y: 0.34 },
+      shoulderR: { x: 0.78, y: 0.34 },
+      hipL: { x: 0.46, y: 0.72 },
+      hipR: { x: 0.74, y: 0.72 },
+      category: "shirt",
+      scale: 1,
+      sleevesInPhoto: false,
+    });
+    const followed = followQuad(still, turned);
+    const shoulderGap = Math.abs(followed.topL.x - turned.topL.x);
+    const hemGap = Math.abs(followed.botL.x - turned.botL.x);
+    assert.ok(hemGap > shoulderGap);
+    assert.ok(hemGap < 0.2);
+    const settled = followQuad(turned, turned);
+    assert.equal(settled.botL.x, turned.botL.x);
+    assert.equal(settled.topR.y, turned.topR.y);
+  });
+
+  it("covers the shoulder of the shirt already being worn", () => {
+    const quad = clothingQuad({
+      shoulderL: { x: 0.3, y: 0.34 },
+      shoulderR: { x: 0.7, y: 0.34 },
+      hipL: { x: 0.34, y: 0.74 },
+      hipR: { x: 0.66, y: 0.74 },
+      category: "shirt",
+      scale: 1,
+      sleevesInPhoto: false,
+    });
+    const hugged = hugQuad(quad, "shirt");
+    const width = (q: { topL: { x: number }; topR: { x: number }; botL: { x: number }; botR: { x: number } }, hem: boolean) =>
+      hem ? Math.abs(q.botR.x - q.botL.x) : Math.abs(q.topR.x - q.topL.x);
+    assert.ok(width(hugged, false) > width(quad, false));
+    assert.ok(width(hugged, true) < width(hugged, false));
+    assert.ok(Math.abs((hugged.topL.x + hugged.topR.x) / 2 - (quad.topL.x + quad.topR.x) / 2) < 0.001);
+  });
+
+  it("keeps each arm on its own side when the detector swaps them", () => {
+    const left = { x: 0.32, y: 0.4 };
+    const right = { x: 0.68, y: 0.4 };
+    const swapped = stableSide(left, right, right, left);
+    assert.equal(swapped.swapped, true);
+    assert.equal(swapped.left.x, left.x);
+    assert.equal(swapped.right.x, right.x);
+    const moved = stableSide(left, right, { x: 0.36, y: 0.42 }, { x: 0.64, y: 0.48 });
+    assert.equal(moved.swapped, false);
+    assert.equal(moved.left.x, 0.36);
+  });
+
+  it("wears the front of the shirt and leaves the throat clear", () => {
+    const centre = wornFrontTex(0, 0.5, 0);
+    assert.ok(centre);
+    assert.ok(Math.abs(centre.u - 0.5) < 0.04);
+    assert.ok(centre.v > 0.18 && centre.v < 0.95);
+    assert.equal(wornFrontTex(0, 0.05, 0), null);
+    const turned = wornFrontTex(0, 0.5, 1);
+    assert.ok(turned);
+    assert.ok(turned.u > 0.3 && turned.u < 0.7);
+    assert.ok(torsoTurn({ x: 0.3, y: 0.4 }, { x: 0.7, y: 0.4 }, { x: 0.62, y: 0.3 }) > 0);
+    const hung = hangingSleeve({ x: 0.3, y: 0.35 }, { x: 0.34, y: 0.8 }, -0.08);
+    assert.ok(hung.wrist.y > hung.elbow.y);
+    assert.ok(hung.elbow.x < 0.3);
+    const flat = wornLight(0.8, 0.7, 0.7);
+    const crease = wornLight(0.8, 0.55, 0.7);
+    assert.ok(crease < flat);
+    assert.ok(wornLight(0.8, 0.85, 0.7) > flat);
   });
 
   it("keeps the centre of a torso inside the garment", () => {

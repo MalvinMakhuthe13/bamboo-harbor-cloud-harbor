@@ -31,6 +31,8 @@ uniform vec2 uWristL;
 uniform vec2 uElbowR;
 uniform vec2 uWristR;
 uniform float uArmW;
+uniform float uYaw;
+uniform float uFrontArm;
 uniform vec2 uHairC;
 uniform vec2 uHairHalf;
 uniform float uHairCos;
@@ -59,9 +61,21 @@ vec3 lumaTint(vec3 rgb) {
   return uTint * (0.38 + l * 1.12);
 }
 
-vec3 shade(vec3 prod, vec3 cam) {
-  float l = dot(cam, vec3(0.2126, 0.7152, 0.0722));
-  return prod * clamp(0.8 + l * 0.42, 0.68, 1.2);
+float lum(vec3 c) {
+  return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+vec3 shade(vec3 prod, vec3 cam, vec2 camUv, float wrap) {
+  float l = lum(cam);
+  float around = lum(texture(uCam, camUv + vec2(0.016, 0.0)).rgb);
+  around += lum(texture(uCam, camUv - vec2(0.016, 0.0)).rgb);
+  around += lum(texture(uCam, camUv + vec2(0.0, 0.02)).rgb);
+  around += lum(texture(uCam, camUv - vec2(0.0, 0.02)).rgb);
+  around = (around + l) / 5.0;
+  float wrinkle = (l - around) * 7.0;
+  float form = (around - 0.62) * 0.9;
+  float scale = clamp(0.9 + wrinkle + form, 0.5, 1.3);
+  return prod * scale * wrap;
 }
 
 float clsAt(vec2 camUv) {
@@ -84,7 +98,7 @@ bool inEllipse(vec2 p, vec2 c, vec2 halfExt, float csn, float sn) {
   return nx * nx + ny * ny <= 1.0;
 }
 
-vec2 torsoSample(vec2 p) {
+vec2 torsoSample(vec2 p, float allowOutside) {
   vec2 top = (uTopL + uTopR) * 0.5;
   vec2 bot = (uBotL + uBotR) * 0.5;
   vec2 axis = bot - top;
@@ -100,15 +114,25 @@ vec2 torsoSample(vec2 p) {
   float halfW = mix(halfT, halfB, clamped);
   vec2 midP = top + n * (len * clamped);
   float u = dot(p - midP, side) / max(halfW, 1e-4);
-  if (v < 0.0 || v > 1.04 || abs(u) > 1.02) return vec2(-1.0);
-  float tu = uFullTex > 0.5
-    ? mix(0.04, 0.96, u * 0.5 + 0.5)
-    : mix(0.2, 0.8, u * 0.5 + 0.5);
-  float tv = mix(0.02, 0.98, clamp(v, 0.0, 1.0));
+  bool outside = v < 0.0 || v > 1.0 || abs(u) > 0.96;
+  if (outside && allowOutside < 0.5) return vec2(-1.0);
+  if (outside) {
+    v = clamp(v, 0.0, 1.0);
+    u = clamp(u, -0.96, 0.96);
+  }
+  if (v < 0.08 && abs(u) < 0.12) return vec2(-1.0);
+  float slide = clamp(uYaw, -0.85, 0.85);
+  float across = clamp(u * 0.55 - slide * 0.18, -0.5, 0.5);
+  float tu = mix(0.30, 0.70, across + 0.5);
+  tu += sin(v * 24.0 + u * 5.0) * 0.012 * abs(slide);
+  tu = clamp(tu, 0.30, 0.70);
+  float bodyV = mix(0.16, 0.94, clamp((v - 0.08) / 0.92, 0.0, 1.0));
+  float collarV = mix(0.02, 0.12, clamp(v / 0.08, 0.0, 1.0));
+  float tv = v < 0.08 ? collarV : bodyV;
   return vec2(tu, 1.0 - tv);
 }
 
-vec2 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign) {
+vec3 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign, float force) {
   vec2 a0 = sh;
   vec2 b0 = el;
   vec2 a1 = el;
@@ -141,11 +165,11 @@ vec2 armSample(vec2 p, vec2 sh, vec2 el, vec2 wr, float sideSign) {
     across = dot(p - q, vec2(-dir.y, dir.x));
     along = (len0 + t * len1) / total;
   }
-  if (best > uArmW) return vec2(-1.0);
+  if (best > uArmW && force < 0.5) return vec3(-1.0, -1.0, 1e3);
   float uLocal = clamp(across / max(uArmW, 1e-4) * 0.5 + 0.5, 0.0, 1.0);
   float tu = sideSign < 0.0 ? mix(0.02, 0.28, uLocal) : mix(0.72, 0.98, uLocal);
-  float tv = mix(0.14, 0.82, along);
-  return vec2(tu, 1.0 - tv);
+  float tv = mix(0.2, 0.9, along);
+  return vec3(tu, 1.0 - tv, best);
 }
 
 vec2 hairSample(vec2 p, out float edge) {
@@ -196,34 +220,50 @@ void main() {
   bool hair = cls > 0.5 && cls < 1.5;
   bool body = cls > 1.5 && cls < 2.5;
   bool clothes = cls > 3.5 && cls < 4.5;
-  bool other = cls > 4.5 && cls < 5.5;
-  bool bg = cls >= 0.0 && cls < 0.5;
   bool protect = inEllipse(p, uProtectC, uProtectHalf, uHairCos, uHairSin);
   bool hand = nearHand(p);
 
   if (uMode == 1 && uHasMask > 0.5 && !protect && !hand) {
-    vec2 sampleUv = torsoSample(p);
-    vec2 armL = vec2(-1.0);
-    vec2 armR = vec2(-1.0);
+    vec2 sampleUv = torsoSample(p, 0.0);
+    vec3 armL = vec3(-1.0, -1.0, 1e3);
+    vec3 armR = vec3(-1.0, -1.0, 1e3);
     if (uHasArms > 0.5) {
-      armL = armSample(p, uShL, uElbowL, uWristL, -1.0);
-      armR = armSample(p, uShR, uElbowR, uWristR, 1.0);
+      armL = armSample(p, uShL, uElbowL, uWristL, -1.0, 0.0);
+      armR = armSample(p, uShR, uElbowR, uWristR, 1.0, 0.0);
+      if (uFrontArm > 0.5) armL.z *= 0.72;
+      if (uFrontArm < -0.5) armR.z *= 0.72;
     }
-    bool paintable = (clothes || body || other) && !hair && !face && !bg;
-    bool onSleeve = (armL.x >= 0.0 || armR.x >= 0.0) && paintable;
-    bool onTorso = sampleUv.x >= 0.0 && paintable;
-    if (onTorso || onSleeve) {
-      vec2 uv = onTorso ? sampleUv : (armL.x >= 0.0 ? armL : armR);
+    bool inArm = uHasArms > 0.5 && min(armL.z, armR.z) < 100.0;
+    // The front panel is worn on the torso. A sleeve uses the nearer arm, so the
+    // two sides do not trade places when the arms cross.
+    bool torsoCloth = sampleUv.x >= 0.0 && !inArm && !hair && !face && (clothes || body);
+    bool sleeveCloth = inArm && clothes && !hair && !face;
+    // Clothes the panel missed still belong to the new shirt. Leaving them shows the old one.
+    bool missed = clothes && !torsoCloth && !sleeveCloth && !hair && !face;
+    if (torsoCloth || sleeveCloth || missed) {
+      vec2 sleeveUv = armL.z <= armR.z ? armL.xy : armR.xy;
+      vec2 uv = missed ? torsoSample(p, 1.0) : (torsoCloth ? sampleUv : sleeveUv);
+      if (missed && uHasArms > 0.5) {
+        float midX = (uShL.x + uShR.x) * 0.5;
+        if (abs(p.x - midX) > length(uShR - uShL) * 0.42) {
+          vec3 forced = p.x < midX
+            ? armSample(p, uShL, uElbowL, uWristL, -1.0, 1.0)
+            : armSample(p, uShR, uElbowR, uWristR, 1.0, 1.0);
+          if (forced.x >= 0.0) uv = forced.xy;
+        }
+      }
       vec4 prod = texture(uProd, uv);
       float green = prod.g - max(prod.r, prod.b);
       if (green > 0.22 && prod.g > 0.25) prod.a = 0.0;
+      float peak = max(prod.r, max(prod.g, prod.b));
+      float sat = peak - min(prod.r, min(prod.g, prod.b));
+      if (peak < 0.09 && sat < 0.06) prod = texture(uProd, mix(uv, vec2(0.5, 0.42), 0.7));
       if (prod.a > 0.2) {
-        float edge = 1.0;
-        if (clsAt(camUv + vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);
-        if (clsAt(camUv - vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);
-        if (clsAt(camUv + vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
-        if (clsAt(camUv - vec2(0.0, 0.008)) < 0.5) edge = min(edge, 0.45);
-        vec3 lit = shade(lumaTint(prod.rgb), cam.rgb);
+        // A clothes pixel is fully replaced. Fading it brings the old shirt back as a pale rim.
+        float edge = clothes ? 1.0 : 0.92;
+        float side = clamp(abs(uv.x - 0.5) / 0.2, 0.0, 1.0);
+        float wrap = torsoCloth ? mix(1.0, 0.76, side * side) : 0.9;
+        vec3 lit = shade(lumaTint(prod.rgb), cam.rgb, camUv, wrap);
         rgb = mix(rgb, lit, prod.a * edge);
       }
     }
@@ -270,12 +310,34 @@ void main() {
 export const SPRITE_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uSprite;
+uniform sampler2D uMask;
 uniform vec3 uTint;
 uniform float uTintOn;
 uniform float uLens;
+uniform float uHasMask;
+uniform float uOcclude;
+uniform vec2 uResolution;
+uniform vec2 uHand0;
+uniform vec2 uHand1;
+uniform float uHandR;
+uniform float uHasHands;
 in vec2 vUv;
 out vec4 o;
+
+float clsAt(vec2 camUv) {
+  return texture(uMask, camUv).r * 255.0;
+}
+
 void main() {
+  vec2 fragUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
+  vec2 p = vec2(1.0 - fragUv.x, 1.0 - fragUv.y);
+  vec2 camUv = vec2(p.x, fragUv.y);
+  bool nearHand = uHasHands > 0.5 && (distance(p, uHand0) < uHandR || distance(p, uHand1) < uHandR);
+  if (uOcclude > 0.5 && uHasMask > 0.5) {
+    float cls = clsAt(camUv);
+    bool face = cls > 2.5 && cls < 3.5;
+    if (face || nearHand) discard;
+  }
   vec4 s = texture(uSprite, vUv);
   float green = s.g - max(s.r, s.b);
   if (green > 0.05 && s.g > 0.12) s.a *= clamp(1.0 - green * 10.0, 0.0, 1.0);

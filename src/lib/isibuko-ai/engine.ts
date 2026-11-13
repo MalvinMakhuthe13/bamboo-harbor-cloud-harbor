@@ -7,11 +7,15 @@ import { getGarmentFitProfile, isGarmentCategory } from "@/lib/isibuko-ai/garmen
 import { FrameBudgetMonitor } from "@/lib/isibuko-ai/budget";
 import { fuseHeadPose, HeadPoseSmoother, type HeadPose } from "@/lib/isibuko-ai/head-pose";
 import {
+  armIsHanging,
   braceletSprite,
   clothingQuad,
   earringSprite,
+  followQuad,
   glassesSprite,
+  hugQuad,
   hairFrame,
+  hangingSleeve,
   hasSleeves,
   isPlausibleClothingQuad,
   hatSprite,
@@ -21,6 +25,8 @@ import {
   regionMode,
   ringSprite,
   smoothPoint,
+  stableSide,
+  torsoTurn,
   watchSprite,
   wigSprite,
   type Sprite,
@@ -221,6 +227,8 @@ export function startEngine(opts: {
     elR: loc("uElbowR"),
     wrR: loc("uWristR"),
     armW: loc("uArmW"),
+    yaw: loc("uYaw"),
+    frontArm: loc("uFrontArm"),
     hairC: loc("uHairC"),
     hairH: loc("uHairHalf"),
     hairCos: loc("uHairCos"),
@@ -246,6 +254,14 @@ export function startEngine(opts: {
   const spriteTint = gl.getUniformLocation(spriteProg, "uTint");
   const spriteTintOn = gl.getUniformLocation(spriteProg, "uTintOn");
   const spriteLens = gl.getUniformLocation(spriteProg, "uLens");
+  const spriteMask = gl.getUniformLocation(spriteProg, "uMask");
+  const spriteHasMask = gl.getUniformLocation(spriteProg, "uHasMask");
+  const spriteOcclude = gl.getUniformLocation(spriteProg, "uOcclude");
+  const spriteResolution = gl.getUniformLocation(spriteProg, "uResolution");
+  const spriteHand0 = gl.getUniformLocation(spriteProg, "uHand0");
+  const spriteHand1 = gl.getUniformLocation(spriteProg, "uHand1");
+  const spriteHandR = gl.getUniformLocation(spriteProg, "uHandR");
+  const spriteHasHands = gl.getUniformLocation(spriteProg, "uHasHands");
 
   const originalError = console.error;
   console.error = (...args: unknown[]) => {
@@ -500,6 +516,13 @@ export function startEngine(opts: {
       });
   }
 
+  let worn: ReturnType<typeof clothingQuad> | null = null;
+  let wornId = "";
+  let sideL: Pt | null = null;
+  let sideR: Pt | null = null;
+  let bodySwapped = false;
+  let palmL: Pt | null = null;
+  let palmR: Pt | null = null;
   let switchKey = "";
   let switchStarted = 0;
   let switchMs: number | null = null;
@@ -591,20 +614,39 @@ export function startEngine(opts: {
     let shR: Pt | null = null;
     let hipL: Pt | null = null;
     let hipR: Pt | null = null;
+    let elL: Pt | null = null;
+    let elR: Pt | null = null;
+    let wrL: Pt | null = null;
+    let wrR: Pt | null = null;
+    gl.uniform1f(u.yaw, 0);
+    gl.uniform1f(u.frontArm, 0);
     if (poseOk && poseLm) {
-      shL = remember("shL", flip(poseLm[11]!));
-      shR = remember("shR", flip(poseLm[12]!));
+      const sided = stableSide(sideL, sideR, flip(poseLm[11]!), flip(poseLm[12]!));
+      sideL = sided.left;
+      sideR = sided.right;
+      bodySwapped = sided.swapped;
+      const limb = (leftIndex: number, rightIndex: number) => poseLm![sided.swapped ? rightIndex : leftIndex];
+      shL = remember("shL", sided.left);
+      shR = remember("shR", sided.right);
       const shoulderW = Math.hypot(shR.x - shL.x, shR.y - shL.y);
       const hipFallback = shoulderW * 1.05;
-      hipL = seen(poseLm[23], 0.15) ? remember("hipL", flip(poseLm[23]!)) : { x: shL.x, y: Math.min(0.98, shL.y + hipFallback) };
-      hipR = seen(poseLm[24], 0.15) ? remember("hipR", flip(poseLm[24]!)) : { x: shR.x, y: Math.min(0.98, shR.y + hipFallback) };
+      const hipSrcL = limb(23, 24);
+      const hipSrcR = limb(24, 23);
+      hipL = seen(hipSrcL, 0.15) ? remember("hipL", flip(hipSrcL!)) : { x: shL.x, y: Math.min(0.98, shL.y + hipFallback) };
+      hipR = seen(hipSrcR, 0.15) ? remember("hipR", flip(hipSrcR!)) : { x: shR.x, y: Math.min(0.98, shR.y + hipFallback) };
       if (hipL.y > 1.02) hipL = { ...hipL, y: Math.min(hipL.y, shL.y + shoulderW * 1.2) };
       if (hipR.y > 1.02) hipR = { ...hipR, y: Math.min(hipR.y, shR.y + shoulderW * 1.2) };
+      const hold = (key: string, src: Lm | undefined, fallback: Pt | null): Pt | null =>
+        src && seen(src, 0.2) ? remember(key, flip(src)) : (memory.get(key) ?? fallback);
+      elL = hold("elL", limb(13, 14), shL);
+      elR = hold("elR", limb(14, 13), shR);
+      wrL = hold("wrL", limb(15, 16), elL);
+      wrR = hold("wrR", limb(16, 15), elR);
+      const zL = poseWorld?.[sided.swapped ? 16 : 15]?.z;
+      const zR = poseWorld?.[sided.swapped ? 15 : 16]?.z;
+      gl.uniform1f(u.frontArm, zL != null && zR != null ? (zL < zR ? 1 : -1) : 0);
+      gl.uniform1f(u.yaw, torsoTurn(shL, shR, poseLm[0] && seen(poseLm[0], 0.1) ? flip(poseLm[0]) : null));
     }
-    const elL = poseLm && shL && seen(poseLm[13], 0.2) ? remember("elL", flip(poseLm[13]!)) : shL;
-    const elR = poseLm && shR && seen(poseLm[14], 0.2) ? remember("elR", flip(poseLm[14]!)) : shR;
-    const wrL = poseLm && elL && seen(poseLm[15], 0.2) ? remember("wrL", flip(poseLm[15]!)) : elL;
-    const wrR = poseLm && elR && seen(poseLm[16], 0.2) ? remember("wrR", flip(poseLm[16]!)) : elR;
     const fitProfile = getGarmentFitProfile(category);
     const proposedClothing =
       mode === "clothing" && isGarmentCategory(category) && fitProfile && shL && shR && hipL && hipR
@@ -614,8 +656,8 @@ export function startEngine(opts: {
             hipL,
             hipR,
             category: category as "shirt" | "jacket" | "dress" | "pants" | "skirt",
-            ankleL: poseLm && seen(poseLm[27], 0.2) ? remember("anL", flip(poseLm[27]!)) : null,
-            ankleR: poseLm && seen(poseLm[28], 0.2) ? remember("anR", flip(poseLm[28]!)) : null,
+            ankleL: poseLm && seen(poseLm[bodySwapped ? 28 : 27], 0.2) ? remember("anL", flip(poseLm[bodySwapped ? 28 : 27]!)) : null,
+            ankleR: poseLm && seen(poseLm[bodySwapped ? 27 : 28], 0.2) ? remember("anR", flip(poseLm[bodySwapped ? 27 : 28]!)) : null,
             scale: request.sizeScale,
             sleevesInPhoto: false,
           })
@@ -682,11 +724,19 @@ export function startEngine(opts: {
     }
     const shift = mode === "clothing" ? dragPt : { x: 0, y: 0 };
     const move = (p: Pt): Pt => ({ x: p.x + shift.x, y: p.y + shift.y });
-    if (clothing && shL && shR) {
-      vec(u.topL, move(clothing.topL));
-      vec(u.topR, move(clothing.topR));
-      vec(u.botL, move(clothing.botL));
-      vec(u.botR, move(clothing.botR));
+    const productKey = request.productId ?? request.image ?? "";
+    if (productKey !== wornId) {
+      worn = null;
+      wornId = productKey;
+    }
+    const fitted = clothing ? hugQuad(clothing, category as "shirt" | "jacket" | "dress" | "pants" | "skirt") : null;
+    const followed = fitted ? followQuad(worn, fitted) : null;
+    if (followed) worn = followed;
+    if (followed && shL && shR) {
+      vec(u.topL, move(followed.topL));
+      vec(u.topR, move(followed.topR));
+      vec(u.botL, move(followed.botL));
+      vec(u.botR, move(followed.botR));
       vec(u.shL, move(shL));
       vec(u.shR, move(shR));
       vec(u.elL, move(elL ?? shL));
@@ -694,8 +744,20 @@ export function startEngine(opts: {
       vec(u.elR, move(elR ?? shR));
       vec(u.wrR, move(wrR ?? elR ?? shR));
       const span = Math.hypot(shR.x - shL.x, shR.y - shL.y);
+      if (hasSleeves(category) && hipL && hipR) {
+        if (armIsHanging(shL, elL, span)) {
+          const hung = hangingSleeve(shL, hipL, -span * 0.18);
+          elL = hung.elbow;
+          wrL = hung.wrist;
+        }
+        if (armIsHanging(shR, elR, span)) {
+          const hung = hangingSleeve(shR, hipR, span * 0.18);
+          elR = hung.elbow;
+          wrR = hung.wrist;
+        }
+      }
       const arm = Math.hypot((elL ?? shL).x - shL.x, (elL ?? shL).y - shL.y);
-      gl.uniform1f(u.armW, Math.max(arm * 0.42, span * 0.2));
+      gl.uniform1f(u.armW, Math.max(arm * 0.46, span * 0.2));
       gl.uniform1f(u.hasArms, hasSleeves(category) && elL && wrL && elR && wrR ? 1 : 0);
     } else {
       gl.uniform1f(u.hasArms, 0);
@@ -709,8 +771,15 @@ export function startEngine(opts: {
 
     const palms: Pt[] = [];
     let handR = 0.06;
-    for (const hand of handLms) {
-      if (hand.length < 21 || !hand[9]) continue;
+    let orderedHands = handLms.filter((hand) => hand.length >= 21 && hand[9]);
+    if (orderedHands.length >= 2 && orderedHands[0]?.[9] && orderedHands[1]?.[9]) {
+      const sidedHands = stableSide(palmL, palmR, flip(orderedHands[0][9]!), flip(orderedHands[1][9]!));
+      palmL = sidedHands.left;
+      palmR = sidedHands.right;
+      if (sidedHands.swapped) orderedHands = [orderedHands[1]!, orderedHands[0]!];
+    }
+    for (const hand of orderedHands) {
+      if (!hand[9]) continue;
       palms.push(remember(`palm${palms.length}`, flip(hand[9])));
       if (hand[0] && hand[9]) {
         const reach = Math.hypot(hand[0].x - hand[9].x, hand[0].y - hand[9].y);
@@ -723,7 +792,7 @@ export function startEngine(opts: {
     gl.uniform1f(u.handR, handR);
 
     nailBuf.fill(0);
-    const segments = category === "nails" ? nailSegments(handLms.map((hand) => hand.map((lm) => flip(lm)))) : [];
+    const segments = category === "nails" ? nailSegments(orderedHands.map((hand) => hand.map((lm) => flip(lm)))) : [];
     segments.forEach((seg, i) => {
       nailBuf[i * 4] = seg.tip.x;
       nailBuf[i * 4 + 1] = seg.tip.y;
@@ -851,6 +920,16 @@ export function startEngine(opts: {
       gl.uniform3f(spriteTint, tint?.[0] ?? 1, tint?.[1] ?? 1, tint?.[2] ?? 1);
       gl.uniform1f(spriteTintOn, tint ? 1 : 0);
       gl.uniform1f(spriteLens, category === "glasses" ? 1 : 0);
+      gl.uniform2f(spriteResolution, canvas.width, canvas.height);
+      gl.uniform1f(spriteHasMask, hasMask ? 1 : 0);
+      gl.uniform1f(spriteOcclude, category === "wig" || category === "hat" || category === "necklace" ? 1 : 0);
+      gl.uniform1f(spriteHasHands, palms.length ? 1 : 0);
+      gl.uniform2f(spriteHand0, palms[0]?.x ?? -2, palms[0]?.y ?? -2);
+      gl.uniform2f(spriteHand1, palms[1]?.x ?? -2, palms[1]?.y ?? -2);
+      gl.uniform1f(spriteHandR, handR);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, maskTex);
+      gl.uniform1i(spriteMask, 2);
       gl.bindVertexArray(spriteVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, spriteBuf);
       const arr = new Float32Array(data);
@@ -998,7 +1077,11 @@ export function startEngine(opts: {
   function pumpSeg() {
     if (segInflight || !segReady || disposed || !frameSource()) return;
     const category = getRequest().category;
-    const needs = regionMode(category) === "clothing" || regionMode(category) === "hair";
+    const needs =
+      regionMode(category) === "clothing" ||
+      regionMode(category) === "hair" ||
+      category === "hat" ||
+      category === "necklace";
     if (!needs) return;
     const now = performance.now();
     const gap = cadenceMs(category, times.segment).segment;

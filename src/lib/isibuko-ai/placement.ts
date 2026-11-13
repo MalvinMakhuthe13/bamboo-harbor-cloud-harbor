@@ -29,18 +29,30 @@ export function allowsRegionPaint(opts: {
   inHairEllipse: boolean;
   inProtectedFace: boolean;
   nearHand: boolean;
+  /** Body-skin inside a shoulder-to-wrist arm, including where that arm crosses the torso. */
+  onArm?: boolean;
 }): boolean {
   if (opts.mode === "none") return false;
   if (opts.inProtectedFace) return false;
   // A tracked hand stays the camera, including where it crosses a garment.
   if (opts.mode === "clothing" && opts.nearHand) return false;
   if (opts.mode === "clothing") {
-    if (!opts.inGarment) return false;
-    if (opts.cls === CLASS.background || opts.cls === CLASS.hair || opts.cls === CLASS.face) return false;
-    return opts.cls === CLASS.clothes || opts.cls === CLASS.body || opts.cls === CLASS.other;
+    if (!opts.inGarment && !opts.onArm) return false;
+    if (opts.cls === CLASS.background || opts.cls === CLASS.hair || opts.cls === CLASS.face || opts.cls === CLASS.other) return false;
+    // A bare arm stays the person's arm. Cloth already on that arm can take the product sleeve.
+    if (opts.onArm) return opts.cls === CLASS.clothes;
+    return opts.cls === CLASS.clothes || opts.cls === CLASS.body;
   }
   if (!opts.inHairEllipse) return false;
   return true;
+}
+
+/** A cut-out plate must not cover the face or a hand that is in front of it. */
+export function spriteShowsCamera(opts: { category: Category | null; cls: number; nearHand: boolean; hasMask: boolean }): boolean {
+  if (!opts.hasMask) return false;
+  if (opts.category !== "wig" && opts.category !== "hat" && opts.category !== "necklace") return false;
+  if (opts.nearHand) return true;
+  return opts.cls === CLASS.face;
 }
 
 /** Segmented hair outside the protected face is cleared so the wig plate is the hair, not a sticker on top of it. */
@@ -181,6 +193,108 @@ export function clothingQuad(opts: {
   return { topL, topR, botL, botR };
 }
 
+/** Pulls the product photograph onto the torso. Shoulders sit inside the arm, and a shirt narrows toward the waist. */
+export function hugQuad(quad: Quad, category: "shirt" | "jacket" | "dress" | "pants" | "skirt"): Quad {
+  const toward = (from: Pt, to: Pt, amount: number): Pt => ({
+    x: from.x + (to.x - from.x) * amount,
+    y: from.y + (to.y - from.y) * amount,
+  });
+  const top = mid(quad.topL, quad.topR);
+  const bot = mid(quad.botL, quad.botR);
+  // A shirt has to cover the shoulder caps of the clothes already being worn.
+  // Pulling it inside the joints leaves those sleeves showing.
+  const topIn = category === "shirt" || category === "jacket" ? -0.22 : category === "pants" ? 0.06 : category === "skirt" ? 0.16 : 0.02;
+  const botIn = category === "shirt" || category === "jacket" ? 0.02 : category === "dress" || category === "skirt" ? 0.04 : category === "pants" ? 0.12 : 0.08;
+  return {
+    topL: toward(quad.topL, top, topIn),
+    topR: toward(quad.topR, top, topIn),
+    botL: toward(quad.botL, bot, botIn),
+    botR: toward(quad.botR, bot, botIn),
+  };
+}
+
+/** Keeps the left limb on the left. A one-frame detector swap is rejected. */
+export function stableSide(prevL: Pt | null, prevR: Pt | null, nextL: Pt, nextR: Pt): { left: Pt; right: Pt; swapped: boolean } {
+  if (!prevL || !prevR) return { left: nextL, right: nextR, swapped: false };
+  const direct = dist(prevL, nextL) + dist(prevR, nextR);
+  const crossed = dist(prevL, nextR) + dist(prevR, nextL);
+  if (crossed + 0.02 < direct) return { left: nextR, right: nextL, swapped: true };
+  return { left: nextL, right: nextR, swapped: false };
+}
+
+/**
+ * Where the front of a flat-lay garment lands. `across` is -1..1 on the chest,
+ * `down` is 0 at the shoulders. The collar opening is not placed on the throat.
+ * A turn slides along the front panel and stops before the sleeves or the back.
+ */
+export function wornFrontTex(across: number, down: number, yaw: number): { u: number; v: number } | null {
+  if (down < 0 || down > 1 || Math.abs(across) > 0.96) return null;
+  if (down < 0.08 && Math.abs(across) < 0.12) return null;
+  const slide = Math.max(-0.85, Math.min(0.85, yaw));
+  const side = Math.max(-0.5, Math.min(0.5, across * 0.55 - slide * 0.18));
+  let u = 0.3 + (side + 0.5) * (0.7 - 0.3);
+  u += Math.sin(down * 24 + across * 5) * 0.012 * Math.abs(slide);
+  u = Math.max(0.3, Math.min(0.7, u));
+  const v = down < 0.08 ? 0.02 + (down / 0.08) * 0.1 : 0.16 + ((down - 0.08) / 0.92) * 0.78;
+  return { u, v };
+}
+
+export function armIsHanging(shoulder: Pt, elbow: Pt | null, span: number): boolean {
+  if (!elbow) return true;
+  return dist(shoulder, elbow) < Math.max(span, 0.05) * 0.22;
+}
+
+/** A sleeve for an arm that hangs beside the body, outside the shirt the person already has on. */
+export function hangingSleeve(shoulder: Pt, hip: Pt, outward: number): { elbow: Pt; wrist: Pt } {
+  const drop = Math.max(hip.y - shoulder.y, 0.18);
+  return {
+    elbow: { x: shoulder.x + outward, y: shoulder.y + drop * 0.5 },
+    wrist: { x: shoulder.x + outward * 1.15, y: shoulder.y + drop * 0.98 },
+  };
+}
+
+/** The product keeps its colour. Creases come from the shirt already on the body. */
+export function wornLight(product: number, camera: number, around: number): number {
+  const wrinkle = (camera - around) * 7;
+  const form = (around - 0.62) * 0.9;
+  const scale = Math.min(1.3, Math.max(0.5, 0.9 + wrinkle + form));
+  return product * scale;
+}
+
+export function torsoTurn(shL: Pt, shR: Pt, nose: Pt | null): number {
+  if (!nose) return 0;
+  const span = Math.max(dist(shL, shR), 0.05);
+  const mid = (shL.x + shR.x) / 2;
+  return Math.max(-1, Math.min(1, (nose.x - mid) / (span * 0.5)));
+}
+
+/**
+ * The shoulders take the new pose first. The hem catches up over the next frames,
+ * and it cannot drift farther than a fraction of the torso. This is the product
+ * photograph following the body. It does not generate new cloth.
+ */
+export function followQuad(prev: Quad | null, next: Quad, lead = 0.84, trail = 0.62, maxLag = 0.07): Quad {
+  if (!prev) return next;
+  const torso = Math.max(dist(next.topL, next.botL), dist(next.topR, next.botR), dist(mid(next.topL, next.topR), mid(next.botL, next.botR)), 0.08);
+  const limit = torso * maxLag;
+  const step = (from: Pt, to: Pt, alpha: number, cap: number): Pt => {
+    const x = from.x + (to.x - from.x) * alpha;
+    const y = from.y + (to.y - from.y) * alpha;
+    const dx = x - to.x;
+    const dy = y - to.y;
+    const d = Math.hypot(dx, dy);
+    if (d <= cap || d < 1e-6) return { x, y };
+    const s = cap / d;
+    return { x: to.x + dx * s, y: to.y + dy * s };
+  };
+  return {
+    topL: step(prev.topL, next.topL, lead, limit * 0.35),
+    topR: step(prev.topR, next.topR, lead, limit * 0.35),
+    botL: step(prev.botL, next.botL, trail, limit),
+    botR: step(prev.botR, next.botR, trail, limit),
+  };
+}
+
 /** u across the torso (−1…1) and v down the torso (0…1). Null when outside. */
 export function torsoUv(p: Pt, quad: Quad): { u: number; v: number } | null {
   const top = mid(quad.topL, quad.topR);
@@ -197,7 +311,7 @@ export function torsoUv(p: Pt, quad: Quad): { u: number; v: number } | null {
   const halfW = halfT + (halfB - halfT) * clamped;
   const midP = { x: top.x + n.x * len * clamped, y: top.y + n.y * len * clamped };
   const u = ((p.x - midP.x) * side.x + (p.y - midP.y) * side.y) / Math.max(halfW, 1e-4);
-  if (v < 0.0 || v > 1.04 || Math.abs(u) > 1.02) return null;
+  if (v < 0.0 || v > 1.0 || Math.abs(u) > 0.96) return null;
   return { u, v };
 }
 
