@@ -105,15 +105,15 @@ vec2 torsoSample(vec2 p) {
   // The open collar in the product photo is the inside of the neck. Leave that
   // throat as the person, and map only the front panel below it. A turn slides
   // along that front panel. It never reaches the sleeves or the back.
-  if (v < 0.14 && abs(u) < 0.22) return vec2(-1.0);
+  if (v < 0.08 && abs(u) < 0.12) return vec2(-1.0);
   float slide = clamp(uYaw, -0.85, 0.85);
   float across = clamp(u * 0.55 - slide * 0.18, -0.5, 0.5);
-  float tu = mix(0.36, 0.64, across + 0.5);
+  float tu = mix(0.30, 0.70, across + 0.5);
   tu += sin(v * 24.0 + u * 5.0) * 0.012 * abs(slide);
-  tu = clamp(tu, 0.36, 0.64);
-  float bodyV = mix(0.2, 0.94, clamp((v - 0.14) / 0.86, 0.0, 1.0));
-  float collarV = mix(0.02, 0.1, clamp(v / 0.14, 0.0, 1.0));
-  float tv = v < 0.14 ? collarV : bodyV;
+  tu = clamp(tu, 0.30, 0.70);
+  float bodyV = mix(0.16, 0.94, clamp((v - 0.08) / 0.92, 0.0, 1.0));
+  float collarV = mix(0.02, 0.12, clamp(v / 0.08, 0.0, 1.0));
+  float tv = v < 0.08 ? collarV : bodyV;
   return vec2(tu, 1.0 - tv);
 }
 
@@ -226,6 +226,9 @@ void main() {
       vec4 prod = texture(uProd, uv);
       float green = prod.g - max(prod.r, prod.b);
       if (green > 0.22 && prod.g > 0.25) prod.a = 0.0;
+      float peak = max(prod.r, max(prod.g, prod.b));
+      float sat = peak - min(prod.r, min(prod.g, prod.b));
+      if (peak < 0.09 && sat < 0.06) prod.a = 0.0;
       if (prod.a > 0.2) {
         float edge = 1.0;
         if (clsAt(camUv + vec2(0.008, 0.0)) < 0.5) edge = min(edge, 0.45);

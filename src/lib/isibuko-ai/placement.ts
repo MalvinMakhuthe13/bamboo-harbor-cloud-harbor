@@ -166,8 +166,10 @@ export function hugQuad(quad: Quad, category: "shirt" | "jacket" | "dress" | "pa
   });
   const top = mid(quad.topL, quad.topR);
   const bot = mid(quad.botL, quad.botR);
-  const topIn = category === "pants" ? 0.06 : category === "skirt" ? 0.16 : 0.1;
-  const botIn = category === "dress" || category === "skirt" ? 0.04 : category === "pants" ? 0.12 : 0.22;
+  // A shirt has to cover the shoulder caps of the clothes already being worn.
+  // Pulling it inside the joints leaves those sleeves showing.
+  const topIn = category === "shirt" || category === "jacket" ? -0.12 : category === "pants" ? 0.06 : category === "skirt" ? 0.16 : 0.02;
+  const botIn = category === "shirt" || category === "jacket" ? 0.02 : category === "dress" || category === "skirt" ? 0.04 : category === "pants" ? 0.12 : 0.08;
   return {
     topL: toward(quad.topL, top, topIn),
     topR: toward(quad.topR, top, topIn),
@@ -192,17 +194,29 @@ export function stableSide(prevL: Pt | null, prevR: Pt | null, nextL: Pt, nextR:
  */
 export function wornFrontTex(across: number, down: number, yaw: number): { u: number; v: number } | null {
   if (down < 0 || down > 1 || Math.abs(across) > 0.96) return null;
-  if (down < 0.14 && Math.abs(across) < 0.22) return null;
+  if (down < 0.08 && Math.abs(across) < 0.12) return null;
   const slide = Math.max(-0.85, Math.min(0.85, yaw));
   const side = Math.max(-0.5, Math.min(0.5, across * 0.55 - slide * 0.18));
-  let u = 0.36 + (side + 0.5) * (0.64 - 0.36);
+  let u = 0.3 + (side + 0.5) * (0.7 - 0.3);
   u += Math.sin(down * 24 + across * 5) * 0.012 * Math.abs(slide);
-  u = Math.max(0.36, Math.min(0.64, u));
-  const v = down < 0.14 ? 0.02 + (down / 0.14) * 0.08 : 0.2 + ((down - 0.14) / 0.86) * 0.74;
+  u = Math.max(0.3, Math.min(0.7, u));
+  const v = down < 0.08 ? 0.02 + (down / 0.08) * 0.1 : 0.16 + ((down - 0.08) / 0.92) * 0.78;
   return { u, v };
 }
 
-/** Nose relative to the shoulder line. Positive turns toward the right shoulder. */
+export function armIsHanging(shoulder: Pt, elbow: Pt | null, span: number): boolean {
+  if (!elbow) return true;
+  return dist(shoulder, elbow) < Math.max(span, 0.05) * 0.22;
+}
+
+/** A sleeve for an arm that hangs beside the body, outside the shirt the person already has on. */
+export function hangingSleeve(shoulder: Pt, hip: Pt, outward: number): { elbow: Pt; wrist: Pt } {
+  const drop = Math.max(hip.y - shoulder.y, 0.18);
+  return {
+    elbow: { x: shoulder.x + outward, y: shoulder.y + drop * 0.5 },
+    wrist: { x: shoulder.x + outward * 1.15, y: shoulder.y + drop * 0.98 },
+  };
+}
 export function torsoTurn(shL: Pt, shR: Pt, nose: Pt | null): number {
   if (!nose) return 0;
   const span = Math.max(dist(shL, shR), 0.05);

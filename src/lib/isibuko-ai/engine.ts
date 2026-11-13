@@ -1,5 +1,6 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
 import {
+  armIsHanging,
   braceletSprite,
   clothingQuad,
   earringSprite,
@@ -7,6 +8,7 @@ import {
   glassesSprite,
   hugQuad,
   hairFrame,
+  hangingSleeve,
   hasSleeves,
   hatSprite,
   nailSegments,
@@ -627,8 +629,20 @@ export function startEngine(opts: {
       vec(u.elR, move(elR ?? shR));
       vec(u.wrR, move(wrR ?? elR ?? shR));
       const span = Math.hypot(shR.x - shL.x, shR.y - shL.y);
+      if (hasSleeves(category) && hipL && hipR) {
+        if (armIsHanging(shL, elL, span)) {
+          const hung = hangingSleeve(shL, hipL, -span * 0.18);
+          elL = hung.elbow;
+          wrL = hung.wrist;
+        }
+        if (armIsHanging(shR, elR, span)) {
+          const hung = hangingSleeve(shR, hipR, span * 0.18);
+          elR = hung.elbow;
+          wrR = hung.wrist;
+        }
+      }
       const arm = Math.hypot((elL ?? shL).x - shL.x, (elL ?? shL).y - shL.y);
-      gl.uniform1f(u.armW, Math.max(arm * 0.28, span * 0.12));
+      gl.uniform1f(u.armW, Math.max(arm * 0.46, span * 0.2));
       gl.uniform1f(u.hasArms, hasSleeves(category) && elL && wrL && elR && wrR ? 1 : 0);
     } else {
       gl.uniform1f(u.hasArms, 0);
