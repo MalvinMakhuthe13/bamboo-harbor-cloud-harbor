@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Stage } from "@/components/mirror/Stage";
 import { CameraTest } from "@/components/mirror/CameraTest";
+import { CaptureDebug } from "@/components/mirror/CaptureDebug";
+import { PerfOverlay } from "@/components/mirror/PerfOverlay";
 import { Nav } from "@/components/site/Nav";
 import { CATEGORY_LABEL, CATEGORY_ORDER, findProduct, productsIn } from "@/lib/isibuko-ai/catalog";
 import { conditionProduct } from "@/lib/isibuko-ai/condition";
@@ -18,7 +20,7 @@ import {
   FIELD_LABEL,
   ORIGIN_LABEL,
 } from "@/lib/isibuko-ai/product-facts";
-import { matchSize, sizeScaleFor } from "@/lib/isibuko-ai/fit";
+import { sizeScaleFor } from "@/lib/isibuko-ai/fit";
 import { useWardrobe } from "@/lib/isibuko-ai/store";
 import type {
   Category,
@@ -28,11 +30,18 @@ import type {
   TryEvent,
 } from "@/lib/isibuko-ai/types";
 
-type Search = { product?: string };
+type Search = { product?: string; dev?: string };
+
+function devFlag(value: unknown): "1" | undefined {
+  if (value === "1" || value === 1 || value === true) return "1";
+  if (Array.isArray(value) && devFlag(value[0]) === "1") return "1";
+  return undefined;
+}
 
 export const Route = createFileRoute("/mirror")({
   validateSearch: (search: Record<string, unknown>): Search => ({
     product: typeof search.product === "string" ? search.product : undefined,
+    dev: devFlag(search.dev),
   }),
   component: MirrorPage,
 });
@@ -49,7 +58,6 @@ function MirrorPage() {
   const [metrics, setMetrics] = useState<LiveMetrics | null>(null);
   const [handoff, setHandoff] = useState(false);
   const [emptyNote, setEmptyNote] = useState("");
-  const [height, setHeight] = useState(data.heightCm);
   const [switches, setSwitches] = useState(0);
   const [sessionSeen, setSessionSeen] = useState<number | null>(null);
   const [fitHelp, setFitHelp] = useState(false);
@@ -58,10 +66,6 @@ function MirrorPage() {
   const controlsRef = useRef<{ setDelegate: (delegate: "CPU" | "GPU") => void } | null>(null);
   const active = findProduct(data.products, productId);
   const swatch = active.swatches.find((item) => item.id === swatchId) ?? active.swatches[0];
-  const fit = useMemo(
-    () => (metrics ? matchSize(active.sizes, metrics.body) : null),
-    [active.sizes, metrics],
-  );
   const chestCm = metrics?.body.chestCm ?? null;
   const waistCm = metrics?.body.waistCm ?? null;
   const shoulderCm = metrics?.body.shoulderCm ?? null;
@@ -133,8 +137,12 @@ function MirrorPage() {
     tint: swatch?.tint ?? null,
     sizeScale: sizeScaleFor(sizeLabel),
     nail: active.nail,
-    heightCm: height,
+    nailSite: active.nailSite,
+    nailFinish: active.nailFinish,
+    heightCm: null,
     fittingAnchors: active.fittingAnchors,
+    sleeve: active.sleeve,
+    neckline: active.neckline,
   });
   requestRef.current = {
     productId: active.id,
@@ -143,8 +151,12 @@ function MirrorPage() {
     tint: swatch?.tint ?? null,
     sizeScale: sizeScaleFor(sizeLabel),
     nail: active.nail,
-    heightCm: height,
+    nailSite: active.nailSite,
+    nailFinish: active.nailFinish,
+    heightCm: null,
     fittingAnchors: active.fittingAnchors,
+    sleeve: active.sleeve,
+    neckline: active.neckline,
   };
   const dragRef = useRef<Drag>({ x: 0, y: 0, hold: false });
 
@@ -190,7 +202,7 @@ function MirrorPage() {
   return (
     <main className="flex h-dvh flex-col bg-ink text-paper">
       <Nav tone="ink" />
-      <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid min-h-0 min-w-0 flex-1 md:grid-cols-[minmax(0,1fr)_22rem]">
         <Stage
           requestRef={requestRef}
           dragRef={dragRef}
@@ -198,7 +210,7 @@ function MirrorPage() {
           onMetrics={setMetrics}
           onStatus={setStatus}
         />
-        <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto border-t border-line bg-ink-2 px-4 py-4 md:border-t-0 md:border-l">
+        <aside className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto border-t border-line bg-ink-2 px-4 py-4 md:border-t-0 md:border-l">
           <p className="text-sm text-brass-2">{status}</p>
           <div className="flex flex-wrap gap-2">
             {CATEGORY_ORDER.map((category) => (
@@ -260,20 +272,20 @@ function MirrorPage() {
                   className={`min-h-11 rounded-full px-3 text-sm ${row.label === sizeLabel ? "bg-paper text-ink" : "bg-ink text-muted"}`}
                 >
                   {row.label}
-                  {fit?.size === row.label ? " · suggested" : ""}
                 </button>
               ))}
             </div>
           )}
-          {fit?.warning && <p className="text-sm text-clay">{fit.warning}</p>}
-          {fit?.detail && <p className="text-sm text-muted">{fit.detail}</p>}
+          <p className="text-sm text-muted">
+            These buttons scale the photograph on the tracked body. They are not a clothing size, and the camera is not a tape measure.
+          </p>
           <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
               checked={fitHelp}
               onChange={(event) => setFitHelp(event.target.checked)}
             />
-            Fit help, off by default. Measurements stay on this device.
+            Fit help stays off. This mirror does not turn the camera into a clothing size.
           </label>
           <div aria-live="polite" aria-atomic="true">
             {fitHelp && advice && (
@@ -318,40 +330,21 @@ function MirrorPage() {
               </div>
             )}
           </div>
-          <label className="text-sm text-muted">
-            Height in centimetres
-            <input
-              className="mt-1 min-h-11 w-full rounded-xl border border-line bg-ink px-3 text-paper"
-              type="number"
-              min={120}
-              max={220}
-              value={height}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                setHeight(next);
-              }}
-              onBlur={async () => {
-                if (!Number.isFinite(height) || height < 120 || height > 220) {
-                  setStatus("Enter a height between 120 and 220 cm.");
-                  return;
-                }
-
-                try {
-                  await commit((current) => ({
-                    ...current,
-                    heightCm: height,
-                  }));
-                  setStatus("Height saved.");
-                } catch (error) {
-                  setStatus(
-                    error instanceof Error
-                      ? `Height could not be saved: ${error.message}`
-                      : "Height could not be saved.",
-                  );
-                }
-              }}
-            />
-          </label>
+          {active.category === "wig" && (
+            <p className="text-sm text-muted">
+              Shake or tilt your head, or flick it. The left, centre and right of the length answer at different times, then settle. Pass a hand through it and it gives way. The hairline stays on your forehead. This is a spring on the photograph, not grown hair.
+            </p>
+          )}
+          {active.category === "nails" && active.nailSite === "toes" && (
+            <p className="text-sm text-muted">
+              Toenails are estimated, not a measured pedicure. Show the top of a bare foot. One plate follows the foot-index landmark. The other four are spaced beside it and are not tracked toes. A side view will not place them.
+            </p>
+          )}
+          {active.category === "nails" && active.nailSite !== "toes" && (
+            <p className="text-sm text-muted">
+              Manicure. Each plate follows a fingertip from the hand tracker. Both hands are used when they are in frame. Bring the fingertips into view.
+            </p>
+          )}
           <p className="text-sm text-muted">{metrics?.body.note}</p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -415,6 +408,8 @@ function MirrorPage() {
             switches={switches}
             onDelegate={(delegate) => controlsRef.current?.setDelegate(delegate)}
           />
+          {import.meta.env.DEV && search.dev === "1" ? <CaptureDebug /> : null}
+          {import.meta.env.DEV && search.dev === "1" ? <PerfOverlay metrics={metrics} /> : null}
           <p className="text-sm text-muted">
             Changing product, colour, or size does not stop the camera. The studio photo is only a
             labelled test. Picture fps is the display. The hertz numbers are how often each model

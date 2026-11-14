@@ -37,8 +37,10 @@ node --experimental-strip-types --test \
 npm run build
 ```
 
-`npm test` also runs the app-template scripts. Eight of those OG-card injector tests fail on this branch and are not mirror regressions. See `docs/ISIBUKO_RELEASE_CANDIDATE.md`.
+`npm test` also runs the app-template scripts. On this line those scripts passed, with four skipped by their own guards. See `docs/ISIBUKO_RELEASE_CANDIDATE.md`.
+
+Developer commands that do not train, upload, or download weights: `npm run train:prepare`, `npm run train:synthetic`, `npm run train:kaggle-pack`, `npm run train:eval`, and `npm run train:import`. The landmark recorder is only on `/mirror?dev=1` in a development build. `docs/ISIBUKO_TRAINING_PLAN.md` describes them.
 
 ## Honest limit
 
-A webcam and a person were not available in the build environment. The studio photograph is a labelled test, not a live camera. Stop ends the session and releases the camera tracks; starting again opens a new session. Skirts and bracelets have a placement path and a merchant upload, and no house photograph yet. Generative try-on is specified and refused until a checkpoint exists. The production preview must serve `.wasm` as `application/wasm` and must not Brotli-compress the tracker binaries on the fly, or MediaPipe never finishes loading.
+A webcam and a person were not available in the build environment. The studio photograph is a labelled test, not a live camera. Stop ends the session and releases the camera tracks; starting again opens a new session. Skirts and bracelets have a placement path, and the catalogue includes a labelled studio drawing for each so they can be tried without a merchant upload. Those drawings are not merchant photographs. Generative try-on is specified and refused until a checkpoint exists. The production preview must serve `.wasm` as `application/wasm` and must not Brotli-compress the tracker binaries on the fly, or MediaPipe never finishes loading.

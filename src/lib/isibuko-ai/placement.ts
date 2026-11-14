@@ -387,7 +387,7 @@ export function inEllipse(p: Pt, center: Pt, halfW: number, halfH: number, rot: 
   return nx * nx + ny * ny <= 1;
 }
 
-export type Sprite = { cx: number; cy: number; w: number; h: number; rot: number };
+export type Sprite = { cx: number; cy: number; w: number; h: number; rot: number; hemX?: number; hemY?: number; hemLeftX?: number; hemRightX?: number };
 
 export function glassesSprite(eyeL: Pt, eyeR: Pt, imageAspect: number, scale: number): Sprite {
   const left = eyeL.x <= eyeR.x ? eyeL : eyeR;
@@ -406,14 +406,18 @@ export function glassesSprite(eyeL: Pt, eyeR: Pt, imageAspect: number, scale: nu
 
 export function wigSprite(forehead: Pt, chin: Pt, cheekL: Pt, cheekR: Pt, imageAspect: number, scale: number, opening = 0.16, holeFrac = 0.26): Sprite {
   const faceW = Math.max(dist(cheekL, cheekR), 1e-4);
+  const faceH = Math.max(Math.abs(chin.y - forehead.y), faceW);
   const left = cheekL.x <= cheekR.x ? cheekL : cheekR;
   const right = cheekL.x <= cheekR.x ? cheekR : cheekL;
   const w = (faceW * 0.92 * scale) / Math.max(holeFrac, 0.08);
   const h = w * imageAspect;
   const rot = Math.atan2(right.y - left.y, right.x - left.x);
+  // `opening` is the face hole in the photograph. Drop it just onto the brow
+  // so the fringe meets the forehead instead of floating above the head.
+  const holeOnBrow = forehead.y + faceH * 0.08;
   return {
     cx: (left.x + right.x) / 2,
-    cy: forehead.y + h * (0.5 - opening),
+    cy: holeOnBrow + h * (0.5 - opening),
     w,
     h,
     rot,
@@ -433,11 +437,14 @@ export function earringSprite(ear: Pt, faceW: number, imageAspect: number, scale
 
 export function hatSprite(forehead: Pt, cheekL: Pt, cheekR: Pt, eyeRot: number, imageAspect: number, scale: number, cap: boolean): Sprite {
   const faceW = Math.max(dist(cheekL, cheekR), 1e-4);
-  const w = faceW * (cap ? 1.55 : 1.75) * scale;
+  const w = faceW * (cap ? 1.7 : 2.15) * scale;
   const h = w * imageAspect;
+  // The brim is the lower part of the photograph. Seat that line on the forehead.
+  // 0.22 left the fedora crown over the eyes. 0.46 puts the brim on the brow.
+  const brimBelowCentre = cap ? 0.36 : 0.46;
   return {
     cx: forehead.x,
-    cy: forehead.y - h * 0.18,
+    cy: forehead.y - h * brimBelowCentre,
     w,
     h,
     rot: eyeRot,
@@ -498,26 +505,85 @@ export function ringSprite(dip: Pt, tip: Pt, imageAspect: number, scale: number)
 const TIP = [4, 8, 12, 16, 20];
 const DIP = [3, 7, 11, 15, 19];
 
+export type NailPlate = { tip: Pt; base: Pt; estimated: boolean };
+
 export function nailSegments(hands: Pt[][]): { tip: Pt; base: Pt }[] {
-  const out: { tip: Pt; base: Pt }[] = [];
+  return fingerNailPlates(hands).map(({ tip, base }) => ({ tip, base }));
+}
+
+/**
+ * One plate per visible fingertip. The width follows that finger's own
+ * distal segment, so a longer finger gets a larger plate. A closer finger
+ * (smaller landmark z, the MediaPipe convention) hides a nail it covers.
+ * This is the hand tracker, not a nail detector.
+ */
+export function fingerNailPlates(hands: (Pt & { z?: number })[][]): NailPlate[] {
+  const plates: (NailPlate & { z: number })[] = [];
   for (const hand of hands) {
     if (hand.length < 21) continue;
     for (let i = 0; i < TIP.length; i++) {
       const tip = hand[TIP[i]!];
       const base = hand[DIP[i]!];
       if (!tip || !base) continue;
-      out.push({ tip, base });
+      if (dist(tip, base) < 1e-4) continue;
+      plates.push({ tip, base, estimated: false, z: tip.z ?? 0 });
     }
   }
-  return out.slice(0, 10);
+  const visible = plates.filter((plate, index) => {
+    return !plates.some((other, otherIndex) => {
+      if (otherIndex === index) return false;
+      if (!(other.z < plate.z - 0.01)) return false;
+      const reach = dist(other.base, other.tip) * 0.7;
+      return dist(plate.tip, other.tip) < reach;
+    });
+  });
+  return visible.slice(0, 10).map(({ tip, base, estimated }) => ({ tip, base, estimated }));
 }
 
-export function nailShapeFactors(shape: NailShape): { half: number; start: number; tip: number } {
+/**
+ * MediaPipe pose has an ankle, a heel, and one foot-index point. It has no
+ * toe landmarks. The first plate sits on that foot-index point. The other
+ * four are spaced beside it along the foot and are estimates, not tracked toes.
+ * Returns null when the foot is too small or the three points do not form a foot.
+ */
+export function estimateToeNails(foot: { ankle: Pt; heel: Pt; footIndex: Pt }): NailPlate[] | null {
+  const points = [foot.ankle, foot.heel, foot.footIndex];
+  if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) return null;
+  const axis = { x: foot.footIndex.x - foot.heel.x, y: foot.footIndex.y - foot.heel.y };
+  const length = Math.hypot(axis.x, axis.y);
+  if (length < 0.04 || length > 0.55) return null;
+  const ankleOff = Math.hypot(foot.ankle.x - foot.heel.x, foot.ankle.y - foot.heel.y);
+  if (ankleOff < length * 0.15) return null;
+  const dir = { x: axis.x / length, y: axis.y / length };
+  let perp = { x: -dir.y, y: dir.x };
+  const ankleSide = (foot.ankle.x - foot.heel.x) * perp.x + (foot.ankle.y - foot.heel.y) * perp.y;
+  if (ankleSide > 0) perp = { x: -perp.x, y: -perp.y };
+  const span = length * 0.38;
+  const plate = length * 0.18;
+  const out: NailPlate[] = [];
+  for (let i = 0; i < 5; i++) {
+    const across = (i / 4) * span;
+    const shrink = 1 - i * 0.1;
+    const center = {
+      x: foot.footIndex.x + perp.x * across,
+      y: foot.footIndex.y + perp.y * across,
+    };
+    out.push({
+      tip: { x: center.x + dir.x * plate * 0.42 * shrink, y: center.y + dir.y * plate * 0.42 * shrink },
+      base: { x: center.x - dir.x * plate * 0.58 * shrink, y: center.y - dir.y * plate * 0.58 * shrink },
+      estimated: i !== 0,
+    });
+  }
+  return out;
+}
+
+export function nailShapeFactors(shape: NailShape): { half: number; start: number; tip: number; taper: number } {
   // Hand landmarks span the distal finger segment, not the nail plate itself.
   // Keep polish on the fingertip and stop before it spills beyond the fingertip.
-  if (shape === "square") return { half: 0.13, start: 0.48, tip: 0.94 };
-  if (shape === "stiletto") return { half: 0.105, start: 0.45, tip: 0.98 };
-  return { half: 0.12, start: 0.46, tip: 0.96 };
+  // taper is how narrow the free edge is compared with the cuticle. Square stays wide.
+  if (shape === "square") return { half: 0.14, start: 0.5, tip: 0.92, taper: 0.94 };
+  if (shape === "stiletto") return { half: 0.1, start: 0.42, tip: 0.98, taper: 0.4 };
+  return { half: 0.12, start: 0.46, tip: 0.96, taper: 0.62 };
 }
 
 export function containPoint(opts: {

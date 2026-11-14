@@ -2,13 +2,12 @@ name: Isibuko CI
 
 on:
   pull_request:
-    branches:
-      - integration/isibuko-unified
-      - build/isibuko-full-force-2026-11-11
   push:
     branches:
       - integration/isibuko-unified
       - build/isibuko-full-force-2026-11-11
+      - grok/isibuko-worn-merge-2026-11-14
+      - cursor/isibuko-live-fit-fac2
 
 permissions:
   contents: read
@@ -45,4 +44,4 @@ jobs:
         run: npm run lint
 
       - name: Build application bundle
-        run: npm run build:dev
+        run: npm run build

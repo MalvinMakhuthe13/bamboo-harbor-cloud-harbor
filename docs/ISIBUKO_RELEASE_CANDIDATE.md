@@ -24,6 +24,16 @@ Branch `build/isibuko-decart-inspired-live-experience`. This is an engineering r
 
 Nothing was removed from the live composite. The older `/studio` page was left in place.
 
+## Geometric fit on this line
+
+The live picture is still MediaPipe tracking plus a WebGL composite of the product photograph. It is not cloth simulation and it is not a generative frame.
+
+- Torso width at the chest, waist, and hip follows the pose and the segmentation mask, and a portrait that loses the hips keeps the last torso length instead of pulling the collar down.
+- A stated sleeveless, short, or long cut decides whether sleeve triangles are built. Clothes pixels on a bare arm are filled with a neighbouring body-class colour from the same frame. That fill is not a reconstructed arm.
+- Landmark smoothing takes a larger step while the body is moving and a smaller step while it is still. The hem takes a small lateral offset from shoulder velocity and tilt, then settles. Fold shading and a webcam colour cast stay inside the garment shader, with a darker band at the collar and hem.
+- A wig plate is clipped to the hair class so the rectangular photograph does not sit on the background as a box. Hats, glasses, earrings, necklaces, watches, bracelets, rings, skirts, trousers, dresses, and nails use the same steadier landmarks.
+- `readyForModel` stays false. No weights are downloaded. Camera frames still do not leave the browser.
+
 ## Category matrix
 
 | Category | In the mirror | What it actually does | Not true |
@@ -31,11 +41,11 @@ Nothing was removed from the live composite. The older `/studio` page was left i
 | Shirts, coats | Yes, house photos | Replaces segmented torso and, for sleeves, the arms. A tracked hand stays the camera | Not a drape or a diffusion frame |
 | Dresses | Yes | Same body replacement, longer, no extra sleeves | Not cloth simulation |
 | Trousers | Yes | Waist to ankle when the legs are in frame | A chest-up photo cannot show them |
-| Skirts | Path only | Waist to mid-thigh, no sleeves | No house photo. Not validated on a person |
+| Skirts | Yes, studio sample drawing | Waist to mid-thigh, no sleeves. The drawing is not a merchant photograph | Not validated on a person. Not cloth simulation |
 | Hair | Yes, three plates | Clears segmented hair outside the face, then draws the plate | Not a new hair mesh. Backdrop fill is approximate |
 | Glasses, hats, earrings, necklaces | Yes | Landmark sprites | Approximate scale, not a scan |
 | Watches | Yes | Sprite on the wrist pose | Needs the wrist in frame |
-| Bracelets | Path only | Narrower band further along the forearm than the watch | No house photo. Not validated on a person |
+| Bracelets | Yes, studio sample drawing | Narrower band further along the forearm than the watch. The drawing is not a merchant photograph | Not validated on a person |
 | Rings, nails | Yes | Finger landmarks and nail tint | Needs a visible hand. Hands were 0 on the studio still |
 
 ## Functional, partial, prototype
@@ -100,7 +110,7 @@ Passed here:
 - Isibuko node tests, invoked directly: 39 tests, 0 failures. They cover placement, fit, the schedule, the camera session, privacy, the merchant draft, the adapter refusal, the shirt foundation, and the shirt experiment.
 - `npm run build`
 
-`npm test` exits 1 before those node tests, because the script stops on the first suite and eight pre-existing OG-card injector tests fail:
+`npm test` on this line runs the script suite and then the node suite. The eight OG-card injector cases named below pass here. They were not weakened and they were not skipped. Four other script tests are skipped by their own guards. The names that used to fail on an earlier record were:
 
 - platform chrome overwrites share-card metas and always sets og:title
 - published grok.me slug is still a title fallback
@@ -111,7 +121,7 @@ Passed here:
 - streaming injector matches `</HEAD>` case-insensitively
 - uses the app name in the injected title tag
 
-The scripts suite was 197 tests, 189 pass, 8 fail. They were not disabled. No test was skipped. A real person was not available.
+On this line the script suite was 198 tests, 194 pass, 4 skipped by their own guards, 0 fail. The node suite was 368 tests, 0 fail. A real person was not available. Developer commands that do not train are in `docs/ISIBUKO_TRAINING_PLAN.md`. A studio-still seating note is in `docs/VISUAL_PASS_LOG.md`.
 
 ## Security and privacy
 
@@ -145,7 +155,7 @@ npm run build
 ## Still required, by severity
 
 1. A person on a real camera: arms, a turn, a shirt change, then a stop and a second start. This environment has no camera.
-2. House photographs for a skirt and a bracelet, then the same human check.
+2. A person wearing the studio skirt and bracelet drawings, then the same human check. The drawings are in the catalogue. They are not merchant photographs.
 3. Hair that is a real silhouette, not a plate plus a backdrop fill.
 4. Licensed pairs and an approved training run before any generative frame is shown.
 5. A measured GPU-delegate run on hardware that is not software WebGL.

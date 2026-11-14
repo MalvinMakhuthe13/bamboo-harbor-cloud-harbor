@@ -41,7 +41,12 @@ export type ShirtMeshOptions = {
   rows?: number;
   scale?: number;
   hemLength?: number;
+  /** 0 builds the torso only. Short and long values must stay in 0.2…1. */
   sleeveLength?: number;
+  /** Half-widths along the torso. Omitted keeps the shoulder-to-hem interpolation. */
+  contour?: { shoulder: number; chest: number; waist: number; hip: number };
+  /** Lateral hem offset in normalized units. A geometric lag, not cloth simulation. */
+  sway?: number;
 };
 
 const EPSILON = 1e-5;
@@ -147,12 +152,15 @@ export function buildShirtMesh(
   const scale = options.scale ?? 1;
   const hemLength = options.hemLength ?? 0.16;
   const sleeveLength = options.sleeveLength ?? 1;
+  const sway = Math.min(0.03, Math.max(-0.03, options.sway ?? 0));
+  const contour = validContour(options.contour);
   if (
     !Number.isFinite(columns) || !Number.isFinite(rows) ||
     columns < 3 || columns > 25 || rows < 3 || rows > 25 ||
     !Number.isFinite(scale) || scale < 0.75 || scale > 1.3 ||
     !Number.isFinite(hemLength) || hemLength < 0 || hemLength > 0.45 ||
-    !Number.isFinite(sleeveLength) || sleeveLength < 0.2 || sleeveLength > 1
+    !Number.isFinite(sleeveLength) || sleeveLength < 0 || sleeveLength > 1 ||
+    (sleeveLength > 0 && sleeveLength < 0.2)
   ) return null;
 
   const shoulderMid = midpoint(anchors.shoulderL, anchors.shoulderR);
@@ -187,14 +195,26 @@ export function buildShirtMesh(
   for (let row = 0; row < rows; row++) {
     const v = row / (rows - 1);
     const t = smooth(v);
-    const left = {
+    let left = {
       x: mix(leftTop.x, leftHem.x, t),
       y: mix(leftTop.y, leftHem.y, t),
     };
-    const right = {
+    let right = {
       x: mix(rightTop.x, rightHem.x, t),
       y: mix(rightTop.y, rightHem.y, t),
     };
+    const ax = right.x - left.x;
+    const ay = right.y - left.y;
+    const span = Math.hypot(ax, ay) || 1;
+    const dirX = ax / span;
+    const dirY = ay / span;
+    if (contour) {
+      const center = { x: (left.x + right.x) * 0.5, y: (left.y + right.y) * 0.5 };
+      const half = contourHalf(v, contour) * scale;
+      left = { x: center.x - dirX * half, y: center.y - dirY * half };
+      right = { x: center.x + dirX * half, y: center.y + dirY * half };
+    }
+    const swayShift = sway * t;
     // A small deterministic ease at the waist prevents a rigid rectangular
     // sheet; the maximum contour is intentionally subtle until depth is known.
     const waistEase = Math.sin(Math.PI * v) * shoulderWidth * 0.018 * (1 - v);
@@ -204,8 +224,8 @@ export function buildShirtMesh(
       const vertical = mix(left.y, right.y, u);
       const bulge = Math.sin(Math.PI * u) * waistEase;
       vertices.push({
-        x: across + down.x * bulge,
-        y: vertical + down.y * bulge,
+        x: across + down.x * bulge + dirX * swayShift,
+        y: vertical + down.y * bulge + dirY * swayShift,
         u: mix(0.2, 0.8, u),
         v: mix(0.02, 0.98, v),
       });
@@ -215,12 +235,29 @@ export function buildShirtMesh(
   const mesh: GarmentMesh = { vertices: [], indices: [], parts: [], columns, rows };
   addPart(mesh, "torso", vertices, columns, rows);
 
-  addSleeve(mesh, "sleeve-left", anchors.shoulderL, anchors.elbowL, anchors.wristL, true, shoulderWidth, sleeveLength);
-  addSleeve(mesh, "sleeve-right", anchors.shoulderR, anchors.elbowR, anchors.wristR, false, shoulderWidth, sleeveLength);
+  if (sleeveLength > 0) {
+    addSleeve(mesh, "sleeve-left", anchors.shoulderL, anchors.elbowL, anchors.wristL, true, shoulderWidth, sleeveLength);
+    addSleeve(mesh, "sleeve-right", anchors.shoulderR, anchors.elbowR, anchors.wristR, false, shoulderWidth, sleeveLength);
+  }
 
   if (!mesh.vertices.every((vertex) => [vertex.x, vertex.y, vertex.u, vertex.v].every(Number.isFinite))) return null;
   if (!mesh.indices.every((index) => Number.isInteger(index) && index >= 0 && index < mesh.vertices.length)) return null;
   return mesh;
+}
+
+function validContour(
+  contour: ShirtMeshOptions["contour"],
+): ShirtMeshOptions["contour"] | null {
+  if (!contour) return null;
+  const values = [contour.shoulder, contour.chest, contour.waist, contour.hip];
+  if (values.some((value) => !Number.isFinite(value) || value < 0.02 || value > 0.55)) return null;
+  return contour;
+}
+
+function contourHalf(v: number, contour: { shoulder: number; chest: number; waist: number; hip: number }): number {
+  if (v < 0.28) return mix(contour.shoulder, contour.chest, smooth(v / 0.28));
+  if (v < 0.62) return mix(contour.chest, contour.waist, smooth((v - 0.28) / 0.34));
+  return mix(contour.waist, contour.hip, smooth((v - 0.62) / 0.38));
 }
 
 function addSleeve(

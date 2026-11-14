@@ -1,4 +1,3 @@
-import { inflateSync } from "node:zlib";
 import { factFrom, type ProductFact } from "./product-facts.ts";
 import { assertProductImage, imageMagic } from "./privacy.ts";
 
@@ -186,12 +185,27 @@ function pngHeader(bytes: Uint8Array): PngHeader | HeuristicRefusal {
   return { ...header, idat };
 }
 
+/**
+ * Node tests inflate here. The browser must not import `node:zlib` or the
+ * wardrobe page fails to load. A browser without this builtin returns a
+ * decode refusal; the file can still be saved.
+ */
+function inflatePng(data: Uint8Array): Uint8Array {
+  const builtin = (
+    globalThis as {
+      process?: { getBuiltinModule?: (id: string) => { inflateSync: (input: Uint8Array) => Uint8Array } };
+    }
+  ).process?.getBuiltinModule?.("node:zlib");
+  if (!builtin) throw new Error("PNG inflate is not available in this runtime.");
+  return new Uint8Array(builtin.inflateSync(data));
+}
+
 function analyseRgba(width: number, height: number, idat: Uint8Array): HeuristicReport | HeuristicRefusal {
   livePixelBuffers += 1;
   let inflated: Uint8Array | null = null;
   let pixels: Uint8Array | null = null;
   try {
-    inflated = inflateSync(idat);
+    inflated = inflatePng(idat);
     const stride = width * 4;
     const expected = height * (stride + 1);
     if (inflated.length < expected) return refuse("DECODE", "The PNG pixel data is incomplete.");

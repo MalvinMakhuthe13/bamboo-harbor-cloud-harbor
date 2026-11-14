@@ -54,7 +54,7 @@ export function priorFromHeight(heightCm: number): BodyEstimate {
     faceWidthCm: round1(h * STATURE_PRIORS.faceWidth),
     headCircCm: round1(h * STATURE_PRIORS.headCirc),
     wristCm: round1(h * STATURE_PRIORS.wristCirc),
-    note: "Stature prior from the height you entered. A full-body pose replaces it.",
+    note: "A standing pose is missing, so this is a stature prior. You are not asked to type a measurement.",
   };
 }
 
@@ -68,12 +68,28 @@ function dist3(a: WorldPt, b: WorldPt): number {
  * Shoulder breadth comes from the pose in metres. Chest, waist and hip are
  * ellipse tapes: measured breadth, assumed depth. Not a tailor's tape.
  */
+/** Landmarks drive the picture. No centimetres are invented from a default stature. */
+export function landmarkProportions(): BodyEstimate {
+  return {
+    source: "none",
+    shoulderCm: null,
+    chestCm: null,
+    waistCm: null,
+    hipCm: null,
+    faceWidthCm: null,
+    headCircCm: null,
+    wristCm: null,
+    note: "The photograph follows the tracked landmarks. This is not a clothing size and not a body measurement.",
+  };
+}
+
 export function estimateFromWorld(opts: {
   world: WorldPt[] | null;
-  heightCm: number;
+  heightCm: number | null;
   faceWidthCm: number | null;
   wristCm: number | null;
 }): BodyEstimate {
+  if (opts.heightCm == null || !Number.isFinite(opts.heightCm)) return landmarkProportions();
   const prior = priorFromHeight(opts.heightCm);
   const w = opts.world;
   if (!w || w.length < 25) {

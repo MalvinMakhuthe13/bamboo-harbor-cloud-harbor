@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { matchSize, priorFromHeight, sizeScaleFor } from "./fit.ts";
+import { estimateFromWorld, landmarkProportions, matchSize, priorFromHeight, sizeScaleFor } from "./fit.ts";
 import {
   allowsRegionPaint,
   CLASS,
@@ -476,6 +476,19 @@ describe("fit", () => {
     const fit = matchSize(rows, { chestCm: 110 });
     assert.equal(fit?.size, "M");
     assert.match(fit?.warning ?? "", /tight/);
+  });
+
+  it("does not invent centimetres when no stature was given", () => {
+    const body = estimateFromWorld({
+      world: [{ x: 0, y: 0, z: 0 }],
+      heightCm: null,
+      faceWidthCm: 14,
+      wristCm: 16,
+    });
+    assert.equal(body.source, "none");
+    assert.equal(body.chestCm, null);
+    assert.equal(body.shoulderCm, null);
+    assert.match(landmarkProportions().note, /not a clothing size/i);
   });
 
   it("derives a stature prior from height", () => {

@@ -58,10 +58,15 @@ export type ProductDraft = {
   colourName: string;
   colourHex: string;
   merchantUrl: string;
+  /** Optional. Stored only. There is no checkout. */
+  purchaseUrl?: string;
   image: string | null;
   imageType: string | null;
   imageBytes: number;
   fittingAnchors?: ProductFittingAnchors | null;
+  /** Stated cut. Not read from the photograph. */
+  sleeve?: "sleeveless" | "short" | "long";
+  neckline?: "closed" | "open" | "strapless";
 };
 
 export function canAddCustom(count: number, replacing: boolean): boolean {
@@ -94,6 +99,10 @@ export function buildCustomProduct(
     }
   } else if (draft.category !== "nails") {
     errors.push("Add a photograph. A name alone is not a garment.");
+  }
+  if (draft.purchaseUrl?.trim()) {
+    const purchase = publicHttpUrl(draft.purchaseUrl);
+    if (!purchase.ok) errors.push(purchase.reason.replace("merchant link", "purchase link"));
   }
   let merchantUrl: string | undefined;
   if (draft.merchantUrl.trim()) {
@@ -134,10 +143,32 @@ export function buildCustomProduct(
       nail: "almond",
       custom: true,
       merchantUrl,
+      purchaseUrl: statedPurchase(draft),
       fabric: fabric || undefined,
       fittingAnchors: validAnchors,
+      ...(statedSleeve(draft) ? { sleeve: statedSleeve(draft) } : {}),
+      ...(statedNeckline(draft) ? { neckline: statedNeckline(draft) } : {}),
     },
   };
+}
+
+function statedPurchase(draft: ProductDraft): string | undefined {
+  const raw = draft.purchaseUrl?.trim() ?? "";
+  if (!raw) return undefined;
+  const link = publicHttpUrl(raw);
+  return link.ok ? link.url : undefined;
+}
+
+function statedSleeve(draft: ProductDraft): Product["sleeve"] {
+  if (draft.category !== "shirt" && draft.category !== "jacket" && draft.category !== "dress") return undefined;
+  if (draft.sleeve === "sleeveless" || draft.sleeve === "short" || draft.sleeve === "long") return draft.sleeve;
+  return undefined;
+}
+
+function statedNeckline(draft: ProductDraft): Product["neckline"] {
+  if (draft.category !== "shirt" && draft.category !== "jacket" && draft.category !== "dress") return undefined;
+  if (draft.neckline === "closed" || draft.neckline === "open" || draft.neckline === "strapless") return draft.neckline;
+  return undefined;
 }
 
 function cloneFittingAnchors(
@@ -187,9 +218,12 @@ export function productToEditDraft(product: Product): ProductDraft & {
     colourName: product.swatches[1]?.name ?? "",
     colourHex: tintToHex(product.swatches[1]?.tint),
     merchantUrl: product.merchantUrl ?? "",
+    purchaseUrl: product.purchaseUrl ?? "",
     image: product.image,
     imageType,
     imageBytes,
     fittingAnchors: cloneFittingAnchors(product.fittingAnchors),
+    sleeve: product.sleeve,
+    neckline: product.neckline,
   };
 }

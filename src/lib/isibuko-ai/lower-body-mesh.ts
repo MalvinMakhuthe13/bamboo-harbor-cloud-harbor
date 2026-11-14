@@ -25,7 +25,7 @@ export type LowerBodyMesh = {
   rows: number;
 };
 
-type Options = { columns?: number; rows?: number; scale?: number; hemWidth?: number };
+type Options = { columns?: number; rows?: number; scale?: number; hemWidth?: number; sway?: number };
 
 const finite = (p: Pt | null | undefined): p is Pt =>
   Boolean(p && Number.isFinite(p.x) && Number.isFinite(p.y));
@@ -58,6 +58,11 @@ function appendGrid(mesh: LowerBodyMesh, kind: LowerBodyPart["kind"], vertices: 
     indexStart,
     indexCount: (columns - 1) * (rows - 1) * 6,
   });
+}
+
+function shiftPanel(vertices: LowerBodyVertex[], sway: number): LowerBodyVertex[] {
+  if (!sway) return vertices;
+  return vertices.map((vertex) => ({ ...vertex, x: vertex.x + sway * vertex.v }));
 }
 
 function buildPanel(
@@ -126,6 +131,7 @@ export function buildLowerBodyMesh(
   const rows = Math.round(options.rows ?? 11);
   const scale = options.scale ?? 1;
   const hemWidth = options.hemWidth ?? 1;
+  const sway = Math.min(0.03, Math.max(-0.03, options.sway ?? 0));
   if (
     !Number.isFinite(columns) || !Number.isFinite(rows) ||
     columns < 3 || columns > 17 || rows < 3 || rows > 25 ||
@@ -174,7 +180,13 @@ export function buildLowerBodyMesh(
       for (let c = 0; c < columns; c++) {
         const u = c / (columns - 1);
         const fold = Math.sin(Math.PI * u) * Math.sin(Math.PI * v) * 0.012;
-        vertices.push({ x: mix(left.x, right.x, u) + across.x * fold, y: mix(left.y, right.y, u) + across.y * fold, u, v });
+        const swayShift = sway * v;
+        vertices.push({
+          x: mix(left.x, right.x, u) + across.x * (fold + swayShift),
+          y: mix(left.y, right.y, u) + across.y * (fold + swayShift),
+          u,
+          v,
+        });
       }
     }
     appendGrid(mesh, "skirt", vertices, columns, rows);
@@ -189,8 +201,8 @@ export function buildLowerBodyMesh(
     const across = { x: hipR.x - hipL.x, y: hipR.y - hipL.y };
     const leftLegTop = { x: hipL.x + across.x * 0.28, y: hipL.y + across.y * 0.28 };
     const rightLegTop = { x: hipR.x - across.x * 0.28, y: hipR.y - across.y * 0.28 };
-    appendGrid(mesh, "pant-leg-left", buildPanel(leftLegTop, kneeL, ankleL, columns, rows, 0.02, 0.48, 1), columns, rows);
-    appendGrid(mesh, "pant-leg-right", buildPanel(rightLegTop, kneeR, ankleR, columns, rows, 0.52, 0.98, 1), columns, rows);
+    appendGrid(mesh, "pant-leg-left", shiftPanel(buildPanel(leftLegTop, kneeL, ankleL, columns, rows, 0.02, 0.48, 1), sway), columns, rows);
+    appendGrid(mesh, "pant-leg-right", shiftPanel(buildPanel(rightLegTop, kneeR, ankleR, columns, rows, 0.52, 0.98, 1), -sway), columns, rows);
   }
 
   if (!mesh.vertices.every((v) => [v.x, v.y, v.u, v.v].every(Number.isFinite))) return null;

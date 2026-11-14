@@ -17,6 +17,9 @@ export type Category =
   | "bracelet";
 
 export type NailShape = "almond" | "square" | "stiletto";
+/** Fingers use the hand tracker. Toes use the pose foot point plus a spacing estimate. */
+export type NailSite = "fingers" | "toes";
+export type NailFinish = "cream" | "gloss";
 
 export type ProductAnchorPoint = { x: number; y: number; confidence?: number };
 export type ProductFittingAnchors = {
@@ -58,12 +61,23 @@ export type Product = {
   sizes: SizeRow[];
   swatches: Swatch[];
   nail: NailShape;
+  /** Omitted means fingernails. */
+  nailSite?: NailSite;
+  /** Omitted means gloss. Cream has no extra highlight. */
+  nailFinish?: NailFinish;
   custom?: boolean;
   merchantUrl?: string;
+  /** Saved for a later checkout. The mirror does not open it and does not take payment. */
+  purchaseUrl?: string;
   /** Merchant's own words. Not inferred from the photograph. */
   fabric?: string;
   /** Versioned, reviewed fitting metadata derived from the product asset. */
   fittingAnchors?: ProductFittingAnchors;
+  /** Stated by the merchant or the studio sample. Not inferred from the photograph. */
+  sleeve?: "sleeveless" | "short" | "long";
+  neckline?: "closed" | "open" | "strapless";
+  /** A drawing made for testing. Not a merchant photograph. */
+  studioSample?: boolean;
 };
 
 export type TryEvent = {
@@ -149,6 +163,12 @@ export type LiveMetrics = {
   source: "camera" | "studio" | "off";
   body: BodyEstimate;
   productId: string | null;
+  /** Animation-frame rate. Independent of the tracker rates. */
+  renderFps: number;
+  /** Video frames observed per second. Zero on the studio still. */
+  cameraFps: number;
+  /** Time from the start of this animation frame to the metrics publish. */
+  frameLatencyMs: number;
 };
 
 export type FrameRequest = {
@@ -158,8 +178,14 @@ export type FrameRequest = {
   tint: [number, number, number] | null;
   sizeScale: number;
   nail: NailShape;
-  heightCm: number;
+  nailSite?: NailSite;
+  nailFinish?: NailFinish;
+  /** Null means the mirror has no stature. Visual scale follows landmarks, not centimetres. */
+  heightCm: number | null;
   fittingAnchors?: ProductFittingAnchors;
+  /** Merchant-stated cut. The photograph is not measured to produce this. */
+  sleeve?: "sleeveless" | "short" | "long";
+  neckline?: "closed" | "open" | "strapless";
 };
 
 export type Pt = { x: number; y: number };

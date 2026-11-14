@@ -10,7 +10,7 @@ export type DressAnchors = {
   kneeR?: Pt | null;
 };
 
-type Options = { columns?: number; rows?: number; scale?: number; hemWidth?: number };
+type Options = { columns?: number; rows?: number; scale?: number; hemWidth?: number; sway?: number };
 
 const finite = (p: Pt | null | undefined): p is Pt =>
   Boolean(p && Number.isFinite(p.x) && Number.isFinite(p.y));
@@ -43,6 +43,7 @@ export function buildDressMesh(anchors: DressAnchors, options: Options = {}): Ga
   const rows = Math.round(options.rows ?? 17);
   const scale = options.scale ?? 1;
   const hemWidth = options.hemWidth ?? 1.55;
+  const sway = Math.min(0.03, Math.max(-0.03, options.sway ?? 0));
   if (!Number.isFinite(columns) || !Number.isFinite(rows) || columns < 3 || columns > 21 ||
       rows < 5 || rows > 31 || !Number.isFinite(scale) || scale < 0.75 || scale > 1.3 ||
       !Number.isFinite(hemWidth) || hemWidth < 1 || hemWidth > 2.5) return null;
@@ -89,9 +90,10 @@ export function buildDressMesh(anchors: DressAnchors, options: Options = {}): Ga
       const u = column / (columns - 1);
       const side = (u * 2 - 1) * half;
       const subtleDrape = Math.sin(Math.PI * u * 4) * Math.sin(Math.PI * v) * shoulderWidth * 0.008;
+      const swayShift = sway * v;
       vertices.push({
-        x: center.x + normal.x * (side + subtleDrape),
-        y: center.y + normal.y * (side + subtleDrape),
+        x: center.x + normal.x * (side + subtleDrape) + across.x * swayShift,
+        y: center.y + normal.y * (side + subtleDrape) + across.y * swayShift,
         u,
         v,
       });

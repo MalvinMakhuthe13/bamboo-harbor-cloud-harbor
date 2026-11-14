@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Camera, Ruler, ShieldCheck, Store } from "lucide-react";
 import type { ReactNode } from "react";
 import { Nav } from "@/components/site/Nav";
-import { CATEGORY_LABEL, CATEGORY_ORDER } from "@/lib/tryon/catalog";
+import { CATEGORY_LABEL, CATEGORY_ORDER, DEFAULT_PRODUCTS, productsIn } from "@/lib/isibuko-ai/catalog";
+import type { Category } from "@/lib/isibuko-ai/types";
 
 export const Route = createFileRoute("/")({ component: Home });
 
@@ -41,10 +42,10 @@ function Home() {
               <p className="font-display text-2xl">What a shopper does</p>
               <ol className="mt-4 space-y-3 text-muted">
                 <li>1. On the rail, tap the piece. Or paste a shop link.</li>
-                <li>2. Enter height. Pick the size you would actually buy.</li>
-                <li>3. Turn. Folds follow the shoulders and the hips.</li>
-                <li>4. Pinch a fold, a strand, or a bead. Let go. It settles.</li>
-                <li>5. Read the size, and the warning if it will run tight.</li>
+                <li>2. Pick a scale. It changes the photograph. It is not a clothing size.</li>
+                <li>3. Turn. The photograph follows the shoulders and the hips.</li>
+                <li>4. Drag a piece. Let go. It eases back.</li>
+                <li>5. The piece stays on the landmarks. The mirror does not report a body measurement.</li>
               </ol>
             </div>
           </div>
@@ -53,7 +54,7 @@ function Home() {
 
       <section className="mx-auto grid max-w-6xl gap-4 px-5 py-16 md:grid-cols-4">
         <Point icon={<Camera />} title="Live, not a photo" text="MediaPipe tracks the face, hands and pose on the device. Three.js pins the piece to those points every frame." />
-        <Point icon={<Ruler />} title="A size, with the error stated" text="Height corrects the pose. Chest and waist are ellipses, not a tape. The screen says so." />
+        <Point icon={<Ruler />} title="Scale, from the landmarks" text="The photograph follows the tracked shoulders and hips. The scale buttons are not a clothing size, and the camera is not a tape measure." />
         <Point icon={<ShieldCheck />} title="Video stays here" text="Frames are read in the browser and dropped. A shop only gets counts: tried on, size chosen." />
         <Point icon={<Store />} title="One engine, many pieces" text="A new wearable is a category, an anchor and a size chart. It is not a new app." />
       </section>
@@ -62,9 +63,9 @@ function Home() {
         <div className="mx-auto max-w-6xl px-5 py-16">
           <h2 className="font-display text-3xl">What can be tried on</h2>
           <p className="mt-3 max-w-2xl text-ink-muted">
-            Shirts and trousers follow the body you are showing them. Ease from the size chart
-            decides how much they wrinkle. It is not a film-quality cloth solver — a phone cannot
-            run one live — and shoes are not in this build.
+            The mirror fits a product photograph to the tracked body. It is MediaPipe plus a
+            geometric composite, not a cloth simulation and not a generative frame. Shoes are not
+            in this build.
           </p>
           <ul className="mt-8 grid gap-3 sm:grid-cols-2 md:grid-cols-5">
             {CATEGORY_ORDER.map((category) => (
@@ -82,17 +83,8 @@ function Home() {
   );
 }
 
-function defaultProduct(category: string) {
-  if (category === "wig") return "wig-straight";
-  if (category === "hat") return "hat-beret";
-  if (category === "nails") return "nails-french";
-  if (category === "glasses") return "glasses-round";
-  if (category === "earrings") return "earrings-drop";
-  if (category === "necklace") return "necklace-chain";
-  if (category === "ring") return "ring-signet";
-  if (category === "watch") return "watch-round";
-  if (category === "shirt") return "shirt-linen";
-  return "pants-tailored";
+function defaultProduct(category: Category) {
+  return productsIn(DEFAULT_PRODUCTS, category)[0]?.id ?? "shirt-linen";
 }
 
 function Point({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {

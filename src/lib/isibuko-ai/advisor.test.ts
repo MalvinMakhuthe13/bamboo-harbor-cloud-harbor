@@ -307,9 +307,11 @@ describe("Isibuko AI advisor", () => {
     }
   });
 
-  it("leaves the photographic size suggestion on the original matchSize call", () => {
+  it("does not turn landmark scale into a clothing size", () => {
     const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../routes/mirror.tsx"), "utf8");
-    assert.match(source, /const fit = useMemo\(\s*\(\) => \(metrics \? matchSize\(active\.sizes, metrics\.body\) : null\)/);
+    assert.equal(source.includes("matchSize("), false);
+    assert.match(source, /heightCm: null/);
+    assert.match(source, /not a clothing size/);
     assert.match(source, /const \[fitHelp, setFitHelp\] = useState\(false\)/);
     assert.match(source, /aria-live="polite"/);
   });
