@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Stage } from "@/components/mirror/Stage";
 import { CameraTest } from "@/components/mirror/CameraTest";
 import { CaptureDebug } from "@/components/mirror/CaptureDebug";
+import { PerfOverlay } from "@/components/mirror/PerfOverlay";
 import { Nav } from "@/components/site/Nav";
 import { CATEGORY_LABEL, CATEGORY_ORDER, findProduct, productsIn } from "@/lib/isibuko-ai/catalog";
 import { conditionProduct } from "@/lib/isibuko-ai/condition";
@@ -19,7 +20,7 @@ import {
   FIELD_LABEL,
   ORIGIN_LABEL,
 } from "@/lib/isibuko-ai/product-facts";
-import { matchSize, sizeScaleFor } from "@/lib/isibuko-ai/fit";
+import { sizeScaleFor } from "@/lib/isibuko-ai/fit";
 import { useWardrobe } from "@/lib/isibuko-ai/store";
 import type {
   Category,
@@ -31,10 +32,16 @@ import type {
 
 type Search = { product?: string; dev?: string };
 
+function devFlag(value: unknown): "1" | undefined {
+  if (value === "1" || value === 1 || value === true) return "1";
+  if (Array.isArray(value) && devFlag(value[0]) === "1") return "1";
+  return undefined;
+}
+
 export const Route = createFileRoute("/mirror")({
   validateSearch: (search: Record<string, unknown>): Search => ({
     product: typeof search.product === "string" ? search.product : undefined,
-    dev: search.dev === "1" ? "1" : undefined,
+    dev: devFlag(search.dev),
   }),
   component: MirrorPage,
 });
@@ -59,10 +66,6 @@ function MirrorPage() {
   const controlsRef = useRef<{ setDelegate: (delegate: "CPU" | "GPU") => void } | null>(null);
   const active = findProduct(data.products, productId);
   const swatch = active.swatches.find((item) => item.id === swatchId) ?? active.swatches[0];
-  const fit = useMemo(
-    () => (metrics ? matchSize(active.sizes, metrics.body) : null),
-    [active.sizes, metrics],
-  );
   const chestCm = metrics?.body.chestCm ?? null;
   const waistCm = metrics?.body.waistCm ?? null;
   const shoulderCm = metrics?.body.shoulderCm ?? null;
@@ -136,7 +139,7 @@ function MirrorPage() {
     nail: active.nail,
     nailSite: active.nailSite,
     nailFinish: active.nailFinish,
-    heightCm: 170,
+    heightCm: null,
     fittingAnchors: active.fittingAnchors,
     sleeve: active.sleeve,
     neckline: active.neckline,
@@ -150,7 +153,7 @@ function MirrorPage() {
     nail: active.nail,
     nailSite: active.nailSite,
     nailFinish: active.nailFinish,
-    heightCm: 170,
+    heightCm: null,
     fittingAnchors: active.fittingAnchors,
     sleeve: active.sleeve,
     neckline: active.neckline,
@@ -269,20 +272,20 @@ function MirrorPage() {
                   className={`min-h-11 rounded-full px-3 text-sm ${row.label === sizeLabel ? "bg-paper text-ink" : "bg-ink text-muted"}`}
                 >
                   {row.label}
-                  {fit?.size === row.label ? " · suggested" : ""}
                 </button>
               ))}
             </div>
           )}
-          {fit?.warning && <p className="text-sm text-clay">{fit.warning}</p>}
-          {fit?.detail && <p className="text-sm text-muted">{fit.detail}</p>}
+          <p className="text-sm text-muted">
+            These buttons scale the photograph on the tracked body. They are not a clothing size, and the camera is not a tape measure.
+          </p>
           <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
               checked={fitHelp}
               onChange={(event) => setFitHelp(event.target.checked)}
             />
-            Fit help, optional and off. It reads the camera estimate. It does not ask you to measure.
+            Fit help stays off. This mirror does not turn the camera into a clothing size.
           </label>
           <div aria-live="polite" aria-atomic="true">
             {fitHelp && advice && (
@@ -334,7 +337,7 @@ function MirrorPage() {
           )}
           {active.category === "nails" && active.nailSite === "toes" && (
             <p className="text-sm text-muted">
-              Pedicure estimate. Show the top of a bare foot. The big-toe plate follows the foot-index landmark. The other four are spaced beside it and are not tracked. A side view will not place them.
+              Toenails are estimated, not a measured pedicure. Show the top of a bare foot. One plate follows the foot-index landmark. The other four are spaced beside it and are not tracked toes. A side view will not place them.
             </p>
           )}
           {active.category === "nails" && active.nailSite !== "toes" && (
@@ -406,6 +409,7 @@ function MirrorPage() {
             onDelegate={(delegate) => controlsRef.current?.setDelegate(delegate)}
           />
           {import.meta.env.DEV && search.dev === "1" ? <CaptureDebug /> : null}
+          {import.meta.env.DEV && search.dev === "1" ? <PerfOverlay metrics={metrics} /> : null}
           <p className="text-sm text-muted">
             Changing product, colour, or size does not stop the camera. The studio photo is only a
             labelled test. Picture fps is the display. The hertz numbers are how often each model

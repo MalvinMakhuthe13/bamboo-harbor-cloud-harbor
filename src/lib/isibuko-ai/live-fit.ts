@@ -127,9 +127,16 @@ export function stabilizeMask(
   next: Uint8Array,
   width: number,
   height: number,
+  into?: Uint8Array,
 ): Uint8Array {
-  if (!prev || prev.length !== next.length || width < 3 || height < 3) return next.slice();
-  const out = next.slice();
+  const reusable = into && into.length === next.length ? into : null;
+  if (!prev || prev.length !== next.length || width < 3 || height < 3) {
+    if (!reusable) return next.slice();
+    reusable.set(next);
+    return reusable;
+  }
+  const out = reusable ?? next.slice();
+  if (out !== next) out.set(next);
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
       const i = y * width + x;

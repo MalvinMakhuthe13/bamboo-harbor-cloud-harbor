@@ -163,6 +163,12 @@ export type LiveMetrics = {
   source: "camera" | "studio" | "off";
   body: BodyEstimate;
   productId: string | null;
+  /** Animation-frame rate. Independent of the tracker rates. */
+  renderFps: number;
+  /** Video frames observed per second. Zero on the studio still. */
+  cameraFps: number;
+  /** Time from the start of this animation frame to the metrics publish. */
+  frameLatencyMs: number;
 };
 
 export type FrameRequest = {
@@ -174,7 +180,8 @@ export type FrameRequest = {
   nail: NailShape;
   nailSite?: NailSite;
   nailFinish?: NailFinish;
-  heightCm: number;
+  /** Null means the mirror has no stature. Visual scale follows landmarks, not centimetres. */
+  heightCm: number | null;
   fittingAnchors?: ProductFittingAnchors;
   /** Merchant-stated cut. The photograph is not measured to produce this. */
   sleeve?: "sleeveless" | "short" | "long";

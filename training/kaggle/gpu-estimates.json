@@ -1,7 +1,8 @@
 {
   "tier": "kaggle-free",
   "gpuHoursPerWeek": 30,
-  "sessionNote": "Free notebooks are often limited to about 9–12 hours at a time and about 30 GPU hours in a week. These figures are planning estimates, not a measurement from a run.",
+  "sessionNote": "A common description of the free tier is about 9–12 hours at a time and about 30 GPU hours in a week. That is an assumption, not a guarantee, and not a measurement from a run.",
+  "guaranteed": false,
   "jobs": [
     {
       "id": "motion-tune",

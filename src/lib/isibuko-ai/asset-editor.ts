@@ -250,7 +250,7 @@ export function createMirrorFrameRequest(
     tint: swatch?.tint ?? null,
     sizeScale: sizeScaleFor(sizeLabel),
     nail: product.nail,
-    heightCm: options.heightCm ?? 170,
+    heightCm: options.heightCm ?? null,
     fittingAnchors: product.fittingAnchors,
   };
 }
