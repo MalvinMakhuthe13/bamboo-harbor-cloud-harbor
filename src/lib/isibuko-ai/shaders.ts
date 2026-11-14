@@ -52,8 +52,16 @@ uniform vec3 uPolish;
 uniform float uNailHalf;
 uniform float uNailTip;
 uniform float uNailStart;
+uniform float uNailTaper;
+uniform float uNailGloss;
+uniform float uNailSheen;
+uniform float uPresence;
 uniform vec3 uBackdrop;
 uniform float uHasProduct;
+uniform float uRevealSkin;
+uniform float uSleeveReach;
+uniform float uNeckClear;
+uniform vec2 uSkinP;
 
 vec3 lumaTint(vec3 rgb) {
   if (uTintOn < 0.5) return rgb;
@@ -185,6 +193,76 @@ vec2 hairSample(vec2 p, out float edge) {
   return vec2(nx * 0.5 + 0.5, 0.5 - ny * 0.5);
 }
 
+float torsoMetrics(vec2 p, out float across, out float down) {
+  vec2 top = (uTopL + uTopR) * 0.5;
+  vec2 bot = (uBotL + uBotR) * 0.5;
+  vec2 axis = bot - top;
+  float len2 = dot(axis, axis);
+  across = 0.0;
+  down = -2.0;
+  if (len2 < 1e-6) return -1.0;
+  float len = sqrt(len2);
+  vec2 n = axis / len;
+  vec2 side = vec2(-n.y, n.x);
+  down = dot(p - top, n) / len;
+  float halfT = length(uTopR - uTopL) * 0.5;
+  float halfB = length(uBotR - uBotL) * 0.5;
+  float clamped = clamp(down, 0.0, 1.0);
+  float halfW = mix(halfT, halfB, clamped);
+  vec2 midP = top + n * (len * clamped);
+  across = dot(p - midP, side) / max(halfW, 1e-4);
+  return 1.0;
+}
+
+float armAlongOf(vec2 p, vec2 sh, vec2 el, vec2 wr, out float best) {
+  best = 1e3;
+  float along = 0.0;
+  float len0 = length(el - sh);
+  float len1 = length(wr - el);
+  float total = max(len0 + len1, 1e-4);
+  vec2 ab = el - sh;
+  float l2 = dot(ab, ab);
+  float t = l2 < 1e-6 ? 0.0 : clamp(dot(p - sh, ab) / l2, 0.0, 1.0);
+  float d = length(p - (sh + ab * t));
+  if (d < best) {
+    best = d;
+    along = (t * len0) / total;
+  }
+  ab = wr - el;
+  l2 = dot(ab, ab);
+  t = l2 < 1e-6 ? 0.0 : clamp(dot(p - el, ab) / l2, 0.0, 1.0);
+  d = length(p - (el + ab * t));
+  if (d < best) {
+    best = d;
+    along = (len0 + t * len1) / total;
+  }
+  return along;
+}
+
+void revealWornCloth(inout vec3 rgb, vec2 p, vec4 cam, bool clothes, bool face, bool hair, bool hand, bool protect) {
+  if (uRevealSkin < 0.5 || !clothes || face || hair || hand || protect) return;
+  float across = 0.0;
+  float down = 0.0;
+  float ok = torsoMetrics(p, across, down);
+  bool inTorso = ok > 0.0 && down >= 0.0 && down <= 1.0 && abs(across) <= 0.96;
+  bool neck = uNeckClear > 0.03 && ok > 0.0 && down > -0.18 && down < uNeckClear && abs(across) < 0.78;
+  float bestL = 1e3;
+  float alongL = armAlongOf(p, uShL, uElbowL, uWristL, bestL);
+  float bestR = 1e3;
+  float alongR = armAlongOf(p, uShR, uElbowR, uWristR, bestR);
+  bool inArm = uHasArms > 0.5 && min(bestL, bestR) < uArmW;
+  float along = bestL <= bestR ? alongL : alongR;
+  bool pastSleeve = inArm && !inTorso && along > uSleeveReach + 0.04;
+  bool bareArm = uSleeveReach < 0.05 && inArm && !inTorso;
+  if (!(neck || pastSleeve || bareArm)) return;
+  vec3 skin = texture(uCam, vec2(uSkinP.x, 1.0 - uSkinP.y)).rgb;
+  float l = lum(cam.rgb);
+  float sl = max(lum(skin), 0.05);
+  // Neighbouring body-class colour, scaled by this pixel's brightness. Not a reconstructed limb.
+  vec3 fill = clamp(skin * (0.55 + 0.65 * l / sl), 0.0, 1.0);
+  rgb = mix(rgb, fill, neck ? 0.88 : 0.94);
+}
+
 float nailMask(vec2 p) {
   float m = 0.0;
   for (int i = 0; i < 10; i++) {
@@ -198,7 +276,7 @@ float nailMask(vec2 p) {
     vec2 d = p - base;
     float along = dot(d, dir) / L;
     float across = dot(d, vec2(-dir.y, dir.x)) / L;
-    float taper = mix(0.86, 0.58, smoothstep(uNailStart, uNailTip, along));
+    float taper = mix(1.0, clamp(uNailTaper, 0.35, 1.0), smoothstep(uNailStart, uNailTip, along));
     float halfWidth = uNailHalf * taper;
     if (along > uNailStart && along < uNailTip && abs(across) < halfWidth) {
       float side = 1.0 - smoothstep(halfWidth * 0.78, halfWidth, abs(across));
@@ -222,12 +300,13 @@ void main() {
   bool clothes = cls > 3.5 && cls < 4.5;
   bool protect = inEllipse(p, uProtectC, uProtectHalf, uHairCos, uHairSin);
   bool hand = nearHand(p);
+  revealWornCloth(rgb, p, cam, clothes, face, hair, hand, protect);
 
   if (uMode == 1 && uHasMask > 0.5 && !protect && !hand) {
     vec2 sampleUv = torsoSample(p, 0.0);
     vec3 armL = vec3(-1.0, -1.0, 1e3);
     vec3 armR = vec3(-1.0, -1.0, 1e3);
-    if (uHasArms > 0.5) {
+    if (uHasArms > 0.5 && uSleeveReach > 0.05) {
       armL = armSample(p, uShL, uElbowL, uWristL, -1.0, 0.0);
       armR = armSample(p, uShR, uElbowR, uWristR, 1.0, 0.0);
       if (uFrontArm > 0.5) armL.z *= 0.72;
@@ -287,9 +366,10 @@ void main() {
     float m = nailMask(p);
     if (m > 0.0) {
       float l = dot(cam.rgb, vec3(0.2126, 0.7152, 0.0722));
-      vec3 gloss = uPolish * (0.5 + l * 0.95);
+      float shine = uNailGloss * pow(clamp(m, 0.0, 1.0), 1.4) * (0.35 + 0.65 * clamp(uNailSheen, -1.0, 1.0) * 0.5 + 0.5) * (0.2 + l);
+      vec3 gloss = uPolish * (0.5 + l * 0.95) + vec3(shine);
       vec3 polished = mix(cam.rgb, gloss, 0.8);
-      rgb = mix(rgb, polished, m);
+      rgb = mix(rgb, polished, m * clamp(uPresence, 0.0, 1.0));
     }
   }
 
@@ -321,6 +401,8 @@ uniform vec2 uHand0;
 uniform vec2 uHand1;
 uniform float uHandR;
 uniform float uHasHands;
+uniform float uHairClip;
+uniform float uPresence;
 in vec2 vUv;
 out vec4 o;
 
@@ -336,14 +418,30 @@ void main() {
   if (uOcclude > 0.5 && uHasMask > 0.5) {
     float cls = clsAt(camUv);
     bool face = cls > 2.5 && cls < 3.5;
-    if (face || nearHand) discard;
+    // Hats need to cover the forehead. Only a wig or necklace yields the face.
+    if ((uOcclude > 1.5 && face) || nearHand) discard;
   }
   vec4 s = texture(uSprite, vUv);
-  float green = s.g - max(s.r, s.b);
-  if (green > 0.05 && s.g > 0.12) s.a *= clamp(1.0 - green * 10.0, 0.0, 1.0);
+  // Catalogue cut-outs carry a lime matte. Filtering mixes it into the hair edge.
+  // Pull that green out of the colour, then drop pixels that are still mostly matte.
+  float spill = s.g - max(s.r, s.b);
+  if (spill > 0.045 && s.g > 0.2) {
+    s.g = max(s.r, s.b);
+    s.a *= clamp(1.0 - (spill - 0.045) * 12.0, 0.0, 1.0);
+  }
   float luma = dot(s.rgb, vec3(0.2126, 0.7152, 0.0722));
   float sat = max(s.r, max(s.g, s.b)) - min(s.r, min(s.g, s.b));
   if (uLens > 0.5 && luma < 0.2 && sat < 0.08) s.a *= 0.28;
+  if (uHairClip > 0.5) {
+    // The wig's own cut-out is the silhouette. Clipping it to the shopper's
+    // hair class made a jagged hole. Soften only the outer photograph edge.
+    float edge = min(smoothstep(0.0, 0.06, vUv.x), smoothstep(1.0, 0.94, vUv.x));
+    edge = min(edge, min(smoothstep(0.0, 0.05, vUv.y), smoothstep(1.0, 0.9, vUv.y)));
+    s.a *= edge;
+    float hairline = smoothstep(0.78, 0.98, vUv.y);
+    s.a *= 1.0 - hairline * 0.22;
+  }
+  s.a *= clamp(uPresence, 0.0, 1.0);
   if (s.a < 0.04) discard;
   vec3 rgb = s.rgb;
   if (uTintOn > 0.5) {
@@ -393,6 +491,7 @@ uniform float uProtectCos;
 uniform float uProtectSin;
 uniform vec3 uTint;
 uniform float uTintOn;
+uniform float uPresence;
 
 float clsAt(vec2 uv) {
   return texture(uMask, uv).r * 255.0;
@@ -428,7 +527,10 @@ vec3 shade(vec3 product, vec3 camera) {
   around = (around + l) / 5.0;
   float ratio = l / max(around, 0.05);
   float scale = mix(1.0, clamp(ratio, 0.82, 1.12), 0.45);
-  return tinted * scale;
+  float crease = clamp((l - around) * 3.4, -0.1, 0.12);
+  vec3 chroma = camera / max(vec3(l), vec3(0.08));
+  vec3 lit = tinted * (scale + crease);
+  return mix(lit, lit * chroma, 0.18);
 }
 void main() {
   if (uHasMask < 0.5 || protectedFace(vScreen) || nearHand(vScreen)) discard;
@@ -458,6 +560,10 @@ void main() {
 
   vec3 camera = texture(uCamera, vMaskUv).rgb;
   vec3 rgb = shade(product.rgb, camera);
-  o = vec4(rgb, product.a * edge);
+  float contact = mix(0.74, 1.0, smoothstep(0.2, 0.85, edge));
+  float collar = smoothstep(0.9, 1.0, vUv.y);
+  float hem = smoothstep(0.1, 0.0, vUv.y);
+  rgb *= contact * mix(1.0, 0.84, max(collar, hem));
+  o = vec4(rgb, product.a * edge * clamp(uPresence, 0.0, 1.0));
 }
 `;

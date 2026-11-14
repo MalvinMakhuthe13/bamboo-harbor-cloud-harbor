@@ -10,6 +10,7 @@ import {
 } from "@/lib/isibuko-ai/merchant";
 import { factText, FIELD_LABEL, type ProductFact } from "@/lib/isibuko-ai/product-facts";
 import { assertProductImage, imageMagic } from "@/lib/isibuko-ai/privacy";
+import { fetchProductPicture, guessFromPicture, medianColourHex } from "@/lib/isibuko-ai/bring-in";
 import { useWardrobe } from "@/lib/isibuko-ai/store";
 
 import {
@@ -33,11 +34,21 @@ const empty = {
   colourName: "",
   colourHex: "",
   merchantUrl: "",
+  purchaseUrl: "",
   image: null as string | null,
   imageType: null as string | null,
   imageBytes: 0,
   fittingAnchors: null as ProductFittingAnchors | null,
+  sleeve: "long" as "sleeveless" | "short" | "long",
+  neckline: "closed" as "closed" | "open" | "strapless",
 };
+
+/** A fresh ArrayBuffer copy. A view over SharedArrayBuffer is not a Blob part. */
+function imageBlob(bytes: Uint8Array, mime: string): Blob {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return new Blob([copy], { type: mime });
+}
 
 export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string }) {
   const { data, commit } = useWardrobe();
@@ -51,6 +62,61 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
 
   function set<K extends keyof typeof empty>(key: K, value: (typeof empty)[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  async function usePictureBytes(bytes: Uint8Array, mime: string) {
+    const checked = assertProductImage({ type: mime, size: bytes.byteLength });
+    if (!checked.ok) {
+      setNote(checked.reason);
+      return;
+    }
+    let width = 1;
+    let height = 1;
+    let transparentRatio = 0;
+    let colour: string | null = null;
+    try {
+      const bitmap = await createImageBitmap(imageBlob(bytes, mime));
+      width = bitmap.width;
+      height = bitmap.height;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.min(48, bitmap.width);
+      canvas.height = Math.min(48, bitmap.height);
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (context) {
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const pixels = new Uint8Array(context.getImageData(0, 0, canvas.width, canvas.height).data);
+        let clear = 0;
+        for (let i = 3; i < pixels.length; i += 4) if ((pixels[i] ?? 255) < 20) clear += 1;
+        transparentRatio = clear / (canvas.width * canvas.height);
+        colour = medianColourHex(pixels);
+      }
+      bitmap.close();
+    } catch {
+      setNote("The picture could not be read.");
+      return;
+    }
+    const guess = guessFromPicture({ width, height, transparentRatio, cornerUniform: false });
+    set("category", guess.category);
+    if (colour) set("colourHex", colour);
+    const blob = imageBlob(bytes, mime);
+    const reader = new FileReader();
+    reader.onload = () => {
+      set("image", typeof reader.result === "string" ? reader.result : null);
+      set("imageType", mime);
+      set("imageBytes", bytes.byteLength);
+    };
+    reader.readAsDataURL(blob);
+    setNote(`${guess.reason} Confidence is low. Confirm the category before saving.`);
+  }
+
+  async function bringPicture(raw: string) {
+    setNote("Fetching that picture. Your camera is not sent.");
+    const fetched = await fetchProductPicture(raw);
+    if (!fetched.ok) {
+      setNote(fetched.reason);
+      return;
+    }
+    await usePictureBytes(fetched.bytes, fetched.mime);
   }
 
   async function save(event: FormEvent) {
@@ -69,10 +135,13 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
       colourName: draft.colourName,
       colourHex: draft.colourHex,
       merchantUrl: draft.merchantUrl,
+      purchaseUrl: draft.purchaseUrl,
       image: draft.image,
       imageType: draft.imageType,
       imageBytes: draft.imageBytes,
       fittingAnchors: draft.fittingAnchors,
+      sleeve: draft.sleeve,
+      neckline: draft.neckline,
     };
 
     const id = editing ?? `custom-${Date.now()}`;
@@ -154,6 +223,37 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
               ))}
             </select>
           </label>
+          {(draft.category === "shirt" || draft.category === "jacket" || draft.category === "dress") && (
+              <>
+                <label className="mt-3 block text-sm">
+                  Sleeve, as you state it
+                  <select
+                    className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3"
+                    value={draft.sleeve}
+                    onChange={(event) => set("sleeve", event.target.value as typeof draft.sleeve)}
+                  >
+                    <option value="sleeveless">Sleeveless</option>
+                    <option value="short">Short sleeve</option>
+                    <option value="long">Long sleeve</option>
+                  </select>
+                </label>
+                <label className="mt-3 block text-sm">
+                  Neckline, as you state it
+                  <select
+                    className="mt-1 min-h-11 w-full rounded-xl border border-line bg-paper px-3"
+                    value={draft.neckline}
+                    onChange={(event) => set("neckline", event.target.value as typeof draft.neckline)}
+                  >
+                    <option value="closed">Closed collar</option>
+                    <option value="open">Open neck</option>
+                    <option value="strapless">Strapless</option>
+                  </select>
+                </label>
+                <p className="mt-2 text-sm text-muted">
+                  This is the cut you are stating. The photograph is not measured, and it does not choose the sleeve.
+                </p>
+              </>
+          )}
           <label className="text-sm">
             Fabric note
             <input
@@ -209,7 +309,40 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
             Isibuko does not open that page itself. A private or file address is refused.
           </p>
           <label className="text-sm">
-            Photograph
+            Purchase link, saved only
+            <input
+              className="mt-1 min-h-11 w-full rounded-xl border border-line/40 bg-paper px-3"
+              value={draft.purchaseUrl}
+              onChange={(event) => set("purchaseUrl", event.target.value)}
+              placeholder="https://shop.example/buy"
+            />
+          </label>
+          <p className="text-sm text-ink-muted">
+            There is no checkout. The link is stored for later and is not opened.
+          </p>
+          <label className="text-sm">
+            Picture link
+            <input
+              className="mt-1 min-h-11 w-full rounded-xl border border-line/40 bg-paper px-3"
+              placeholder="https://shop.example/linen.jpg"
+              onPaste={(event) => {
+                const text = event.clipboardData.getData("text");
+                if (text.startsWith("http")) {
+                  event.preventDefault();
+                  void bringPicture(text);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                void bringPicture((event.target as HTMLInputElement).value);
+              }}
+            />
+          </label>
+          <p className="text-sm text-ink-muted">
+            Paste or type a public picture link, or choose a file. The guess is from the picture's shape, not a model. Confirm the category before saving. Camera frames are not uploaded.
+          </p>
+          <label className="text-sm">
             <input
               className="mt-1 block w-full text-sm"
               type="file"
@@ -379,10 +512,13 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
                       colourName: nextDraft.colourName,
                       colourHex: nextDraft.colourHex,
                       merchantUrl: nextDraft.merchantUrl,
+                      purchaseUrl: nextDraft.purchaseUrl ?? "",
                       image: nextDraft.image,
                       imageType: nextDraft.imageType,
                       imageBytes: nextDraft.imageBytes,
                       fittingAnchors: nextDraft.fittingAnchors,
+                      sleeve: nextDraft.sleeve ?? "long",
+                      neckline: nextDraft.neckline ?? "closed",
                     });
                     setNote("Editing. The photograph is kept unless you choose another.");
                   }}

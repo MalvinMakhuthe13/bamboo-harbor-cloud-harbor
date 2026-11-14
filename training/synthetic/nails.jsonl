@@ -1,0 +1,2 @@
+{"id":"synth-nail-1","task":"nails","category":"nails","site":"fingers","containsPixels":false,"samples":[{"tMs":0,"tip":[0.62,0.7],"base":[0.6,0.66],"sheen":0.2}]}
+{"id":"synth-nail-2","task":"nails","category":"nails","site":"toes","containsPixels":false,"note":"Foot-index only. The other toes are not labelled.","samples":[{"tMs":0,"tip":[0.5,0.8],"base":[0.5,0.76],"sheen":0.0}]}

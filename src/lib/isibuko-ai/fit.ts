@@ -54,7 +54,7 @@ export function priorFromHeight(heightCm: number): BodyEstimate {
     faceWidthCm: round1(h * STATURE_PRIORS.faceWidth),
     headCircCm: round1(h * STATURE_PRIORS.headCirc),
     wristCm: round1(h * STATURE_PRIORS.wristCirc),
-    note: "Stature prior from the height you entered. A full-body pose replaces it.",
+    note: "A standing pose is missing, so this is a stature prior. You are not asked to type a measurement.",
   };
 }
 

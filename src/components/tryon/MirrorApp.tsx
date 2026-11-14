@@ -221,18 +221,6 @@ export function MirrorApp({ initialProductId }: { initialProductId?: string }) {
         </Link>
         {camError && <p className="mt-2 text-sm text-brass-2">{camError}</p>}
 
-        <label className="mt-4 block text-sm text-muted">
-          Height {data.heightCm.toFixed(0)} cm
-          <input
-            type="range"
-            min={140}
-            max={210}
-            step={1}
-            value={data.heightCm}
-            onChange={(event) => commit((current) => ({ ...current, heightCm: Number(event.target.value) }))}
-          />
-        </label>
-
         {(active.category === "wig" || active.category === "hat") && (
           <>
             <Slider label={`Size ${wigSize.toFixed(2)}`} min={0.8} max={1.45} step={0.01} value={wigSize} onChange={setWigSize} />

@@ -19,14 +19,19 @@ const MISSING = [
 ];
 
 export function conditionProduct(product: Product, tint: [number, number, number] | null): ProductCondition {
-  const cut = cutFor(product.category);
+  const cut = cutFor(product);
   const missing = [...MISSING];
   if (!product.image && product.category !== "nails") missing.push("This piece has no photograph, so only a colour can be applied.");
   if (!product.sizes.length) missing.push("No size chart was supplied.");
   if (product.category === "wig") missing.push("The wig is a plate on the head. It does not grow a new hair silhouette.");
   if (product.category === "skirt" || product.category === "pants") missing.push("The legs must be in frame. A chest-up picture cannot show this piece.");
-  if (product.category === "bracelet" || product.category === "watch" || product.category === "ring" || product.category === "nails") {
+  if (product.category === "bracelet" || product.category === "watch" || product.category === "ring") {
     missing.push("The wrist or hand must be visible.");
+  }
+  if (product.category === "nails" && product.nailSite === "toes") {
+    missing.push("Only the foot-index point is tracked. The other four toenail plates are a spacing estimate, not detected toes.");
+  } else if (product.category === "nails") {
+    missing.push("Each fingernail follows a hand landmark. The hand must be visible.");
   }
   return {
     productId: product.id,
@@ -40,9 +45,14 @@ export function conditionProduct(product: Product, tint: [number, number, number
   };
 }
 
-function cutFor(category: Category): ProductCondition["cut"] {
-  if (category === "shirt" || category === "jacket") return "sleeved";
-  if (category === "dress") return "sleeveless-torso";
+function cutFor(product: Product): ProductCondition["cut"] {
+  const category = product.category;
+  if (category === "shirt" || category === "jacket") {
+    return product.sleeve === "sleeveless" ? "sleeveless-torso" : "sleeved";
+  }
+  if (category === "dress") {
+    return product.sleeve === "short" || product.sleeve === "long" ? "sleeved" : "sleeveless-torso";
+  }
   if (category === "skirt") return "skirt";
   if (category === "pants") return "trousers";
   if (category === "wig") return "hair";

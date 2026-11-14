@@ -1,4 +1,14 @@
 import { estimateFromWorld } from "@/lib/isibuko-ai/fit";
+import {
+  adaptiveAlpha,
+  findSkinPoint,
+  hemSway,
+  planLiveFit,
+  predictPoint,
+  stabilizeMask,
+  type HipHold,
+  type WidthContour,
+} from "@/lib/isibuko-ai/live-fit";
 import { buildShirtMesh, garmentClip } from "@/lib/isibuko-ai/garment-mesh";
 import { buildDressMesh } from "@/lib/isibuko-ai/dress-mesh";
 import { buildLowerBodyMesh } from "@/lib/isibuko-ai/lower-body-mesh";
@@ -21,7 +31,8 @@ import {
   collarY,
   necklineFromMask,
   hatSprite,
-  nailSegments,
+  estimateToeNails,
+  fingerNailPlates,
   nailShapeFactors,
   necklaceSprite,
   regionMode,
@@ -35,6 +46,7 @@ import {
 } from "@/lib/isibuko-ai/placement";
 import { COMPOSITE_FRAG, FULLSCREEN_VERT, GARMENT_MESH_FRAG, GARMENT_MESH_VERT, SPRITE_FRAG, SPRITE_VERT } from "@/lib/isibuko-ai/shaders";
 import { applySessionEvent, reuseLiveCamera } from "@/lib/isibuko-ai/session";
+import { emitCapture, captureListenerCount } from "@/lib/isibuko-gen/capture-bus";
 import { noteLiveFrame } from "@/lib/isibuko-gen/live-track";
 import { notePerception } from "@/lib/isibuko-gen/perception";
 import {
@@ -54,6 +66,8 @@ import {
 } from "@/lib/isibuko-ai/schedule";
 import type { FrameRequest, LiveMetrics, Pt } from "@/lib/isibuko-ai/types";
 import { applyShirtGarmentUv } from "@/lib/isibuko-ai/garment-uv";
+import { flickImpulse, handPushOnHair, restOrnament, restStrands, stepOrnament, stepStrandGroups, type OrnamentState, type StrandSet } from "@/lib/isibuko-ai/hair-motion";
+import { PresenceGate } from "@/lib/isibuko-ai/presence";
 
 
 
@@ -199,6 +213,7 @@ export function startEngine(opts: {
     protectSin: gl.getUniformLocation(garmentMeshProg, "uProtectSin"),
     tint: gl.getUniformLocation(garmentMeshProg, "uTint"),
     tintOn: gl.getUniformLocation(garmentMeshProg, "uTintOn"),
+    presence: gl.getUniformLocation(garmentMeshProg, "uPresence"),
   };
 
   const spriteBuf = gl.createBuffer();
@@ -251,8 +266,16 @@ export function startEngine(opts: {
     nailHalf: loc("uNailHalf"),
     nailTip: loc("uNailTip"),
     nailStart: loc("uNailStart"),
+    nailTaper: loc("uNailTaper"),
+    nailGloss: loc("uNailGloss"),
+    nailSheen: loc("uNailSheen"),
     backdrop: loc("uBackdrop"),
     hasProduct: loc("uHasProduct"),
+    reveal: loc("uRevealSkin"),
+    sleeveReach: loc("uSleeveReach"),
+    neckClear: loc("uNeckClear"),
+    skinP: loc("uSkinP"),
+    presence: loc("uPresence"),
   };
   const spriteTint = gl.getUniformLocation(spriteProg, "uTint");
   const spriteTintOn = gl.getUniformLocation(spriteProg, "uTintOn");
@@ -265,6 +288,8 @@ export function startEngine(opts: {
   const spriteHand1 = gl.getUniformLocation(spriteProg, "uHand1");
   const spriteHandR = gl.getUniformLocation(spriteProg, "uHandR");
   const spriteHasHands = gl.getUniformLocation(spriteProg, "uHasHands");
+  const spriteHairClip = gl.getUniformLocation(spriteProg, "uHairClip");
+  const spritePresence = gl.getUniformLocation(spriteProg, "uPresence");
 
   const originalError = console.error;
   console.error = (...args: unknown[]) => {
@@ -302,6 +327,24 @@ export function startEngine(opts: {
   let hasMask = false;
   let maskNeckY: number | null = null;
   const memory = new Map<string, Pt>();
+  const memoryAt = new Map<string, number>();
+  let maskRaw: Uint8Array | null = null;
+  let maskW = 0;
+  let maskH = 0;
+  let skinPoint: Pt | null = null;
+  let hipHold: HipHold | null = null;
+  let contourPrev: WidthContour | null = null;
+  let hemPrev: number | null = null;
+  let hemOffset = 0;
+  let swaySample: { x: number; at: number; speed: number } | null = null;
+  let frontLeft = false;
+  const presenceGate = new PresenceGate();
+  let presenceKey = "";
+  let lastCaptureAt = 0;
+  let hairCard: StrandSet = restStrands();
+  let hairAnchor: { x: number; y: number; at: number; speed: number } | null = null;
+  let earringSwing: OrnamentState = restOrnament();
+  let necklaceSwing: OrnamentState = restOrnament();
   const nailBuf = new Float32Array(40);
   let faceLm: Lm[] | null = null;
   let headPose: HeadPose | null = null;
@@ -353,8 +396,15 @@ export function startEngine(opts: {
   }
 
   function remember(key: string, point: Pt): Pt {
-    const next = smoothPoint(memory.get(key) ?? null, point, 0.48);
+    const prev = memory.get(key) ?? null;
+    const now = performance.now();
+    const then = memoryAt.get(key) ?? now;
+    const dt = Math.max(1, now - then);
+    const speed = prev ? (Math.hypot(point.x - prev.x, point.y - prev.y) / dt) * 1000 : 0;
+    const smoothed = smoothPoint(prev, point, adaptiveAlpha(speed, dt));
+    const next = predictPoint(prev, smoothed, dt);
     memory.set(key, next);
+    memoryAt.set(key, now);
     return next;
   }
 
@@ -379,7 +429,24 @@ export function startEngine(opts: {
       handLms = [];
       // Landmark smoothing must never leak across camera/source sessions.
       memory.clear();
+      memoryAt.clear();
       hasMask = false;
+      maskRaw = null;
+      maskW = 0;
+      maskH = 0;
+      skinPoint = null;
+      hipHold = null;
+      contourPrev = null;
+      hemPrev = null;
+      hemOffset = 0;
+      swaySample = null;
+      frontLeft = false;
+      presenceGate.reset();
+      presenceKey = "";
+      hairCard = restStrands();
+      hairAnchor = null;
+      earringSwing = restOrnament();
+      necklaceSwing = restOrnament();
       maskNeckY = null;
       lastMaskAt = 0;
       shoulderPrev = null;
@@ -491,8 +558,10 @@ export function startEngine(opts: {
       [-pw / 2, ph / 2, 0, 0],
     ];
     const pts = corners.map(([lx, ly, uu, vv]) => {
-      const x = px + lx * c - ly * s;
-      const y = py + lx * s + ly * c;
+      const bend = ly > 0 ? 1 : 0;
+      const side = lx < 0 ? (sprite.hemLeftX ?? sprite.hemX ?? 0) : (sprite.hemRightX ?? sprite.hemX ?? 0);
+      const x = px + lx * c - ly * s + side * W * bend;
+      const y = py + lx * s + ly * c + (sprite.hemY ?? 0) * H * bend;
       return [(x / W) * 2 - 1, 1 - (y / H) * 2, uu, vv] as const;
     });
     for (const i of [0, 1, 2, 0, 2, 3]) {
@@ -615,7 +684,39 @@ export function startEngine(opts: {
       gl.uniform2f(u.protectH, 0.12, 0.16);
     }
 
-    const poseOk = poseLm && seen(poseLm[11], 0.2) && seen(poseLm[12], 0.2);
+    const gateKey = `${category ?? "none"}:${request.nailSite ?? "fingers"}`;
+    if (gateKey !== presenceKey) {
+      presenceGate.reset();
+      presenceKey = gateKey;
+    }
+    const freshL = Boolean(poseLm && seen(poseLm[11], 0.35));
+    const freshR = Boolean(poseLm && seen(poseLm[12], 0.35));
+    const footSeen = Boolean(poseLm && (seen(poseLm[31], 0.4) || seen(poseLm[32], 0.4)));
+    const wristSeen = Boolean(poseLm && (seen(poseLm[15], 0.35) || seen(poseLm[16], 0.35)));
+    let tracked = false;
+    let trackConfidence = 0;
+    if (category === "shirt" || category === "jacket" || category === "dress" || category === "pants" || category === "skirt") {
+      tracked = freshL || freshR;
+      trackConfidence = freshL && freshR ? 1 : tracked ? 0.55 : 0;
+    } else if (category === "nails" && request.nailSite === "toes") {
+      tracked = footSeen;
+      trackConfidence = footSeen ? 0.66 : 0;
+    } else if (category === "nails" || category === "ring") {
+      tracked = handLms.length > 0;
+      trackConfidence = tracked ? 0.8 : 0;
+    } else if (category === "watch" || category === "bracelet") {
+      tracked = wristSeen;
+      trackConfidence = tracked ? 0.75 : 0;
+    } else {
+      tracked = Boolean(faceLm);
+      trackConfidence = tracked ? 0.85 : 0;
+    }
+    const presenceAlpha = presenceGate.update(performance.now(), tracked, trackConfidence);
+    const poseOk = Boolean(
+      (freshL || freshR || (memory.has("shL") && memory.has("shR") && presenceAlpha > 0.05)) &&
+        (freshL || memory.has("shL")) &&
+        (freshR || memory.has("shR")),
+    );
     let shL: Pt | null = null;
     let shR: Pt | null = null;
     let hipL: Pt | null = null;
@@ -624,34 +725,89 @@ export function startEngine(opts: {
     let elR: Pt | null = null;
     let wrL: Pt | null = null;
     let wrR: Pt | null = null;
+    let fitPlan: ReturnType<typeof planLiveFit> | null = null;
     gl.uniform1f(u.yaw, 0);
     gl.uniform1f(u.frontArm, 0);
     if (poseOk && poseLm) {
-      const sided = stableSide(sideL, sideR, flip(poseLm[11]!), flip(poseLm[12]!));
-      sideL = sided.left;
-      sideR = sided.right;
-      bodySwapped = sided.swapped;
-      const limb = (leftIndex: number, rightIndex: number) => poseLm![sided.swapped ? rightIndex : leftIndex];
-      shL = remember("shL", sided.left);
-      shR = remember("shR", sided.right);
-      const shoulderW = Math.hypot(shR.x - shL.x, shR.y - shL.y);
-      const hipFallback = shoulderW * 1.05;
+      let leftPt = freshL ? flip(poseLm[11]!) : memory.get("shL")!;
+      let rightPt = freshR ? flip(poseLm[12]!) : memory.get("shR")!;
+      let swapped = bodySwapped;
+      if (freshL && freshR) {
+        const sided = stableSide(sideL, sideR, leftPt, rightPt);
+        sideL = sided.left;
+        sideR = sided.right;
+        swapped = sided.swapped;
+        bodySwapped = sided.swapped;
+        leftPt = sided.left;
+        rightPt = sided.right;
+      }
+      const limb = (leftIndex: number, rightIndex: number) => poseLm![swapped ? rightIndex : leftIndex];
+      shL = freshL ? remember("shL", leftPt) : leftPt;
+      shR = freshR ? remember("shR", rightPt) : rightPt;
       const hipSrcL = limb(23, 24);
       const hipSrcR = limb(24, 23);
-      hipL = seen(hipSrcL, 0.15) ? remember("hipL", flip(hipSrcL!)) : { x: shL.x, y: Math.min(0.98, shL.y + hipFallback) };
-      hipR = seen(hipSrcR, 0.15) ? remember("hipR", flip(hipSrcR!)) : { x: shR.x, y: Math.min(0.98, shR.y + hipFallback) };
-      if (hipL.y > 1.02) hipL = { ...hipL, y: Math.min(hipL.y, shL.y + shoulderW * 1.2) };
-      if (hipR.y > 1.02) hipR = { ...hipR, y: Math.min(hipR.y, shR.y + shoulderW * 1.2) };
+      const hipsReported = Boolean(seen(hipSrcL, 0.15) && seen(hipSrcR, 0.15));
+      const observedHipL = hipsReported ? remember("hipL", flip(hipSrcL!)) : null;
+      const observedHipR = hipsReported ? remember("hipR", flip(hipSrcR!)) : null;
+      const tilt = torsoTurn(shL, shR, poseLm[0] && seen(poseLm[0], 0.1) ? flip(poseLm[0]) : null);
+      const nowSway = performance.now();
+      const midX = (shL.x + shR.x) / 2;
+      if (swaySample) {
+        const dt = Math.max(16, nowSway - swaySample.at);
+        const vx = ((midX - swaySample.x) / dt) * 1000;
+        const speed = Math.abs(vx);
+        const kick = flickImpulse(swaySample.speed, speed);
+        hemOffset += (hemSway(vx, tilt) - hemOffset) * 0.45 + Math.sign(vx || 1) * kick * 0.008;
+        swaySample = { x: midX, at: nowSway, speed };
+      } else {
+        swaySample = { x: midX, at: nowSway, speed: 0 };
+      }
+      fitPlan = planLiveFit({
+        category,
+        sleeve: request.sleeve,
+        neckline: request.neckline,
+        shoulderL: shL,
+        shoulderR: shR,
+        hipL: observedHipL,
+        hipR: observedHipR,
+        hipsReported,
+        previousHips: hipHold,
+        mask: maskFresh ? maskRaw : null,
+        maskW,
+        maskH,
+        previousContour: contourPrev,
+        previousHem: hemPrev,
+        skin: skinPoint,
+      });
+      hipL = fitPlan.hipL;
+      hipR = fitPlan.hipR;
+      hipHold = fitPlan.hipHold;
+      contourPrev = fitPlan.contour;
+      hemPrev = fitPlan.hemLength;
       const hold = (key: string, src: Lm | undefined, fallback: Pt | null): Pt | null =>
         src && seen(src, 0.2) ? remember(key, flip(src)) : (memory.get(key) ?? fallback);
       elL = hold("elL", limb(13, 14), shL);
       elR = hold("elR", limb(14, 13), shR);
       wrL = hold("wrL", limb(15, 16), elL);
       wrR = hold("wrR", limb(16, 15), elR);
-      const zL = poseWorld?.[sided.swapped ? 16 : 15]?.z;
-      const zR = poseWorld?.[sided.swapped ? 15 : 16]?.z;
-      gl.uniform1f(u.frontArm, zL != null && zR != null ? (zL < zR ? 1 : -1) : 0);
-      gl.uniform1f(u.yaw, torsoTurn(shL, shR, poseLm[0] && seen(poseLm[0], 0.1) ? flip(poseLm[0]) : null));
+      if ((fitPlan?.sleeveReach ?? 0) > 0.5 && hipL && hipR && shL && shR) {
+        const span = Math.hypot(shR.x - shL.x, shR.y - shL.y);
+        if (armIsHanging(shL, elL, span)) {
+          const hung = hangingSleeve(shL, hipL, -span * 0.18);
+          elL = hung.elbow;
+          wrL = hung.wrist;
+        }
+        if (armIsHanging(shR, elR, span)) {
+          const hung = hangingSleeve(shR, hipR, span * 0.18);
+          elR = hung.elbow;
+          wrR = hung.wrist;
+        }
+      }
+      const zL = poseWorld?.[swapped ? 16 : 15]?.z;
+      const zR = poseWorld?.[swapped ? 15 : 16]?.z;
+      frontLeft = zL != null && zR != null && zL < zR;
+      gl.uniform1f(u.frontArm, zL != null && zR != null ? (frontLeft ? 1 : -1) : 0);
+      gl.uniform1f(u.yaw, tilt);
     }
     const fitProfile = getGarmentFitProfile(category);
     const proposedClothing =
@@ -672,22 +828,31 @@ export function startEngine(opts: {
     const clothing = proposedClothing && isPlausibleClothingQuad(proposedClothing) ? proposedClothing : null;
     
     const shirtMesh =
-      category === "shirt" && clothing && productImg && maskFresh && shL && shR && hipL && hipR
+      (category === "shirt" || category === "jacket") && clothing && productImg && maskFresh && shL && shR && hipL && hipR
         ? (() => {
             const chinY = memory.get("chin")?.y;
             // The clothes mask is the neckline. 0.72 is only the fallback when that mask is missing,
             // because pulling 0.72 of the way from the chin to an already-correct neckline floats the collar.
             const neckTarget = maskNeckY ?? (chinY != null ? collarY(chinY, (shL.y + shR.y) / 2) : null);
+            const openNeck = (fitPlan?.neckClear ?? 0) > 0.03;
+            const shoulderLY = openNeck || neckTarget == null ? fitPlan!.meshShoulderL.y : Math.min(fitPlan!.meshShoulderL.y, neckTarget);
+            const shoulderRY = openNeck || neckTarget == null ? fitPlan!.meshShoulderR.y : Math.min(fitPlan!.meshShoulderR.y, neckTarget);
             const mesh = buildShirtMesh({
-              shoulderL: { x: shL.x + dragPt.x, y: (neckTarget != null ? Math.min(shL.y, neckTarget) : shL.y) + dragPt.y },
-              shoulderR: { x: shR.x + dragPt.x, y: (neckTarget != null ? Math.min(shR.y, neckTarget) : shR.y) + dragPt.y },
+              shoulderL: { x: fitPlan!.meshShoulderL.x + dragPt.x, y: shoulderLY + dragPt.y },
+              shoulderR: { x: fitPlan!.meshShoulderR.x + dragPt.x, y: shoulderRY + dragPt.y },
               hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
               hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
               elbowL: elL ? { x: elL.x + dragPt.x, y: elL.y + dragPt.y } : null,
               elbowR: elR ? { x: elR.x + dragPt.x, y: elR.y + dragPt.y } : null,
               wristL: wrL ? { x: wrL.x + dragPt.x, y: wrL.y + dragPt.y } : null,
               wristR: wrR ? { x: wrR.x + dragPt.x, y: wrR.y + dragPt.y } : null,
-            }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) });
+            }, {
+              scale: Math.min(1.3, Math.max(0.75, request.sizeScale)),
+              hemLength: Math.min(0.42, Math.max(0.06, fitPlan!.hemLength)),
+              sleeveLength: fitPlan!.sleeveLength,
+              contour: fitPlan!.contour,
+              sway: hemOffset,
+            });
 
             return mesh
               ? applyShirtGarmentUv(mesh, request.fittingAnchors)
@@ -708,29 +873,35 @@ export function startEngine(opts: {
             kneeR: kneeR ? { x: kneeR.x + dragPt.x, y: kneeR.y + dragPt.y } : null,
             ankleL: ankleL ? { x: ankleL.x + dragPt.x, y: ankleL.y + dragPt.y } : null,
             ankleR: ankleR ? { x: ankleR.x + dragPt.x, y: ankleR.y + dragPt.y } : null,
-          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
+          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)), sway: hemOffset })
         : null;
     const dressMesh =
       category === "dress" && productImg && maskFresh && shL && shR && hipL && hipR
         ? buildDressMesh({
-            shoulderL: { x: shL.x + dragPt.x, y: shL.y + dragPt.y },
-            shoulderR: { x: shR.x + dragPt.x, y: shR.y + dragPt.y },
+            shoulderL: { x: (fitPlan?.meshShoulderL.x ?? shL.x) + dragPt.x, y: (fitPlan?.meshShoulderL.y ?? shL.y) + dragPt.y },
+            shoulderR: { x: (fitPlan?.meshShoulderR.x ?? shR.x) + dragPt.x, y: (fitPlan?.meshShoulderR.y ?? shR.y) + dragPt.y },
             hipL: { x: hipL.x + dragPt.x, y: hipL.y + dragPt.y },
             hipR: { x: hipR.x + dragPt.x, y: hipR.y + dragPt.y },
             kneeL: kneeL ? { x: kneeL.x + dragPt.x, y: kneeL.y + dragPt.y } : null,
             kneeR: kneeR ? { x: kneeR.x + dragPt.x, y: kneeR.y + dragPt.y } : null,
-          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)) })
+          }, { scale: Math.min(1.3, Math.max(0.75, request.sizeScale)), sway: hemOffset })
         : null;
     const activeGarmentMesh = shirtMesh ?? dressMesh ?? lowerBodyMesh;
     const useGarmentMesh = Boolean(activeGarmentMesh?.parts.length);
     gl.uniform1i(u.mode, useGarmentMesh ? 0 : modeId);
     const chin = memory.get("chin") ?? null;
     if (clothing && chin && shL && shR && (category === "shirt" || category === "jacket" || category === "dress")) {
-      const shoulderY = (shL.y + shR.y) / 2;
-      const neckY = maskNeckY ?? collarY(chin.y, shoulderY);
-      const dy = neckY - (clothing.topL.y + clothing.topR.y) / 2;
-      clothing.topL = { ...clothing.topL, y: clothing.topL.y + dy };
-      clothing.topR = { ...clothing.topR, y: clothing.topR.y + dy };
+      if ((fitPlan?.neckClear ?? 0) > 0.03) {
+        const dy = fitPlan!.neckClear * fitPlan!.hipHold.torso;
+        clothing.topL = { ...clothing.topL, y: clothing.topL.y + dy };
+        clothing.topR = { ...clothing.topR, y: clothing.topR.y + dy };
+      } else {
+        const shoulderY = (shL.y + shR.y) / 2;
+        const neckY = maskNeckY ?? collarY(chin.y, shoulderY);
+        const dy = neckY - (clothing.topL.y + clothing.topR.y) / 2;
+        clothing.topL = { ...clothing.topL, y: clothing.topL.y + dy };
+        clothing.topR = { ...clothing.topR, y: clothing.topR.y + dy };
+      }
     }
     const shift = mode === "clothing" ? dragPt : { x: 0, y: 0 };
     const move = (p: Pt): Pt => ({ x: p.x + shift.x, y: p.y + shift.y });
@@ -768,7 +939,9 @@ export function startEngine(opts: {
       }
       const arm = Math.hypot((elL ?? shL).x - shL.x, (elL ?? shL).y - shL.y);
       gl.uniform1f(u.armW, Math.max(arm * 0.46, span * 0.2));
-      gl.uniform1f(u.hasArms, hasSleeves(category) && elL && wrL && elR && wrR ? 1 : 0);
+      const paintSleeves = (fitPlan?.sleeveReach ?? (hasSleeves(category) ? 1 : 0)) > 0.05;
+      const revealArms = Boolean(fitPlan?.revealSkin);
+      gl.uniform1f(u.hasArms, (paintSleeves || revealArms) && elL && wrL && elR && wrR ? 1 : 0);
     } else {
       gl.uniform1f(u.hasArms, 0);
       vec(u.topL, { x: 0, y: 0 });
@@ -801,23 +974,53 @@ export function startEngine(opts: {
     gl.uniform2f(u.hand1, palms[1]?.x ?? -2, palms[1]?.y ?? -2);
     gl.uniform1f(u.handR, handR);
 
+    function toeFoot(ankle: number, heel: number, index: number, key: string) {
+      if (!poseLm || !seen(poseLm[ankle], 0.4) || !seen(poseLm[heel], 0.4) || !seen(poseLm[index], 0.4)) return [];
+      return (
+        estimateToeNails({
+          ankle: remember(`${key}A`, flip(poseLm[ankle]!)),
+          heel: remember(`${key}H`, flip(poseLm[heel]!)),
+          footIndex: remember(`${key}F`, flip(poseLm[index]!)),
+        }) ?? []
+      );
+    }
     nailBuf.fill(0);
-    const segments = category === "nails" ? nailSegments(orderedHands.map((hand) => hand.map((lm) => flip(lm)))) : [];
-    segments.forEach((seg, i) => {
+    const fingerPlates =
+      category === "nails" && request.nailSite !== "toes"
+        ? fingerNailPlates(orderedHands.map((hand) => hand.map((lm) => ({ ...flip(lm), z: lm.z }))))
+        : [];
+    const toePlates =
+      category === "nails" && request.nailSite === "toes" && poseLm
+        ? [
+            ...toeFoot(27, 29, 31, "toeL"),
+            ...toeFoot(28, 30, 32, "toeR"),
+          ]
+        : [];
+    const segments = request.nailSite === "toes" ? toePlates : fingerPlates;
+    segments.slice(0, 10).forEach((seg, i) => {
       nailBuf[i * 4] = seg.tip.x;
       nailBuf[i * 4 + 1] = seg.tip.y;
       nailBuf[i * 4 + 2] = seg.base.x;
       nailBuf[i * 4 + 3] = seg.base.y;
     });
     gl.uniform4fv(u.nails, nailBuf);
-    gl.uniform1i(u.nailCount, segments.length);
+    gl.uniform1i(u.nailCount, Math.min(10, segments.length));
     const polish = tint ?? [0.9, 0.72, 0.74];
     gl.uniform3f(u.polish, polish[0], polish[1], polish[2]);
     const shape = nailShapeFactors(request.nail);
     gl.uniform1f(u.nailHalf, shape.half);
     gl.uniform1f(u.nailTip, shape.tip);
     gl.uniform1f(u.nailStart, shape.start);
+    gl.uniform1f(u.nailTaper, shape.taper);
+    gl.uniform1f(u.nailGloss, request.nailFinish === "cream" ? 0 : 1);
+    const sheen = segments[0] ? Math.max(-1, Math.min(1, (segments[0].tip.x - segments[0].base.x) * 8)) : 0;
+    gl.uniform1f(u.nailSheen, sheen);
 
+    gl.uniform1f(u.presence, presenceAlpha);
+    gl.uniform1f(u.reveal, fitPlan?.revealSkin ? 1 : 0);
+    gl.uniform1f(u.sleeveReach, fitPlan?.sleeveReach ?? (hasSleeves(category) ? 1 : 0));
+    gl.uniform1f(u.neckClear, fitPlan?.neckClear ?? 0);
+    gl.uniform2f(u.skinP, skinPoint?.x ?? 0.5, skinPoint?.y ?? 0.45);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     // Phase 1 shirt path: draw a body-constrained mesh over the camera.
@@ -854,12 +1057,21 @@ export function startEngine(opts: {
       gl.uniform1f(garmentUniform.protectSin, hair ? Math.sin(hair.protect.rot) : 0);
       gl.uniform3f(garmentUniform.tint, tint?.[0] ?? 1, tint?.[1] ?? 1, tint?.[2] ?? 1);
       gl.uniform1f(garmentUniform.tintOn, tint ? 1 : 0);
+      gl.uniform1f(garmentUniform.presence, presenceAlpha);
       gl.bindVertexArray(garmentMeshVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, garmentMeshBuf);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(packed), gl.DYNAMIC_DRAW);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, garmentMeshIndexBuf);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(activeGarmentMesh.indices), gl.DYNAMIC_DRAW);
-      gl.drawElements(gl.TRIANGLES, activeGarmentMesh.indices.length, gl.UNSIGNED_SHORT, 0);
+      const rank = (kind: string) => {
+        if (kind === "sleeve-left" || kind === "pant-leg-left") return frontLeft ? 2 : 1;
+        if (kind === "sleeve-right" || kind === "pant-leg-right") return frontLeft ? 1 : 2;
+        return 0;
+      };
+      const parts = [...activeGarmentMesh.parts].sort((a, b) => rank(a.kind) - rank(b.kind));
+      for (const part of parts) {
+        gl.drawElements(gl.TRIANGLES, part.indexCount, gl.UNSIGNED_SHORT, part.indexStart * 2);
+      }
       gl.disable(gl.BLEND);
     }
 
@@ -883,21 +1095,48 @@ export function startEngine(opts: {
       const cheekR = memory.get("cheekR")!;
       const chin = memory.get("chin")!;
       const faceW = Math.hypot(cheekR.x - cheekL.x, cheekR.y - cheekL.y);
+      const nowHair = performance.now();
+      const hairDt = hairAnchor ? (nowHair - hairAnchor.at) / 1000 : 1 / 60;
+      const headVelocity = hairAnchor
+        ? { x: (forehead.x - hairAnchor.x) / Math.max(hairDt, 0.008), y: (forehead.y - hairAnchor.y) / Math.max(hairDt, 0.008) }
+        : { x: 0, y: 0 };
+      const headSpeed = Math.hypot(headVelocity.x, headVelocity.y);
+      const impulse = flickImpulse(hairAnchor?.speed ?? headSpeed, headSpeed) * Math.sign(headVelocity.x || 1);
+      hairAnchor = { x: forehead.x, y: forehead.y, at: nowHair, speed: headSpeed };
       if (category === "glasses") sprites.push(nudge(glassesSprite(eyeL, eyeR, aspect, scale)));
       if (category === "hat") sprites.push(nudge(hatSprite(forehead, cheekL, cheekR, upright, aspect, scale, request.productId === "hat-cap")));
       if (category === "wig" && maskFresh) {
         const wigFit = getWigFittingParameters(request.fittingAnchors);
-        sprites.push(nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale, wigFit.opening, wigFit.holeFrac)));
+        const push = handPushOnHair(forehead, palms, faceW);
+        const swung = stepStrandGroups(hairCard, { dt: hairDt, headVelocity, handPush: push, impulse });
+        hairCard = swung.state;
+        const wig = nudge(wigSprite(forehead, chin, cheekL, cheekR, aspect, scale, wigFit.opening, wigFit.holeFrac));
+        wig.hemX = swung.hemX;
+        wig.hemY = swung.hemY;
+        wig.hemLeftX = swung.leftX;
+        wig.hemRightX = swung.rightX;
+        sprites.push(wig);
+      } else if (category !== "wig") {
+        hairCard = restStrands();
       }
       if (category === "earrings") {
+        const swung = stepOrnament(earringSwing, { dt: hairDt, headVelocity });
+        earringSwing = swung.state;
         const midX = (cheekL.x + cheekR.x) / 2;
-        sprites.push(nudge(earringSprite(cheekL, faceW, aspect, scale, 0, cheekL.x < midX ? -1 : 1)));
-        sprites.push(nudge(earringSprite(cheekR, faceW, aspect, scale, 0, cheekR.x < midX ? -1 : 1)));
+        const left = nudge(earringSprite(cheekL, faceW, aspect, scale, swung.y, cheekL.x < midX ? -1 : 1));
+        const right = nudge(earringSprite(cheekR, faceW, aspect, scale, swung.y, cheekR.x < midX ? -1 : 1));
+        left.cx += swung.x;
+        right.cx -= swung.x;
+        sprites.push(left, right);
       }
       if (category === "necklace") {
+        const swung = stepOrnament(necklaceSwing, { dt: hairDt, headVelocity });
+        necklaceSwing = swung.state;
         const left = shL ?? { x: chin.x - faceW, y: chin.y + faceW * 0.85 };
         const right = shR ?? { x: chin.x + faceW, y: chin.y + faceW * 0.85 };
-        sprites.push(nudge(necklaceSprite(chin, left, right, aspect, scale, 0)));
+        const piece = nudge(necklaceSprite(chin, left, right, aspect, scale, swung.y));
+        piece.cx += swung.x;
+        sprites.push(piece);
       }
     }
     if (productImg && (category === "watch" || category === "bracelet") && poseLm) {
@@ -933,7 +1172,9 @@ export function startEngine(opts: {
       gl.uniform1f(spriteLens, category === "glasses" ? 1 : 0);
       gl.uniform2f(spriteResolution, canvas.width, canvas.height);
       gl.uniform1f(spriteHasMask, hasMask ? 1 : 0);
-      gl.uniform1f(spriteOcclude, category === "wig" || category === "hat" || category === "necklace" ? 1 : 0);
+      gl.uniform1f(spriteOcclude, category === "necklace" ? 2 : category === "wig" || category === "hat" ? 1 : 0);
+      gl.uniform1f(spriteHairClip, category === "wig" && maskFresh ? 1 : 0);
+      gl.uniform1f(spritePresence, presenceAlpha);
       gl.uniform1f(spriteHasHands, palms.length ? 1 : 0);
       gl.uniform2f(spriteHand0, palms[0]?.x ?? -2, palms[0]?.y ?? -2);
       gl.uniform2f(spriteHand1, palms[1]?.x ?? -2, palms[1]?.y ?? -2);
@@ -1107,14 +1348,19 @@ export function startEngine(opts: {
   }
 
   function uploadMask(width: number, height: number, data: Uint8Array) {
+    const stable = stabilizeMask(maskRaw, data, width, height);
+    maskRaw = stable;
+    maskW = width;
+    maskH = height;
+    skinPoint = findSkinPoint(stable, width, height);
     const rgba = new Uint8Array(width * height * 4);
-    for (let i = 0; i < data.length; i++) rgba[i * 4] = data[i] ?? 0;
+    for (let i = 0; i < stable.length; i++) rgba[i * 4] = stable[i] ?? 0;
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, maskTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
     hasMask = true;
-    maskNeckY = necklineFromMask(data, width, height);
+    maskNeckY = necklineFromMask(stable, width, height);
   }
 
   function applyResult(msg: {
@@ -1278,6 +1524,23 @@ export function startEngine(opts: {
       body,
       productId: request.productId,
     });
+    if (captureListenerCount() > 0 && now - lastCaptureAt > 200) {
+      lastCaptureAt = now;
+      const landmarks = [];
+      if (faceLm?.[10]) landmarks.push({ name: "forehead", x: faceLm[10].x, y: faceLm[10].y });
+      if (faceLm?.[234]) landmarks.push({ name: "cheekL", x: faceLm[234].x, y: faceLm[234].y });
+      if (faceLm?.[454]) landmarks.push({ name: "cheekR", x: faceLm[454].x, y: faceLm[454].y });
+      if (poseLm && seen(poseLm[11], 0.2)) landmarks.push({ name: "shoulderL", x: poseLm[11].x, y: poseLm[11].y });
+      if (poseLm && seen(poseLm[12], 0.2)) landmarks.push({ name: "shoulderR", x: poseLm[12].x, y: poseLm[12].y });
+      if (landmarks.length) {
+        emitCapture({
+          tMs: Math.round(now),
+          category: request.category ?? "none",
+          landmarks,
+          ...(hasMask ? { segmentation: { counts: { mask: 1 } } } : {}),
+        });
+      }
+    }
   }
 
   function countJoints(pose: Lm[] | null, ids: number[]): number {
@@ -1356,7 +1619,8 @@ export function startEngine(opts: {
         setStatus(source === "camera" ? "Live camera is on. The tracker is still loading. The picture keeps moving." : "Studio photograph for testing only. The tracker is still loading.");
       } else if (!faceLm && request.category !== "pants" && request.category !== "skirt" && request.category !== "nails" && request.category !== "bracelet") setStatus("Looking for a face. Face the mirror.");
       else if (regionMode(request.category) === "clothing" && !poseLm) setStatus("Step back so both shoulders are in frame.");
-      else if (request.category === "nails" && handLms.length === 0) setStatus("Hold a hand up so the nails can be read.");
+      else if (request.category === "nails" && request.nailSite === "toes" && !(poseLm && (seen(poseLm[31], 0.4) || seen(poseLm[32], 0.4)))) setStatus("Pedicure estimate. Show the top of a bare foot. Only the foot-index point is tracked. The other four plates are spaced beside it, not detected toes.");
+      else if (request.category === "nails" && request.nailSite !== "toes" && handLms.length === 0) setStatus("Hold a hand where the fingertips can be seen. Each nail follows that finger. Both hands are used when they are in frame.");
       else if (source === "camera") setStatus("Live camera. You are wearing it. Move — changing the piece does not stop the camera.");
       else setStatus("Studio photograph for testing only. This is not your camera.");
     }

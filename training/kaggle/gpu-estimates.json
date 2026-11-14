@@ -1,0 +1,28 @@
+{
+  "tier": "kaggle-free",
+  "gpuHoursPerWeek": 30,
+  "sessionNote": "Free notebooks are often limited to about 9–12 hours at a time and about 30 GPU hours in a week. These figures are planning estimates, not a measurement from a run.",
+  "jobs": [
+    {
+      "id": "motion-tune",
+      "what": "Search spring and damping on landmark trajectories for hair and cloth.",
+      "gpuHours": 2,
+      "why": "The search is small. A GPU is optional. Two hours covers a T4 session that mostly waits on I/O."
+    },
+    {
+      "id": "cutout-classifier",
+      "what": "Fine-tune a small cut-out and category head on commercially licensed product photos.",
+      "gpuHours": 10,
+      "why": "A first fine-tune on a few thousand images, not a foundation model."
+    },
+    {
+      "id": "nail-segment",
+      "what": "Fine-tune a nail mask head on consented hand and foot crops.",
+      "gpuHours": 12,
+      "why": "Segmentation needs more steps than the spring search. Twelve hours fits one careful run inside the weekly cap."
+    }
+  ],
+  "weekTotal": 24,
+  "headroomHours": 6,
+  "notIncluded": "A generative video model does not fit this weekly cap. It is a later paid-GPU phase."
+}

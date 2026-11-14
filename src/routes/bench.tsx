@@ -41,7 +41,7 @@ function BenchPage() {
           <li>No owned generative video weights. The lab validates training clips, assembles a shirt conditioning plan, and scores pixels. It does not generate a worn frame, and the mirror does not call it.</li>
           <li>Clothing replaces the segmented torso and arms, so the old garment is covered where the body is visible. It is still a fitted photograph, not a draped simulation. A chest-up frame cannot show trousers.</li>
           <li>A wig hides the old hair inside the hair mask and places the product’s own cut on the head. Edges on a busy background are approximate. It is not a generative hairstyle.</li>
-          <li>Glasses, hats, earrings, necklaces, watches and rings are anchored to landmarks. Nails recolour the tracked nail, which needs a visible hand.</li>
+          <li>Glasses, hats, earrings, necklaces, watches and rings are anchored to landmarks. Fingernails follow the hand tracker. Toenails use the pose foot-index point plus four spaced estimates, which are not detected toes.</li>
           <li>Depth is assumed from breadth. There is no depth camera. Side and rear views reuse the front photograph.</li>
           <li>The shopper’s camera is opt-in. The studio photograph is labelled and is never treated as a live camera. Timings on this page’s mirror are measured in the current browser, not a phone lab.</li>
         </ul>
