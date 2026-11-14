@@ -64,7 +64,7 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  async function usePictureBytes(bytes: Uint8Array, mime: string) {
+  async function applyPictureBytes(bytes: Uint8Array, mime: string) {
     const checked = assertProductImage({ type: mime, size: bytes.byteLength });
     if (!checked.ok) {
       setNote(checked.reason);
@@ -116,7 +116,7 @@ export function MerchantStudio({ tryHref }: { tryHref: (id: string) => string })
       setNote(fetched.reason);
       return;
     }
-    await usePictureBytes(fetched.bytes, fetched.mime);
+    await applyPictureBytes(fetched.bytes, fetched.mime);
   }
 
   async function save(event: FormEvent) {
